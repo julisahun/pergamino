@@ -1,0 +1,7 @@
+.DS_Store
+.claude/scheduled_tasks.lock
+
+# Campaign data (personal/session content, not app code) —
+# except campaigns/example/, which ships with the repo as demo content.
+campaigns/*
+!campaigns/example/

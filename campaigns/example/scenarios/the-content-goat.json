@@ -1,0 +1,15 @@
+{
+  "kind": "dnd-dm-scene",
+  "version": 1,
+  "scene": {
+    "id": "the-content-goat",
+    "name": "The Content Goat",
+    "art": { "src": "assets/content-goat.jpg" },
+    "audio": null,
+    "roster": [
+      { "beastId": "rind-cultist", "x": 6, "y": 2 }
+    ],
+    "grid": null,
+    "note": "The tavern rumour mill. Half the town is convinced the goat cult did it, the other half blames Brinemarsh. A Rind Cultist is loudly not-drinking in the corner and will deny everything twice as hard as anyone actually accused him."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "dnd-dm-scene",
+  "version": 1,
+  "scene": {
+    "id": "cheese-square",
+    "name": "Cheese Square",
+    "art": { "src": "assets/cheese-square.jpg" },
+    "audio": null,
+    "roster": [
+      { "beastId": "mayor-bartleby-crumbwell", "x": 4, "y": 3 }
+    ],
+    "grid": null,
+    "note": "Bunting half-strung between two lampposts, a brass band tuning up with no idea yet that anything is wrong, and an empty stone pedestal where the Grand Wheel should be sitting under its ceremonial dome. The Mayor is here, wringing his hands, and will hire the party on the spot."
+  }
+}

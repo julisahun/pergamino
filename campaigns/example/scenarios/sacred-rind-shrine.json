@@ -1,0 +1,15 @@
+{
+  "kind": "dnd-dm-scene",
+  "version": 1,
+  "scene": {
+    "id": "sacred-rind-shrine",
+    "name": "The Sacred Rind Shrine",
+    "art": { "src": "assets/sacred-rind-shrine.jpg" },
+    "audio": null,
+    "roster": [
+      { "beastId": "inspector-mildew-grey", "x": 8, "y": 5 }
+    ],
+    "grid": null,
+    "note": "The crime scene. A pedestal-sized dent in the floor, rind crumbs everywhere, and one claw mark far too large to belong to anything that walked in through the front door. Inspector Grey is already here, taking notes on a clipboard he cannot read, trying to look official."
+  }
+}

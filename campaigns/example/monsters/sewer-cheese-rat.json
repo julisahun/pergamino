@@ -1,0 +1,15 @@
+{
+  "id": "sewer-cheese-rat",
+  "name": "Sewer Cheese-Rat",
+  "tag": "vermin",
+  "ac": 11,
+  "hpMax": 5,
+  "initMod": 2,
+  "speed": 30,
+  "note": "An ordinary sewer rat that has been living off cheese-wheel drips for weeks and is now suspiciously large, suspiciously smug, and suspiciously fast. Followed the smell just like Gerald did, several sizes too late to get any.",
+  "portrait": null,
+  "abilities": [
+    { "id": "cmex06ratnibble", "name": "Cheese-Fattened Nibble", "desc": "+4 to hit, 1d4+2 piercing damage." }
+  ],
+  "file": "monsters/sewer-cheese-rat.json"
+}

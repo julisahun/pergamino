@@ -1,0 +1,17 @@
+{
+  "id": "gerald-the-mole",
+  "name": "Gerald the Mole",
+  "tag": "boss",
+  "ac": 14,
+  "hpMax": 52,
+  "initMod": -1,
+  "speed": 20,
+  "note": "The actual culprit. A giant mole who tunnelled into the shrine because it smelled incredible, dragged the whole wheel back to his burrow, and has been asleep on it ever since. Utterly uninterested in fighting — treat any attack against him as a fumbled negotiation. He will only get rough if the party actually tries to take the cheese away from him.",
+  "portrait": null,
+  "abilities": [
+    { "id": "cmex01geraldsnuffle", "name": "Enormous Snuffle", "desc": "Advantage on any check to notice the party, because they smell like they've been in his sewers." },
+    { "id": "cmex02geraldhug", "name": "Devastating Cuddle", "desc": "Only used if provoked. 2d8+4 crushing damage and the target is restrained until it escapes — Gerald is not trying to hurt anyone, he just does not know his own strength." },
+    { "id": "cmex03geraldshare", "name": "Reluctant Sharing", "desc": "If offered literally any other food, Gerald will trade the cheese for it without complaint. He was never attached to this specific wheel, just wheels in general." }
+  ],
+  "file": "monsters/gerald-the-mole.json"
+}

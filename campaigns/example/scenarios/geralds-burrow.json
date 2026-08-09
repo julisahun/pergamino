@@ -1,0 +1,15 @@
+{
+  "kind": "dnd-dm-scene",
+  "version": 1,
+  "scene": {
+    "id": "geralds-burrow",
+    "name": "Gerald's Burrow",
+    "art": { "src": "assets/geralds-burrow.jpg" },
+    "audio": null,
+    "roster": [
+      { "beastId": "gerald-the-mole", "x": 8, "y": 8 }
+    ],
+    "grid": { "cols": 16 },
+    "note": "The end of the trail: a warm, round chamber, and the entire missing Grand Wheel, being gently snored on by something the size of a cart. He is not guarding it. He is napping on it. He will wake up if disturbed, and he will be very confused about why everyone seems upset."
+  }
+}
