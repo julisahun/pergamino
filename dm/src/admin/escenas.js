@@ -13,9 +13,12 @@ import { html } from './html.js';
 import { state, update, flash, saveEntity, aspectOf, urlFor } from './store.js';
 import { deleteFile } from './api.js';
 import { screens } from './app.js';
+import { ModalFrame, closeModal } from './frame.js';
 import { Field, initialsOf } from './field.js';
 import { goLiveScene } from './juego.js';
+import { ObjectCountRows } from './objetos.js';
 import { blankScene, normaliseScene, deriveRows, sceneGridSize, missingAssets } from '../shared/scenes.js';
+import { heldObjects } from '../shared/objects.js';
 import { matchesFilter, slugify } from '../shared/util.js';
 
 export const sceneById = id => state.scenes.find(s => s.id === id) || null;
@@ -97,6 +100,44 @@ function saveDraft() {
   });
   saveEntity(d.file, sceneFilePayload(d));
   flash(`${d.name} guardada.`);
+}
+
+/* --------------------------------------------- what a roster entry carries
+
+   The same counts-Map picker Juego's cards use, but it confirms into the
+   editor draft — prep, not play: no commit, no clampHP, nothing on the
+   board until the scene actually goes live. */
+
+function openRosterObjects(i) {
+  const r = state.ui.editorDraft?.roster[i];
+  if (!r) return;
+  const counts = new Map();
+  for (const id of r.objects || []) counts.set(id, (counts.get(id) || 0) + 1);
+  update(s => { s.ui.modal = () => RosterObjectPicker(i, counts); });
+}
+
+function RosterObjectPicker(i, counts) {
+  const r = state.ui.editorDraft?.roster[i];
+  if (!r) return null;
+  const b = state.session.bestiary.find(x => x.id === r.beastId);
+  const total = [...counts.values()].reduce((a, n) => a + n, 0);
+  const confirmPick = () => update(s => {
+    const entry = s.ui.editorDraft?.roster[i];
+    if (entry) {
+      const ids = [];
+      for (const o of s.session.objects) {
+        for (let n = counts.get(o.id) || 0; n > 0; n--) ids.push(o.id);
+      }
+      entry.objects = ids;
+    }
+    s.ui.modal = null;
+  });
+  return html`<${ModalFrame} title=${'Objetos de ' + (b?.name || 'ese PNJ')} acts=${html`
+      <span class="count">${total ? `${total} objeto${total === 1 ? '' : 's'}` : 'Nada encima'}</span>
+      <button class="ghost" onClick=${closeModal}>Cancelar</button>
+      <button class="primary" onClick=${confirmPick}>Guardar</button>`}>
+    <${ObjectCountRows} counts=${counts} />
+  </>`;
 }
 
 /** The nearest free square to the top-left among this scene's own roster, so
@@ -196,20 +237,25 @@ function Editor() {
       <h3>Reparto <span class="n">${d.roster.length}</span></h3>
       <p class="tip">Quién espera en esta escena, y en qué cuadro — se sienta solo,
         con el mapa de esta escena, la primera vez que sale a la mesa. Arrastra
-        una ficha para cambiarla de sitio.</p>
+        una ficha para cambiarla de sitio, y «Objetos» decide qué lleva cada uno
+        encima al aparecer.</p>
       ${state.session.bestiary.length ? html`<${RosterBoard} d=${d} />` : null}
       ${state.session.bestiary.length
         ? html`<div class="rosterpick">${state.session.bestiary.map(b => html`<div class="rprow" key=${b.id}>
             <b>${b.name}</b>${b.tag ? html`<span class="muted"> · ${b.tag}</span>` : null}
             <button class="small ghost" onClick=${() => update(() => {
-              d.roster.push({ beastId: b.id, ...freeRosterSquare(d.roster, size) });
+              d.roster.push({ beastId: b.id, ...freeRosterSquare(d.roster, size), objects: [] });
             })}>+ Añadir</button>
           </div>`)}</div>`
         : html`<p class="muted">No hay PNJ todavía. Se escriben en${' '}
             <button class="link" onClick=${() => update(s => { s.ui.tab = 'monstruos'; })}>PNJ</button>.</p>`}
       ${d.roster.length ? html`<ul class="rosterlist">${d.roster.map((r, i) => {
           const b = state.session.bestiary.find(x => x.id === r.beastId);
+          const held = heldObjects(state.session.objects, r.objects);
           return html`<li key=${i}>${b ? b.name : '(ese PNJ ya no existe)'}
+            ${held.length ? html`<span class="muted"> · ${held
+              .map(h => h.count > 1 ? `${h.obj.name} ×${h.count}` : h.obj.name).join(', ')}</span>` : null}
+            <button class="small ghost" onClick=${() => openRosterObjects(i)}>Objetos</button>
             <button class="small ghost" aria-label="Quitar del reparto"
               onClick=${() => update(() => { d.roster.splice(i, 1); })}>✕</button></li>`;
         })}</ul>` : null}

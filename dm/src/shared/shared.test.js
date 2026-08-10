@@ -376,6 +376,30 @@ test('roster seats fresh instances, skips occupied squares, no double-seat', () 
   assert.equal(s.npcs.length, 1);          // square occupied -> no double-seat
 });
 
+test('roster objects spawn on the instance: danglers dropped, hp counts the +PG in', () => {
+  const s = blankSession();
+  s.bestiary.push(normaliseBeast({ id: 'gob', name: 'Goblin', ac: 13, hpMax: 7 }));
+  s.objects.push(normaliseObject({ id: 'ring', name: 'Anillo', mods: { hpMax: 2, ac: 1 } }));
+  const scene = normaliseScene({ id: 'amb',
+    roster: [{ beastId: 'gob', x: 3, y: 2, objects: ['ring', 'ring', 'gone'] }] });
+  assert.deepEqual(scene.roster[0].objects, ['ring', 'ring', 'gone']);  // parsing keeps, resolving judges
+  goLive(s, scene, { aspectOf: flatAspect, urlFor });
+  assert.deepEqual(s.npcs[0].objects, ['ring', 'ring']);   // duplicates stack, dangler gone
+  const cb = npcHandle(s.npcs[0], s.objects);
+  assert.equal(cb.hpMax, 11);                              // 7 + 2 + 2
+  assert.equal(s.npcs[0].hp, 11);                          // spawned at its *modified* full
+  assert.equal(cb.ac, 15);
+});
+
+test('a roster entry without objects still spawns (old scene files)', () => {
+  const s = blankSession();
+  s.bestiary.push(normaliseBeast({ id: 'gob', name: 'Goblin', hpMax: 7 }));
+  const scene = normaliseScene({ id: 'old', roster: [{ beastId: 'gob', x: 1, y: 1 }] });
+  goLive(s, scene, { aspectOf: flatAspect, urlFor });
+  assert.deepEqual(s.npcs[0].objects, []);
+  assert.equal(s.npcs[0].hp, 7);
+});
+
 test('scene with no grid override keeps the table size', () => {
   const s = blankSession();
   s.field.cols = 30; s.field.rows = 10;

@@ -15,17 +15,23 @@ import { normaliseArt, normaliseAudio, clampCol, clampRow } from './session.js';
 import { normaliseBeast } from './beasts.js';
 import { blankPlay } from './session.js';
 import { freeSquare, seatAll } from './combat.js';
+import { modTotals } from './objects.js';
 
-/** A roster is a list of bestiary ids and squares. An entry with no bestiary
-    id is not a placement of anything, so it is dropped rather than kept as a
-    blank; whether the id still points at somebody in the bestiary is a
-    question for whoever resolves the roster, not for parsing it. */
+/** A roster is a list of bestiary ids, squares, and what each one carries
+    (object ids, duplicates stack — the same shape a holder's list has in
+    play). An entry with no bestiary id is not a placement of anything, so it
+    is dropped rather than kept as a blank; whether the ids still point at
+    somebody in the bestiary or the catalog is a question for whoever
+    resolves the roster, not for parsing it. */
 export function normaliseRosterList(raw) {
   return Array.isArray(raw)
     ? raw.map(r => ({
         beastId: String(r?.beastId || '').trim(),
         x: Math.max(0, Math.round(Number(r?.x) || 0)),
         y: Math.max(0, Math.round(Number(r?.y) || 0)),
+        objects: Array.isArray(r?.objects)
+          ? r.objects.map(id => String(id || '').trim()).filter(Boolean)
+          : [],
       })).filter(r => r.beastId)
     : [];
 }
@@ -136,7 +142,16 @@ export function resolveRoster(session, scene, f) {
     const x = clampCol(f, r.x), y = clampRow(f, r.y), key = x + ',' + y;
     if (seated.has(key)) continue;
     const n = normaliseBeast({ ...beast, id: newId(), name: beast.name });
-    session.npcs.push(Object.assign(n, blankPlay(), { hp: n.hpMax }));
+    /* What it carries is filtered against the catalog the same way beastId
+       is against the bestiary: an object deleted since the scene was written
+       spawns nothing rather than a dangling id. The spawn hp counts the
+       carried +PG in, because a numeric hp below the handle's maximum reads
+       as wounded — and nobody starts an ambush wounded by their own ring. */
+    const held = r.objects.filter(id => (session.objects || []).some(o => o.id === id));
+    session.npcs.push(Object.assign(n, blankPlay(), {
+      hp: n.hpMax + modTotals(session.objects || [], held).hpMax,
+      objects: held,
+    }));
     f.tokens['npc:' + n.id] = { x, y };
     seated.add(key);
   }

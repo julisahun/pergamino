@@ -133,6 +133,31 @@ function stepCount(counts, id, how) {
   update();
 }
 
+/** The picker's body — the whole catalog as toggle-plus-stepper rows over a
+    counts Map the caller owns. Shared with the scene editor's roster picker,
+    which confirms into a draft rather than a commit, so only the rows live
+    here and the action bar stays each caller's. */
+export function ObjectCountRows({ counts }) {
+  return state.session.objects.length
+    ? state.session.objects.map(o => {
+        const n = counts.get(o.id) || 0;
+        const line = [modSummary(o.mods), o.effects.join(' · ')].filter(Boolean).join(' · ');
+        return html`<div class=${'pickrow' + (n ? ' on' : '')} key=${o.id}>
+          <button class=${'tick' + (n ? ' on' : '')} aria-pressed=${!!n} aria-label=${o.name}
+            onClick=${() => stepCount(counts, o.id, 'toggle')}>${n ? '✓' : ''}</button>
+          <button class="nm" onClick=${() => stepCount(counts, o.id, 'toggle')}><b>${o.name}</b></button>
+          <span class="st">${line || '—'}</span>
+          <span class="stepper">
+            <button class="ghost" aria-label="Uno menos" onClick=${() => stepCount(counts, o.id, -1)}>−</button>
+            <b>${n}</b>
+            <button class="ghost" aria-label="Uno más" onClick=${() => stepCount(counts, o.id, 1)}>+</button>
+          </span>
+        </div>`;
+      })
+    : html`<p class="muted">No hay objetos todavía. Se crean en la pestaña${' '}
+        <button class="link" onClick=${() => update(s => { s.ui.tab = 'objetos'; s.ui.modal = null; })}>Objetos</button>.</p>`;
+}
+
 function ObjectPicker(ref, counts) {
   const cb = handleFor(state.session, ref);
   if (!cb) return null;
@@ -154,24 +179,7 @@ function ObjectPicker(ref, counts) {
       <span class="count">${total ? `${total} objeto${total === 1 ? '' : 's'}` : 'Nada encima'}</span>
       <button class="ghost" onClick=${closeModal}>Cancelar</button>
       <button class="primary" onClick=${confirmPick}>Guardar</button>`}>
-    ${state.session.objects.length
-      ? state.session.objects.map(o => {
-          const n = counts.get(o.id) || 0;
-          const line = [modSummary(o.mods), o.effects.join(' · ')].filter(Boolean).join(' · ');
-          return html`<div class=${'pickrow' + (n ? ' on' : '')} key=${o.id}>
-            <button class=${'tick' + (n ? ' on' : '')} aria-pressed=${!!n} aria-label=${o.name}
-              onClick=${() => stepCount(counts, o.id, 'toggle')}>${n ? '✓' : ''}</button>
-            <button class="nm" onClick=${() => stepCount(counts, o.id, 'toggle')}><b>${o.name}</b></button>
-            <span class="st">${line || '—'}</span>
-            <span class="stepper">
-              <button class="ghost" aria-label="Uno menos" onClick=${() => stepCount(counts, o.id, -1)}>−</button>
-              <b>${n}</b>
-              <button class="ghost" aria-label="Uno más" onClick=${() => stepCount(counts, o.id, 1)}>+</button>
-            </span>
-          </div>`;
-        })
-      : html`<p class="muted">No hay objetos todavía. Se crean en la pestaña${' '}
-          <button class="link" onClick=${() => update(s => { s.ui.tab = 'objetos'; s.ui.modal = null; })}>Objetos</button>.</p>`}
+    <${ObjectCountRows} counts=${counts} />
   </>`;
 }
 
