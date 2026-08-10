@@ -1,0 +1,69 @@
+# Ships dm/ to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
+# Nothing is built — dm/ is stdlib Python plus native ES modules, so the
+# "artifact" is the source tree minus its dev-only files. creator/** is a
+# trigger too: dm/src/rules/* and the theme tokens are copies of the
+# creator's blocks, and check-sync.py is what guards them.
+name: Deploy dm to Pi
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - dm/**
+      - creator/**
+      - .github/workflows/deploy-dm.yml
+  workflow_dispatch:
+
+concurrency:
+  group: pi-dm-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PI_HOST: sigint          # Tailscale MagicDNS name of the Pi
+      PI_USER: sigint
+      PI_DIR: /opt/dm-app
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Check the creator→dm copies have not drifted
+        run: python3 dm/check-sync.py
+
+      - name: Tests
+        run: |
+          node --test \
+            dm/src/lint.test.js \
+            dm/src/shared/shared.test.js \
+            dm/src/shared/qr.test.js \
+            dm/src/tv/audio.test.js
+
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      # --delete-excluded so the deployed tree is exactly the runtime set:
+      # docs, the sync guard and the tests never reach the Pi.
+      - name: Ship dm/ to the Pi
+        run: |
+          rsync -a --delete --delete-excluded \
+            --exclude 'CLAUDE.md' \
+            --exclude 'instructions.md' \
+            --exclude 'check-sync.py' \
+            --exclude '*.test.js' \
+            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            dm/ "$PI_USER@$PI_HOST:$PI_DIR/"
+
+      - name: Restart & smoke test
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
+            'sudo systemctl restart dm-app; for i in $(seq 1 10); do curl -sf http://localhost:8085/api/ping >/dev/null && { echo ok; exit 0; }; sleep 1; done; echo "dm-app failed to come up" >&2; exit 1'
