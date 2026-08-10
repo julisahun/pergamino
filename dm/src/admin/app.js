@@ -69,7 +69,7 @@ const NAV = [
 
 function TopBar() {
   const paused = state.session.field.paused;
-  const tvUrl = state.lanUrl ? `${state.lanUrl}/tv` : '/tv';
+  const tvUrl = `${state.lanUrl || ''}/tv?room=${state.room || ''}`;
   const counts = {
     juego: state.session.encounter.on ? state.session.encounter.members.length : 0,
     jugadores: state.session.party.length,
@@ -102,7 +102,7 @@ function TopBar() {
           onClick=${() => updateSession(s => { s.session.field.paused = !paused; })}>
           ${paused ? '▶ Enviar al tablero' : '⏸ Pausar'}</button>
         <button class="ghost" title=${'También vale cualquier aparato del wifi: ' + tvUrl}
-          onClick=${() => window.open('/tv', 'tablero')}>Tablero ↗</button>
+          onClick=${() => window.open(`/tv?room=${state.room || ''}`, 'tablero')}>Tablero ↗</button>
         <button class="ghost" title="Conectar otro aparato — dirección y código QR"
           onClick=${() => openConnectModal()}>▦</button>
       </div>

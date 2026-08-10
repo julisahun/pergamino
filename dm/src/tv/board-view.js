@@ -8,8 +8,8 @@ let board = null;
 let selected = null;
 
 export function setBoard(b) {
-  board = b;
-  if (selected && !board.tokens.some(t => t.id === selected)) selected = null;
+  board = b;   // null = no table joined yet, or the table was just switched
+  if (selected && !board?.tokens.some(t => t.id === selected)) selected = null;
 }
 export const getBoard = () => board;
 

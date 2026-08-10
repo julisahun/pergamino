@@ -11,13 +11,21 @@ live board from the admin window to the televisions:
   static   /               dm/index.html (admin)
            /tv             dm/tv.html (television — any device on the LAN)
            /src /vendor    dm's modules
-  api      GET  /api/ping                   {app, pid, lanUrl}
-           POST /api/board {origin,board}   store + broadcast; replies with
-                                            referenced asset hashes not held
-           POST /api/move  {origin,ref,x,y} broadcast (TV → admin)
-           GET  /api/events?role=&client=   SSE stream
-           PUT  /api/asset/<sha256>         ephemeral upload (hash-verified)
-           GET  /api/asset/<sha256>         serve it (Range for TV audio)
+  api      GET  /api/ping                        {app, pid, lanUrl}
+           POST /api/board {origin,room,board}   store + broadcast to the room;
+                                                 replies with referenced asset
+                                                 hashes not held
+           POST /api/move  {origin,room,ref,x,y} broadcast to the room (TV → admin)
+           GET  /api/events?role=&client=&room=  SSE stream, one room
+           PUT  /api/asset/<sha256>              ephemeral upload (hash-verified)
+           GET  /api/asset/<sha256>              serve it (Range for TV audio)
+
+Simultaneous tables are partitioned into ROOMS: a room is a 6-char code the
+admin mints per campaign (stored as .dm-room in the campaign folder) and the
+television joins via ?room= or its code screen. Rooms exist implicitly on
+first use, live in RAM, and are LRU-pruned once nobody is connected. The
+asset cache is deliberately NOT per-room — content addressing means rooms
+cannot collide, and shared bytes dedup.
 
 The asset cache is RAM only, content-addressed and LRU-capped: the admin
 uploads exactly what the current board references (a map, two audio layers,
@@ -53,6 +61,9 @@ ASSET_LIMIT = 50 * 1024 * 1024                  # per file
 ASSET_CACHE_MAX = 128 * 1024 * 1024             # whole cache, LRU-evicted
 
 ASSET_HASH = re.compile(r'^[0-9a-f]{64}$')
+# The unambiguous alphabet the admin mints codes from: no 0/O/1/I/L.
+ROOM_CODE = re.compile(r'^[A-HJ-NP-Z2-9]{6}$')
+MAX_IDLE_ROOMS = 64
 
 MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -67,35 +78,64 @@ MIME = {
 # ---------------------------------------------------------------- SSE relay
 
 class Relay:
-    """Client registry + broadcast. One global channel: one table, one game."""
+    """Room registry + per-room broadcast: one room per table, many tables.
+    Rooms exist implicitly (the first join or board post creates one) and
+    hold only a client list and the latest board — small enough that pruning
+    is an abuse cap, not a memory need: once a room has no connected clients
+    it is LRU-evictable, and only the newest MAX_IDLE_ROOMS such rooms keep
+    their boards."""
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.clients = {}          # id -> {'queue': Queue, 'role': str}
-        self.latest_board = None
+        self.rooms = {}   # code -> {'clients': {cid: {queue, role}}, 'board': ..., 'active': ts}
 
-    def add(self, cid, role):
+    def _room(self, code):
+        """Get-or-create; lock held by the caller."""
+        room = self.rooms.get(code)
+        if room is None:
+            room = self.rooms[code] = {'clients': {}, 'board': None, 'active': 0}
+            idle = sorted((c for c, r in self.rooms.items() if not r['clients']),
+                          key=lambda c: self.rooms[c]['active'])
+            for stale in idle[:max(0, len(idle) - MAX_IDLE_ROOMS)]:
+                del self.rooms[stale]
+        room['active'] = time.time()
+        return room
+
+    def add(self, code, cid, role):
         q = queue.Queue()
         with self.lock:
-            self.clients[cid] = {'queue': q, 'role': role}
-        self.broadcast('clients', {'admins': self.admins()}, origin=None)
+            self._room(code)['clients'][cid] = {'queue': q, 'role': role}
+        self.broadcast(code, 'clients', {'admins': self.admins(code)}, origin=None)
         return q
 
-    def remove(self, cid):
+    def remove(self, code, cid):
         with self.lock:
-            self.clients.pop(cid, None)
-        self.broadcast('clients', {'admins': self.admins()}, origin=None)
+            room = self.rooms.get(code)
+            if room:
+                room['clients'].pop(cid, None)
+        self.broadcast(code, 'clients', {'admins': self.admins(code)}, origin=None)
 
-    def admins(self):
+    def admins(self, code):
         with self.lock:
-            return sum(1 for c in self.clients.values() if c['role'] == 'admin')
+            room = self.rooms.get(code)
+            return sum(1 for c in room['clients'].values() if c['role'] == 'admin') if room else 0
 
-    def broadcast(self, event, data, origin):
+    def board(self, code):
+        with self.lock:
+            room = self.rooms.get(code)
+            return room['board'] if room else None
+
+    def set_board(self, code, board):
+        with self.lock:
+            self._room(code)['board'] = board
+
+    def broadcast(self, code, event, data, origin):
         payload = dict(data)
         payload['origin'] = origin
         msg = (event, json.dumps(payload, ensure_ascii=False))
         with self.lock:
-            targets = list(self.clients.values())
+            room = self.rooms.get(code)
+            targets = list(room['clients'].values()) if room else []
         for c in targets:
             c['queue'].put(msg)
 
@@ -259,15 +299,18 @@ class Handler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(query)
         role = (params.get('role') or ['tv'])[0]
         cid = (params.get('client') or ['anon-%d' % time.monotonic_ns()])[0]
-        q = RELAY.add(cid, role)
+        room = (params.get('room') or [''])[0].upper()
+        if not ROOM_CODE.match(room):
+            return self.fail(400, 'bad or missing room')
+        q = RELAY.add(room, cid, role)
         try:
             self.send_response(200)
             self.send_header('Content-Type', 'text/event-stream')
             self.send_header('Cache-Control', 'no-cache')
             self.send_header('Connection', 'keep-alive')
             self.end_headers()
-            hello = json.dumps({'board': RELAY.latest_board,
-                                'admins': RELAY.admins()}, ensure_ascii=False)
+            hello = json.dumps({'board': RELAY.board(room),
+                                'admins': RELAY.admins(room)}, ensure_ascii=False)
             self.wfile.write(('event: hello\ndata: %s\n\n' % hello).encode('utf-8'))
             self.wfile.flush()
             while True:
@@ -281,7 +324,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
         finally:
-            RELAY.remove(cid)
+            RELAY.remove(room, cid)
 
     # ------------------------------------------------------------ routing
 
@@ -317,9 +360,12 @@ class Handler(BaseHTTPRequestHandler):
             body = self.json_body(limit=JSON_LIMIT)
             if not body or 'board' not in body:
                 return self.fail(400, 'bad payload')
+            room = str(body.get('room') or '').upper()
+            if not ROOM_CODE.match(room):
+                return self.fail(400, 'bad or missing room')
             board_json = json.dumps(body['board'], ensure_ascii=False)
-            RELAY.latest_board = body['board']
-            RELAY.broadcast('board', {'board': body['board']},
+            RELAY.set_board(room, body['board'])
+            RELAY.broadcast(room, 'board', {'board': body['board']},
                             origin=body.get('origin'))
             # Which referenced assets this relay does not hold (restarted, or
             # evicted) — the admin re-uploads and re-posts on its own.
@@ -329,9 +375,12 @@ class Handler(BaseHTTPRequestHandler):
             body = self.json_body()
             if not body or 'ref' not in body:
                 return self.fail(400, 'bad payload')
-            RELAY.broadcast('move', {'ref': body['ref'],
-                                     'x': body.get('x'), 'y': body.get('y'),
-                                     'done': bool(body.get('done'))},
+            room = str(body.get('room') or '').upper()
+            if not ROOM_CODE.match(room):
+                return self.fail(400, 'bad or missing room')
+            RELAY.broadcast(room, 'move', {'ref': body['ref'],
+                                           'x': body.get('x'), 'y': body.get('y'),
+                                           'done': bool(body.get('done'))},
                             origin=body.get('origin'))
             return self.send_json({'ok': True})
         self.fail(404, 'no such endpoint')

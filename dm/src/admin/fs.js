@@ -177,3 +177,30 @@ export async function isEmptyDir(root) {
 export async function createCampaignSubdirs(root) {
   for (const name of SUBDIRS) await root.getDirectoryHandle(name, { create: true });
 }
+
+/* --------------------------------------------------------------- the room
+   Which relay channel this table broadcasts on. A 6-char code from an
+   unambiguous alphabet (no 0/O/1/I/L — nothing to misread off a screen),
+   minted once per campaign and stored INSIDE the folder as `.dm-room`:
+   dotfiles are invisible to the walkers above, so it is never an entity and
+   never reads as an external edit — and it travels with the campaign to any
+   device, so the table TV's remembered room keeps working. */
+
+const ROOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const ROOM_RE = /^[A-HJ-NP-Z2-9]{6}$/;
+
+export function mintRoomCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return [...bytes].map(b => ROOM_ALPHABET[b % ROOM_ALPHABET.length]).join('');
+}
+
+export async function readRoomCode(root) {
+  try {
+    const file = await (await root.getFileHandle('.dm-room')).getFile();
+    const code = (await file.text()).trim().toUpperCase();
+    if (ROOM_RE.test(code)) return code;
+  } catch { /* no file yet */ }
+  const code = mintRoomCode();
+  await writeFile(root, '.dm-room', code + '\n');
+  return code;
+}

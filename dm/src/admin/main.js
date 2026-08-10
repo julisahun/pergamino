@@ -15,8 +15,8 @@ import './juego.js';
 import { state, subscribe, update, flash, attachSaver, detachSaver, saveSession,
          syncBoard, refreshAssetUrls } from './store.js';
 import { ping, fetchTree, connectSSE, checkExternalChanges } from './api.js';
-import { pickCampaignFolder, hasPermission, verifyPermission,
-         saveHandle, loadHandle, isEmptyDir, createCampaignSubdirs } from './fs.js';
+import { pickCampaignFolder, hasPermission, verifyPermission, saveHandle,
+         loadHandle, isEmptyDir, createCampaignSubdirs, readRoomCode } from './fs.js';
 import { normalise } from '../rules/character.js';
 import { normaliseSession, blankSession, normalisePlay } from '../shared/session.js';
 import { normaliseBeast } from '../shared/beasts.js';
@@ -135,8 +135,14 @@ async function loadCampaign(root, { keepSession = false, changedAssets = [] } = 
   await refreshAssetUrls(root, tree.assets, changedAssets);
 }
 
-function wireSSE() {
-  connectSSE({
+/* The channel is per-room now, and the room comes from the campaign folder —
+   so the SSE connection lives from adopt() to leaveCampaign(), not from
+   boot. One at a time: switching campaigns swaps the whole connection. */
+let sse = null;
+
+function wireSSE(room) {
+  if (sse) sse.close();
+  sse = connectSSE(room, {
     hello: d => update(s => { s.admins = d.admins; }),
     clients: d => update(s => { s.admins = d.admins; }),
     move: d => {
@@ -147,6 +153,11 @@ function wireSSE() {
       }
     },
   });
+}
+
+function unwireSSE() {
+  if (sse) sse.close();
+  sse = null;
 }
 
 /* ------------------------------------------------------- external edits
@@ -198,9 +209,12 @@ function stopPolling() {
 let rememberedHandle = null;
 
 async function adopt(handle) {
+  const room = await readRoomCode(handle);   // minted on first open, stable after
   await loadCampaign(handle);
+  state.room = room;
   rememberedHandle = handle;
   state.rememberedName = handle.name;
+  wireSSE(room);
   attachSaver(handle);
   saveSession();                   // a fresh table gets its session.json immediately
   syncBoard();
@@ -243,9 +257,11 @@ export async function reopenLast() {
 export function leaveCampaign() {
   stopPolling();
   detachSaver();
+  unwireSSE();
   update(s => {
     s.root = null;
     s.rootName = null;
+    s.room = null;
     s.session = blankSession();
     s.scenes = []; s.assets = []; s.story = { notes: [] };
   });
@@ -258,9 +274,9 @@ async function boot() {
   subscribe(() => render(h(App, null), mount));
 
   /* The LAN address is decoration on the connect modal — a dead server must
-     not keep the gate from opening a folder. */
+     not keep the gate from opening a folder. The SSE channel is wired in
+     adopt(): it needs the room, and the room needs the folder. */
   ping().then(info => update(s => { s.lanUrl = info.lanUrl; })).catch(() => {});
-  wireSSE();
 
   if ('showDirectoryPicker' in window) {
     let remembered = null;

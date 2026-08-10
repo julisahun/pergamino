@@ -2,23 +2,32 @@
 
 A small relay server (`server.py`) plus two pages it serves: `/` is the
 admin window (what the DM drives, `index.html` + `src/admin/`), `/tv` is the
-television (`tv.html` + `src/tv/`), reachable from **any device on the LAN**.
-Start everything by double-clicking `DM.command` (or `python3 dm/server.py`).
+television (`tv.html` + `src/tv/`). **The app runs on the home Pi at
+`https://dm.sigint-pm.uk` — that is the only way it is played**; a local
+`python3 dm/server.py` exists purely for dev and headless verification.
 See the root `CLAUDE.md` for repo-wide rules; `instructions.md` is the full
 behavioral reference.
 
 **Campaign files never touch the server.** The admin page holds a File
-System Access grant (Chromium-only; needs a secure context — localhost or
-https) on whatever folder the DM picked, reads and writes it directly
+System Access grant (Chromium-only; needs a secure context — https or
+localhost, which is why the Pi deployment fronts it with cloudflared) on
+whatever folder the DM picked, reads and writes it directly
 (`src/admin/fs.js`), and remembers the handle in IndexedDB. The server is
 static files + the board/move relay + an ephemeral RAM asset cache
 (`/api/asset/<sha256>`) the TV fetches maps/audio/portraits from — there is
-no endpoint that can read or write a campaign file, which is what makes
-running it beyond the laptop (e.g. the Pi) a non-question for the data.
+no endpoint that can read or write a campaign file, which is what makes the
+always-on public deployment a non-question for the data.
+
+**Simultaneous tables are rooms.** Every campaign folder carries a stable
+6-char code (`.dm-room`, minted on first open from the unambiguous alphabet
+`A-HJ-NP-Z2-9`); the SSE channel, the board post and the move post are all
+scoped to it, so two DMs on two folders never see each other's television.
+The TV joins via the `?room=` the QR/`Tablero ↗` carries, or its code
+screen (bare `/tv`); it remembers the room in localStorage, M switches.
 
 ```bash
-python3 dm/server.py --no-browser   # dev; DM.command is the table-side way
-DM_PORT=8085 python3 dm/server.py --no-browser   # deployed port override
+python3 dm/server.py --no-browser                # dev/verification only
+DM_PORT=8085 python3 dm/server.py --no-browser   # the Pi unit's invocation
 ```
 
 **It invents no rules and rolls no dice.** Every player number comes from
@@ -55,14 +64,17 @@ current board references that the relay does not already hold.
 
 The admin's device preferences: the remembered folder handle (IndexedDB
 `dnd-dm`) and master volume/mute (localStorage `dnd-dm-audio`). The TV
-device keeps its own local volume (`dnd-dm-tv-audio`, arrow keys). None of
-that is session state.
+device keeps its own local volume (`dnd-dm-tv-audio`, arrow keys) and its
+joined room (`dnd-dm-tv-room`). None of that is session state. The room
+code itself lives in the campaign folder (`.dm-room` — a dotfile, so the
+walkers never surface it), which is what makes it travel across devices.
 
 ## The two windows
 
 The **admin tab is authoritative**; the server is a relay (all game logic in
-JS, none in Python). Sync is Server-Sent Events on `/api/events`, one global
-channel:
+JS, none in Python). Sync is Server-Sent Events on `/api/events`, one
+channel **per room** — rooms exist implicitly on first use, live in RAM,
+and idle clientless ones are LRU-pruned past a cap:
 
 - Admin mutation → `buildBoard()` → `POST /api/board` → broadcast → TVs
   render. `field.paused` gates that POST (**Pausar/Enviar al tablero**).
@@ -133,7 +145,8 @@ Beyond units, the pattern that works (see git history for examples):
    serve it) with a `<script type=module>` that imports the real modules and
    drives them, run plain headless (no dump flags) for N real seconds, and
    have the probe **report via `POST /api/board`** with a `probeReport`
-   field — read it back from the SSE `hello` snapshot with curl.
+   field (and a valid 6-char `room` — pick a fixed one for the probe) —
+   read it back from that room's SSE `hello` snapshot with curl.
    `--dump-dom` fires at the load event, before any async work, so it only
    ever shows the empty shell. For a campaign folder without a picker
    gesture, use OPFS: `navigator.storage.getDirectory()` hands you a real

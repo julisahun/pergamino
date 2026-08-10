@@ -8,9 +8,9 @@ dnd/
   creator/            character creator — see creator/CLAUDE.md
     index.html        a file:// page, double-clicked, no server
   dm/                 DM table: relay server + admin page + TV page — see dm/CLAUDE.md
-    DM.command        double-click to run everything
     server.py         stdlib-only Python server (static + SSE relay + asset cache;
-                      campaign files never pass through it)
+                      campaign files never pass through it) — runs on the Pi
+                      (https://dm.sigint-pm.uk), never locally except for dev/tests
     index.html        admin window (served at /; reads/writes the campaign
                       folder itself via the File System Access API)
     tv.html           television window (served at /tv, works on any LAN device)
@@ -36,9 +36,11 @@ Read that file before touching code under `creator/` or `dm/`.
 
 **No build, no npm, no pip.** The creator is opened by double-clicking
 (`file://`, so no `fetch()`/XHR there). The dm/ apps are served by
-`dm/server.py` — Python stdlib only, started by double-clicking `DM.command` —
-and are written as native ES modules with two vendored library files
-(`dm/vendor/`). Never add a bundler, `package.json`, or a pip dependency.
+`dm/server.py` — Python stdlib only, deployed on the home Pi at
+`https://dm.sigint-pm.uk` (a local `python3 dm/server.py` is for dev and
+headless verification only) — and are written as native ES modules with two
+vendored library files (`dm/vendor/`). Never add a bundler, `package.json`,
+or a pip dependency.
 
 **Language split.** UI text and all rules content are **Spanish**. Code,
 identifiers, comments and every doc file (including this one) are **English**.

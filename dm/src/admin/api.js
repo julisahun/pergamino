@@ -70,8 +70,8 @@ export async function checkExternalChanges(root) {
 
 /* ------------------------------------------------------------ the relay */
 
-export const postBoard = board =>
-  fetch('/api/board', { method: 'POST', body: JSON.stringify({ origin: CLIENT_ID, board }) })
+export const postBoard = (room, board) =>
+  fetch('/api/board', { method: 'POST', body: JSON.stringify({ origin: CLIENT_ID, room, board }) })
     .then(jsonOrThrow);
 
 /** Upload one asset the current board references into the relay's ephemeral
@@ -92,10 +92,11 @@ export async function sha256(blob) {
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** The one channel events arrive on. EventSource reconnects on its own; the
-    server's `hello` snapshot on every (re)connect is what makes that free. */
-export function connectSSE(handlers) {
-  const es = new EventSource(`/api/events?role=admin&client=${CLIENT_ID}`);
+/** The one channel this table's events arrive on — scoped to the campaign's
+    room. EventSource reconnects on its own; the server's `hello` snapshot on
+    every (re)connect is what makes that free. */
+export function connectSSE(room, handlers) {
+  const es = new EventSource(`/api/events?role=admin&client=${CLIENT_ID}&room=${room}`);
   for (const [event, fn] of Object.entries(handlers)) {
     es.addEventListener(event, e => {
       let data;

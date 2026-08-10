@@ -216,7 +216,8 @@ export function TvPanel() {
       <b>tocar una vez en la ventana del tablero</b>: el navegador no deja sonar nada hasta que
       alguien la ha tocado. Ella misma lo pide si hace falta.</p>
     <p class="muted tvhint">El tablero también funciona en cualquier aparato de este wifi:${' '}
-      <b>${(state.lanUrl || '') + '/tv'}</b> en el navegador de la tele o de una tablet.</p>
+      <b>${(state.lanUrl || '') + '/tv'}</b> en el navegador de la tele o de una tablet —
+      el código de esta mesa es <b>${state.room || '—'}</b>.</p>
     <p class="muted tvhint">Las fichas se colocan solas. Se arrastran en el tablero, no aquí.</p>
   </div>`;
 }

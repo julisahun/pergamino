@@ -5,9 +5,10 @@
   and how to send a moved token back. It has no session, no rules and no
   secrets — what is not in the payload was never revealed.
 
-  Open it from the admin's "Tablero ↗", or point ANY device on the same
-  wifi at  http://<ip-del-portátil>:8420/tv  — a smart TV's browser, a
-  tablet, anything.
+  Every table is a ROOM: open this page from the admin's "Tablero ↗" (the
+  ?room= is carried along), scan the QR in "Conectar la tele", or open /tv
+  bare on any device and type the 6-char table code once — it is remembered.
+  Press M to switch tables.
 ====================================================================== -->
 <html lang="es">
 <head>
@@ -20,6 +21,17 @@
 </head>
 <body>
 <div id="tv"></div>
+<div id="room" hidden>
+  <form id="roomform">
+    <b>Código de mesa</b>
+    <input id="roomcode" maxlength="6" autocomplete="off" spellcheck="false"
+           placeholder="······" aria-label="Código de mesa">
+    <span>Son 6 letras y números — están en la ventana del DM, en el botón ▦
+      («Conectar la tele»). Este aparato lo recuerda; pulsa <b>M</b> para
+      cambiar de mesa.</span>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
 <div id="sound"><b>♪</b><span>Toca aquí para el sonido</span></div>
 <div id="link" hidden>reconectando…</div>
 <script type="module" src="/src/tv/main.js"></script>

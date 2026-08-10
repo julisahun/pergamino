@@ -27,6 +27,7 @@ export const state = {
   booted: false,
   root: null,                // the picked campaign folder's directory handle
   rootName: null,            // its name, for the top bar
+  room: null,                // this campaign's relay room code (.dm-room)
   rememberedName: null,      // last folder's name, for the gate's Reabrir
   lanUrl: null,              // http://192.168.x.x:8420 — shown beside Tablero ↗
   admins: 1,                 // SSE-reported admin count; >1 shows a warning
@@ -215,7 +216,7 @@ async function pushBoardNow() {
 
   const resolve = p => p ? (relayUrls.get(p) ?? null) : p;
   const board = resolveBoardAssets(buildBoard(state.session, audioPrefs, resolve), resolve);
-  const reply = await postBoard(board);
+  const reply = await postBoard(state.room, board);
 
   /* The relay answers with referenced hashes it does not hold — it restarted,
      or evicted them — so the next push self-heals without anyone noticing. */
@@ -226,7 +227,7 @@ async function pushBoardNow() {
       relayUrls.delete(rel); hashToRel.delete(h);
       await ensureRelayUrl(rel);
     }));
-    await postBoard(board);
+    await postBoard(state.room, board);
   }
 }
 
@@ -237,7 +238,7 @@ let pushing = false, pushAgain = false;
     through to reach the television. Pushes serialise — a burst of commits
     collapses into "one in flight, one queued". */
 export function syncBoard() {
-  if (state.session.field.paused || !state.root) return;
+  if (state.session.field.paused || !state.root || !state.room) return;
   if (pushing) { pushAgain = true; return; }
   pushing = true;
   pushBoardNow()

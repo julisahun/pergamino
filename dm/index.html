@@ -2,13 +2,15 @@
 <!-- ======================================================================
   Mesa del DM — the admin window.
 
-  Served by dm/server.py (double-click DM.command). This file is only the
-  shell: the app lives in src/admin/*.js as native ES modules, the look in
-  src/styles/*.css, the rules engine in src/rules/* (copied from the
-  creator — check-sync.py guards the copy). The television window is /tv.
+  Served by dm/server.py — live at https://dm.sigint-pm.uk (a local run is
+  dev-only). This file is only the shell: the app lives in src/admin/*.js
+  as native ES modules, the look in src/styles/*.css, the rules engine in
+  src/rules/* (copied from the creator — check-sync.py guards the copy).
+  The television window is /tv, joined per-table via a room code.
 
-  There is no save button anywhere: the campaign folder on disk is the
-  single source of truth and every change autosaves into it.
+  There is no save button anywhere: the campaign folder — read and written
+  directly by this browser via the File System Access API — is the single
+  source of truth and every change autosaves into it.
 ====================================================================== -->
 <html lang="es">
 <head>

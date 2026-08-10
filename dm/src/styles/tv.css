@@ -254,3 +254,33 @@ body {
 #sound b { font-family: var(--display); color: var(--seal); font-weight: 400; }
 @keyframes soundpulse { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { #sound { animation: none; } }
+
+/* ------------------------------------------------------------- the room
+   Which table this screen belongs to. Full-screen when the URL carried no
+   ?room= and none is remembered; the M key brings it back to switch. It
+   sits outside #tv because every render replaces that element wholesale. */
+#room {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-content: center; text-align: center;
+  background: var(--page);
+}
+#room[hidden] { display: none; }
+#room form { display: grid; gap: 1.8vh; justify-items: center; }
+#room b {
+  font-family: var(--display); font-variant: var(--head-variant);
+  font-weight: var(--head-weight); letter-spacing: var(--head-ls);
+  color: var(--seal); font-size: 4vh;
+}
+#room input {
+  width: 9ch; text-align: center; letter-spacing: .35em; text-transform: uppercase;
+  font-family: var(--serif); font-size: 4vh; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule);
+  border-radius: .8vh; padding: 1vh 0 1vh .35em;
+}
+#room span { font-size: 2vh; color: var(--ink-soft); max-width: 46ch; }
+#room span b { font-size: inherit; font-family: var(--serif); color: var(--ink); }
+#room button {
+  font-size: 2.2vh; padding: 1vh 3vh; cursor: pointer;
+  font-family: var(--serif); color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 999px;
+}

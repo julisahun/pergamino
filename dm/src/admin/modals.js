@@ -36,12 +36,15 @@ export function openConnectModal() {
 }
 
 function ConnectModal() {
-  const url = (state.lanUrl || location.origin) + '/tv';
+  const room = state.room || '';
+  const url = `${state.lanUrl || location.origin}/tv?room=${room}`;
   return html`<${ModalFrame} title="Conectar la tele" acts=${html`
       <button class="ghost" onClick=${close}>Cerrar</button>
-      <button class="primary" onClick=${() => { window.open('/tv', 'tablero'); close(); }}>Abrir aquí ↗</button>`}>
-    <p>Cualquier aparato del wifi vale de tablero: escanea el código con su
-      cámara, o teclea la dirección en su navegador.</p>
+      <button class="primary" onClick=${() => { window.open(`/tv?room=${room}`, 'tablero'); close(); }}>Abrir aquí ↗</button>`}>
+    <p>Cualquier aparato vale de tablero: escanea el código con su cámara —
+      o abre <b>${(state.lanUrl || location.origin) + '/tv'}</b> en su
+      navegador y teclea el código de esta mesa.</p>
+    <p style="text-align:center;font-size:1.6rem;letter-spacing:.35em;margin:.4rem 0"><b>${room}</b></p>
     <div class="connect">
       <canvas ref=${el => { if (el) qrToCanvas(el, url); }}></canvas>
       <p class="url">${url}</p>

@@ -18,15 +18,18 @@ was ported against — is preserved in git history
 `dm/` is the DM-facing half of a two-app toolkit for running a level-1-only
 D&D 5e (2024 rules) campaign. The admin console is what the DM drives from a
 laptop; the tablero is what the players look at — a second window, or any
-device on the same wifi pointed at `http://<laptop-ip>:8420/tv`.
+device pointed at the `/tv` page with the table's room code.
 
-The pages are served by `dm/server.py` (Python stdlib, port 8420 —
-overridable via `$DM_PORT` — started by double-clicking `DM.command`; a
-second start just opens another tab against the running server). That server
-is a static host and a board relay, nothing more: **campaign files never
-pass through it**. The admin page holds a File System Access grant on the
-campaign folder (Chromium-only, so Chrome or Edge; the page needs a secure
-context — localhost or https) and reads/writes it directly:
+The pages are served by `dm/server.py` (Python stdlib), **deployed on the
+home Pi at `https://dm.sigint-pm.uk` — the only way the app is actually
+run**; a local `python3 dm/server.py` (port 8420, `$DM_PORT` overridable)
+exists for dev and headless verification only. The server is a static host
+and a board relay, nothing more: **campaign files never pass through it**,
+and it serves **many simultaneous tables**, each partitioned into its own
+room (§2). The admin page holds a File System Access grant on the campaign
+folder (Chromium-only, so Chrome or Edge; the page needs a secure context —
+https or localhost, hence the cloudflared hostname) and reads/writes it
+directly:
 
 - **The campaign folder is the single source of truth.** Every change
   autosaves (500ms debounce) into the picked folder — one file per party
@@ -52,9 +55,18 @@ context — localhost or https) and reads/writes it directly:
 
 ## 2. The two windows
 
-The admin opens `/tv` via **Tablero ↗** (a named window, so pressing it again
-refocuses), or any LAN device loads it directly. From then on they talk
-through the server's SSE channel (`/api/events`):
+Every table is a **room**: a stable 6-char code (unambiguous alphabet, no
+0/O/1/I/L) minted the first time a campaign folder is opened and stored
+inside it as `.dm-room`, so it survives device switches and re-picks. The
+SSE channel, the board post and the move post all carry it — two DMs on two
+campaigns share the server without ever seeing each other's television.
+
+The admin opens `/tv?room=<code>` via **Tablero ↗** (a named window, so
+pressing it again refocuses); any other device scans the QR in **▦ Conectar
+la tele** (the URL carries the room) or opens `/tv` bare and types the code
+once into its code screen — the device remembers it (`dnd-dm-tv-room`,
+M switches tables). From then on they talk through the server's SSE channel
+(`/api/events?room=`):
 
 - The **admin is authoritative**. On every play mutation it rebuilds the
   projection (§10) and `POST /api/board`; the server stores the latest board
@@ -74,8 +86,9 @@ through the server's SSE channel (`/api/events`):
 
 A campaign is any folder the DM picks — `campaigns/<name>/` in this repo by
 convention, but the browser does not care — holding `scenarios/`, `assets/`,
-`story/`, `players/`, `monsters/`, and (once played) `session.json` and
-`trash/`.
+`story/`, `players/`, `monsters/`, and (once played) `session.json`,
+`trash/` and `.dm-room` (the table's room code; a dotfile, so the tree walk
+and the 5s poll never surface it).
 
 **First run**: until a folder is opened the whole UI is a gate screen with
 **Abrir carpeta…** (the OS directory picker, readwrite) and — when a folder
@@ -116,11 +129,12 @@ dropped.
 
 | Where | Holds |
 |---|---|
-| the picked campaign folder | everything (§3) |
+| the picked campaign folder | everything (§3), including the table's room code (`.dm-room`) |
 | admin IndexedDB (`dnd-dm`) | the remembered directory handle — a device preference |
 | admin localStorage `dnd-dm-audio` | master volume + mute — a room property, outside undo |
 | TV localStorage `dnd-dm-tv-audio` | that device's own volume (arrow keys), multiplied with the admin's master |
-| server memory | the latest board for `hello` replays, plus the ephemeral asset cache (sha-256-addressed, LRU ≤128MB) the board's URLs point into |
+| TV localStorage `dnd-dm-tv-room` | the joined table's room code (M switches) |
+| server memory | per-room latest boards for `hello` replays (idle clientless rooms LRU-pruned), plus the global ephemeral asset cache (sha-256-addressed, LRU ≤128MB) the boards' URLs point into |
 
 `session.json` holds `{version: 2, play, playerFiles, npcs, encounter,
 field}` — **not** the party and **not** the bestiary, which live in their own
@@ -310,9 +324,9 @@ picked folder itself, in the browser. What remains:
 |---|---|
 | `GET /` · `GET /tv` | the two pages; `/src`, `/vendor` static (dm/-confined, dotfiles invisible, Range supported) |
 | `GET /api/ping` | `{app, pid, lanUrl}` — duplicate-start detection + the TV address |
-| `POST /api/board` · `POST /api/move` | store+broadcast / broadcast; the board reply lists referenced asset hashes the relay lacks, so the admin re-uploads and re-posts by itself |
-| `PUT/GET /api/asset/<sha256>` | the ephemeral asset cache the TV loads maps/audio/portraits from: RAM-only, hash-verified on upload (no poisoning), LRU ≤128MB, Range for audio |
-| `GET /api/events` | SSE: `hello` (board replay + admin count), `board`, `move`, `clients`, 15s heartbeats |
+| `POST /api/board` · `POST /api/move` | store+broadcast / broadcast, scoped to the `room` in the body (missing/invalid → 400); the board reply lists referenced asset hashes the relay lacks, so the admin re-uploads and re-posts by itself |
+| `PUT/GET /api/asset/<sha256>` | the ephemeral asset cache the TV loads maps/audio/portraits from: RAM-only, hash-verified on upload (no poisoning), LRU ≤128MB, Range for audio — deliberately global, not per-room (content addressing cannot collide) |
+| `GET /api/events?room=` | SSE, one room: `hello` (that room's board replay + admin count), `board`, `move`, `clients`, 15s heartbeats |
 
 ---
 
