@@ -1110,7 +1110,9 @@ button.danger:hover:not(:disabled) { background: var(--seal); color: #fdf6e6; }
 }
 .abdetails[open] > summary { margin-bottom: .5rem; }
 
-.quickadd { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .6rem; }
+/* The action row every tab opens with. The bottom margin is what keeps the
+   buttons off whatever they sit above — the search box, the card grid. */
+.quickadd { display: flex; flex-wrap: wrap; gap: .3rem; margin: .6rem 0 .9rem; }
 .quickadd .tag { font-size: .74rem; color: var(--sepia); font-variant: small-caps; align-self: center; margin-right: .2rem; }
 
 .filterbar { margin-bottom: .8rem; max-width: 30rem; }
@@ -1513,7 +1515,7 @@ details.newnote > summary {
   cursor: pointer; color: var(--sepia);
   font-variant: small-caps; letter-spacing: .03em;
 }
-details.newnote form { margin-top: .45rem; }
+details.newnote form { margin: .45rem 0 0; }
 details.newnote input { flex: 1 1 11rem; min-width: 0; }
 
 /* In-place editing: the body is contentEditable, so the note never stops
