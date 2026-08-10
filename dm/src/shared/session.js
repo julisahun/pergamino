@@ -11,11 +11,12 @@
 
 import { normalise } from '../rules/character.js';
 import { normaliseBeast } from './beasts.js';
+import { normaliseObject } from './objects.js';
 import { CONDITION } from './conditions.js';
 
 export function blankPlay() {
   return { hp: null, temp: 0, conditions: [], exh: 0, death: { ok: 0, fail: 0 }, note: '',
-           gold: 0, inventory: '' };
+           gold: 0, inventory: '', objects: [] };
 }
 
 /* The field is squares, not pixels: 24 x 14 of them is 36 m x 21 m, which is
@@ -40,6 +41,8 @@ export function blankSession() {
     play: {},
     playerFiles: {},          // '<charId>': 'players/<name>.json', when it came from disk
     bestiary: [],
+    objects: [],              // the objects/*.json catalog — injected, never serialised
+
     /* Every npc instance currently loaded, in or out of any fight — see
        normaliseBeast() for the shape. Combat is a separate fact about a
        subset of these, tracked below. */
@@ -119,6 +122,11 @@ export function normalisePlay(p) {
   out.note = String(out.note || '');
   out.gold = Math.max(0, Number(out.gold) || 0);
   out.inventory = String(out.inventory || '');
+  /* Held object ids. Whether an id still names anything is the catalog's
+     question, answered at read time — no catalog in scope here. */
+  out.objects = Array.isArray(out.objects)
+    ? out.objects.filter(x => typeof x === 'string' && x)
+    : [];
   return out;
 }
 
@@ -131,6 +139,7 @@ export function normaliseSession(s) {
   out.version = 2;
   out.party = Array.isArray(s?.party) ? s.party.map(normalise) : [];
   out.bestiary = Array.isArray(s?.bestiary) ? s.bestiary.map(normaliseBeast) : [];
+  out.objects = Array.isArray(s?.objects) ? s.objects.map(normaliseObject) : [];
 
   out.play = {};
   for (const c of out.party) out.play[c.id] = normalisePlay(s?.play?.[c.id]);

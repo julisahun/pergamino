@@ -58,7 +58,7 @@ export const state = {
        the table again. endCombat() is what forgets them. */
     rolled: new Map(),
     dmgHelp: null,           // card ref whose damage-box legend is open
-    filters: { escenas: '', monstruos: '', story: '' },
+    filters: { escenas: '', monstruos: '', objetos: '', story: '' },
     sessionConflict: false,  // session.json changed on disk while we were open
   },
 };

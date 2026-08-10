@@ -174,7 +174,7 @@ function MusterPicker(draft) {
   const party = partyHandles(state.session).filter(matches);
   const onScene = party.filter(cb => !state.session.field.benched.includes(cb.ref));
   const offScene = party.filter(cb => state.session.field.benched.includes(cb.ref));
-  const npcs = state.session.npcs.map(npcHandle).filter(matches);
+  const npcs = state.session.npcs.map(n => npcHandle(n, state.session.objects)).filter(matches);
   const unloaded = state.session.bestiary.filter(b =>
     matchesFilter(`${b.name} ${b.tag || ''}`, q) || draft.counts.get(b.id));
 

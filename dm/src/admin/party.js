@@ -5,7 +5,7 @@
    store and the model. */
 
 import { commit, saveEntity } from './store.js';
-import { playOf, stats, clearStatCache } from '../shared/handles.js';
+import { playOf, pcMaxHP, clearStatCache } from '../shared/handles.js';
 import { seatAll } from '../shared/combat.js';
 import { slugify } from '../shared/util.js';
 
@@ -16,12 +16,12 @@ export function mergeParty(s, c) {
   if (at >= 0) {
     s.session.party[at] = c;
     const p = playOf(s.session, c.id);
-    const max = stats(c).hp ?? 0;
+    const max = pcMaxHP(s.session, c);
     if (p.hp != null) p.hp = Math.min(p.hp, max);
     return 'updated';
   }
   s.session.party.push(c);
-  playOf(s.session, c.id).hp = stats(c).hp ?? 0;
+  playOf(s.session, c.id).hp = pcMaxHP(s.session, c);
   return 'added';
 }
 

@@ -134,7 +134,7 @@ export function buildBoard(session, audioPrefs, urlFor) {
        same gate a token already gets — combat decides only whether it says
        anything about hit points. */
     npcs: session.npcs.filter(n => (f.reveal[n.id] || normaliseReveal(null)).on).map(n => {
-      const cb = npcHandle(n);
+      const cb = npcHandle(n, session.objects || []);
       const inCombat = e.members.includes('npc:' + n.id);
       return {
         name: cb.name, portrait: portraitSrc(cb.portrait, urlFor),

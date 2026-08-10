@@ -1161,6 +1161,22 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .beast .nt { grid-column: 1 / -1; font-size: .84rem; color: var(--ink-soft); white-space: pre-wrap; }
 .beast .acts { display: flex; gap: .3rem; flex-wrap: wrap; justify-content: flex-end; }
 
+/* --------------------------------------------------------------- objects */
+/* The wizard's repeatable rows: a stat + how much, and a free-text effect. */
+.modrow {
+  display: grid; grid-template-columns: minmax(8rem, 12rem) 5.5rem auto; gap: .4rem;
+  align-items: center; margin-bottom: .4rem;
+}
+.fxrow { display: grid; grid-template-columns: 1fr auto; gap: .4rem; align-items: center; margin-bottom: .4rem; }
+
+/* Carried effects on the card face, and the held list in the detail panel. */
+.cb .fxline { font-size: .8rem; font-style: italic; color: var(--ink-soft); margin-top: .35rem; }
+.detail .objrow {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  font-size: .88rem; margin-bottom: .25rem;
+}
+.detail .objadd { display: flex; align-items: center; gap: .5rem; margin-top: .2rem; }
+
 /* ================================================================ ESCENAS
    A scene is prep: the art, the grid, and what is standing on it. The library
    is a grid of thumbnails because a scene is a *picture* — a list of names

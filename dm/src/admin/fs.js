@@ -8,7 +8,7 @@
    the same paths the old HTTP API used, so the rest of the app kept its
    vocabulary. */
 
-const SUBDIRS = ['scenarios', 'assets', 'players', 'monsters', 'story'];
+const SUBDIRS = ['scenarios', 'assets', 'players', 'monsters', 'objects', 'story'];
 
 /* ------------------------------------------------- the remembered handle
    idb-keyval would be a vendored file for one key — a bare get/set/del over
@@ -98,12 +98,13 @@ const isTop = (path, top, ext) => {
 };
 
 /** The whole boot payload, in exactly the shape the old GET /api/c/:name/tree
-    returned: {session, scenarios, players, monsters, story, assets} with
-    JSON/MD entries as {path, text} and assets as bare relpaths — plus the
-    mtime map, so the caller can seed the external-edit baseline for free. */
+    returned: {session, scenarios, players, monsters, objects, story, assets}
+    with JSON/MD entries as {path, text} and assets as bare relpaths — plus
+    the mtime map, so the caller can seed the external-edit baseline for
+    free. */
 export async function readTree(root) {
   const files = (await collectFiles(root, '', [])).sort((a, b) => a.path < b.path ? -1 : 1);
-  const tree = { session: null, scenarios: [], players: [], monsters: [], story: [], assets: [] };
+  const tree = { session: null, scenarios: [], players: [], monsters: [], objects: [], story: [], assets: [] };
   const mtimes = new Map();
   await Promise.all(files.map(async ({ path, handle }) => {
     let file;
@@ -113,10 +114,11 @@ export async function readTree(root) {
     else if (isTop(path, 'scenarios', '.json')) tree.scenarios.push({ path, text: await file.text() });
     else if (isTop(path, 'players', '.json')) tree.players.push({ path, text: await file.text() });
     else if (isTop(path, 'monsters', '.json')) tree.monsters.push({ path, text: await file.text() });
+    else if (isTop(path, 'objects', '.json')) tree.objects.push({ path, text: await file.text() });
     else if (path.startsWith('story/') && path.endsWith('.md')) tree.story.push({ path, text: await file.text() });
     else if (path.startsWith('assets/')) tree.assets.push(path);
   }));
-  for (const k of ['scenarios', 'players', 'monsters', 'story']) {
+  for (const k of ['scenarios', 'players', 'monsters', 'objects', 'story']) {
     tree[k].sort((a, b) => a.path < b.path ? -1 : 1);
   }
   tree.assets.sort();

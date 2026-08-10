@@ -46,6 +46,7 @@ save buttons and no merge rules:
 | play state (hp, npcs, encounter, field) | `session.json` | autosaved, 500ms debounce |
 | a party member | `players/<slug>.json` | on import, and when the Jugadores editor (`src/admin/crear.js`) creates or saves one — same `{kind,version,character}` envelope the creator exports, so the file stays interchangeable. A member keeps the path it arrived on: renaming does not move the file |
 | a bestiary entry | `monsters/<slug>.json` | wizard save / "Guardar en los PNJ" |
+| an object (item) | `objects/<slug>.json` | wizard save. The catalog: name, description, `mods` over the five handle stats (ac, hpMax, initMod, speed, pp), free-text `effects`. Holders keep only ids — `play[id].objects` / the npc instance — and inherit the modifiers in `pcHandle`/`npcHandle`, never inside the sync-guarded `derive()` |
 | a scene | `scenarios/<slug>.json` | editor Guardar |
 | a dropped map | `assets/maps/<epoch>.jpg` | on drop (≤1920px JPEG) |
 | a note | `story/**/*.md` | Historia's WYSIWYG editor (`domToMd`), autosaved — or any text editor, same file. An in-app edit re-serialises the file from the rendered subset: wrapped lines unwrap, constructs the renderer flattens get flattened. |

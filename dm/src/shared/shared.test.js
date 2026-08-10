@@ -10,8 +10,10 @@ import { normaliseBeast } from './beasts.js';
 import { normaliseScene, deriveRows, sceneGridSize, missingAssets,
          resolveRoster, goLive } from './scenes.js';
 import { applyDelta, applyGoldDelta, hurt, inOrder, advance, startCombat,
-         endCombat, seatAll, freeSquare, applyMove } from './combat.js';
-import { npcHandle, currentHP } from './handles.js';
+         endCombat, seatAll, freeSquare, applyMove, longRest } from './combat.js';
+import { npcHandle, currentHP, pcMaxHP } from './handles.js';
+import { normaliseObject, modTotals, heldObjects, effectLines } from './objects.js';
+import { normalise } from '../rules/character.js';
 import { coarseWord, tokenHP, buildBoard } from './board.js';
 import { noteFrom, noteTitle, storyIndex, noteTags, noteLinks, backlinksFor,
          mdToHtml, domToMd } from './story.js';
@@ -504,4 +506,102 @@ test('esc, slugify, encodePath', () => {
   assert.equal(slugify('Thálor Vaélen!'), 'thalor-vaelen');
   assert.equal(slugify('***'), 'sin-nombre');
   assert.equal(encodePath('story/Medalla del Tratado.md'), 'story/Medalla%20del%20Tratado.md');
+});
+
+/* ---------------------------------------------------------------- objects */
+
+test('normaliseObject: coerces, drops zero/unknown mods, trims effects', () => {
+  const o = normaliseObject({ name: 'Anillo', mods: { ac: '1', hpMax: 0, speed: 'x', foo: 5 },
+                              effects: [' brilla ', ''] });
+  assert.deepEqual(o.mods, { ac: 1 });
+  assert.deepEqual(o.effects, ['brilla']);
+  assert.equal(normaliseObject(null).name, 'Sin nombre');
+});
+
+test('modTotals stacks duplicates and skips dangling ids', () => {
+  const catalog = [normaliseObject({ id: 'a', mods: { ac: 1, pp: 5 } })];
+  assert.deepEqual(modTotals(catalog, ['a', 'a', 'gone']),
+    { ac: 2, hpMax: 0, initMod: 0, speed: 0, pp: 10 });
+  assert.deepEqual(modTotals(catalog, undefined),
+    { ac: 0, hpMax: 0, initMod: 0, speed: 0, pp: 0 });
+});
+
+test('heldObjects groups with counts; effectLines dedupe', () => {
+  const catalog = [
+    normaliseObject({ id: 'a', name: 'A', effects: ['brilla'] }),
+    normaliseObject({ id: 'b', name: 'B', effects: ['brilla', 'pesa'] }),
+  ];
+  const held = heldObjects(catalog, ['a', 'b', 'a', 'gone']);
+  assert.deepEqual(held.map(h => [h.obj.id, h.count]), [['a', 2], ['b', 1]]);
+  assert.deepEqual(effectLines(catalog, ['a', 'b']), ['brilla', 'pesa']);
+});
+
+test('normalisePlay keeps held ids, drops junk', () => {
+  assert.deepEqual(normalisePlay({ objects: ['a', '', 7, 'b'] }).objects, ['a', 'b']);
+  assert.deepEqual(normalisePlay(null).objects, []);
+});
+
+test('serialiseSession: catalog stays out, assignments stay in', () => {
+  const c = normalise({ id: 'p9', name: 'Pip' });
+  const s = normaliseSession({
+    party: [c],
+    play: { p9: { objects: ['ring'] } },
+    npcs: [{ id: 'g1', hpMax: 7, objects: ['ring'] }],
+    objects: [{ id: 'ring', name: 'Anillo' }],
+  });
+  assert.equal(s.objects[0].name, 'Anillo');
+  const out = serialiseSession(s);
+  assert.equal(out.objects, undefined);           // the catalog is objects/*.json
+  assert.deepEqual(out.play.p9.objects, ['ring']);
+  assert.deepEqual(out.npcs[0].objects, ['ring']);
+});
+
+test('npcHandle layers held objects over stored stats', () => {
+  const catalog = [normaliseObject({ id: 'ring', mods: { ac: 1, hpMax: 2, initMod: 1, pp: 3 } })];
+  const cb = npcHandle(npc({ objects: ['ring', 'ring'] }), catalog);
+  assert.equal(cb.ac, 15);                        // 13 + 2
+  assert.equal(cb.hpMax, 11);                     // 7 + 4
+  assert.equal(cb.initMod, 2);
+  assert.equal(cb.pp, null);                      // unknown + bonus stays unknown
+  assert.equal(currentHP(cb), 11);                // hp: null reads full at the raised max
+  const noSpeed = Object.assign(normaliseBeast({ id: 'x', speed: 'None' }), normalisePlay(null),
+                                { objects: ['ring'] });
+  assert.equal(npcHandle(noSpeed, catalog).speed, null);
+});
+
+test('=n above the raised max stores base, reads effective (no double count)', () => {
+  const catalog = [normaliseObject({ id: 'ring', mods: { hpMax: 2 } })];
+  const n = npc({ objects: ['ring'] });
+  const cb = npcHandle(n, catalog);
+  assert.equal(cb.hpMax, 9);
+  applyDelta(cb, '=20');
+  assert.equal(n.hpMax, 18);                      // what the instance stores
+  assert.equal(n.hp, 20);                         // what the table sees
+  assert.equal(npcHandle(n, catalog).hpMax, 20);
+});
+
+test('longRest and pcMaxHP heal to the object-raised maximum', () => {
+  const c = normalise({ id: 'p8', name: 'Nora' });
+  const s = normaliseSession({
+    party: [c],
+    play: { p8: { hp: 0, objects: ['ring', 'ring'] } },
+    objects: [{ id: 'ring', mods: { hpMax: 2 } }],
+  });
+  assert.equal(pcMaxHP(s, s.party[0]), 4);        // blank sheet: base 0, +2 twice
+  longRest(s);
+  assert.equal(s.play.p8.objects.length, 2);      // a rest packs nothing away
+  assert.equal(s.play.p8.hp, 4);
+});
+
+test('board party rows carry the object-raised hpMax', () => {
+  const c = normalise({ id: 'p7', name: 'Ivo' });
+  const s = normaliseSession({
+    party: [c],
+    play: { p7: { objects: ['ring'] } },
+    objects: [{ id: 'ring', mods: { hpMax: 2 } }],
+  });
+  seatAll(s);
+  const b = buildBoard(s, { master: .7, muted: false }, urlFor);
+  assert.equal(b.party[0].hpMax, 2);              // blank sheet: base 0 + 2
+  assert.equal(b.party[0].hp, 2);                 // hp: null = full at the raised max
 });

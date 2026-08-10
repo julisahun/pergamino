@@ -48,6 +48,9 @@ function importLegacySession(rawSession) {
   const droppedMap = incoming.field.map && !incoming.field.map.src;
   if (droppedMap) incoming.field.map = null;
   commit('importar mesa.json', s => {
+    /* mesa.json predates objects: the catalog lives in objects/*.json on
+       disk, not in any session, so the one already loaded survives the swap. */
+    incoming.objects = s.session.objects;
     for (const c of incoming.party) {
       const rel = incoming.playerFiles[c.id] || ('players/' + (slugify(c.name || '') || c.id) + '.json');
       incoming.playerFiles[c.id] = rel;

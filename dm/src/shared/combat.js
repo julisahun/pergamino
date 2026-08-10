@@ -2,7 +2,7 @@
    dice — initiative totals, damage and death saves are entered, never
    generated. */
 
-import { stats, playOf, handleFor, currentHP } from './handles.js';
+import { playOf, handleFor, currentHP, pcMaxHP } from './handles.js';
 import { clampCol, clampRow, blankPlay } from './session.js';
 import { normaliseBeast } from './beasts.js';
 import { newId } from '../rules/character.js';
@@ -26,10 +26,14 @@ export function applyDelta(cb, raw) {
     /* A monster's maximum is whatever you decided it is, so `=20` on a goblin
        you gave 7 raises the maximum with it — otherwise the number you typed
        silently became 7 and the box looked broken. A player's maximum is
-       derive()'s and not this box's business. */
+       derive()'s and not this box's business. The typed number is the
+       *effective* total, so what lands on the instance has the object bonus
+       taken back out — cb.hpMax re-adds it on the next read. */
     const n = Number(m[1]);
-    if (cb.kind === 'npc' && n > max) { cb.npc.hpMax = n; p.hp = n; }
-    else p.hp = Math.min(max, n);
+    if (cb.kind === 'npc' && n > max) {
+      cb.npc.hpMax = Math.max(1, n - (cb.mods?.hpMax || 0));
+      p.hp = n;
+    } else p.hp = Math.min(max, n);
   } else if ((m = s.match(/^\+(\d+)$/))) {
     heal(cb, Number(m[1]));
   } else if ((m = s.match(/^-?(\d+)$/))) {
@@ -71,7 +75,7 @@ export function applyGoldDelta(p, raw) {
 export function longRest(session) {
   for (const c of session.party) {
     const p = playOf(session, c.id);
-    p.hp = stats(c).hp ?? 0;
+    p.hp = pcMaxHP(session, c);
     p.temp = 0;
     p.conditions = [];
     p.exh = Math.max(0, p.exh - 1);            // a long rest removes one level

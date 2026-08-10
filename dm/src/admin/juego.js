@@ -375,7 +375,7 @@ function NothingLive() {
 
 function Muster() {
   const party = partyHandles(state.session).filter(cb => !state.session.field.benched.includes(cb.ref));
-  const monsters = state.session.npcs.map(npcHandle);
+  const monsters = state.session.npcs.map(n => npcHandle(n, state.session.objects));
 
   const side = (title, cls, rows, empty, plus) => html`<div class=${'side ' + cls}>
     <h3 class=${'sideh ' + cls}>${title} <span class="n">${rows.length}</span>${plus || null}</h3>
@@ -409,7 +409,8 @@ function Fight() {
   const active = list.find(o => o.ref === e.activeRef);
   const pcs = list.filter(o => o.cb.kind === 'pc');
   const npcs = list.filter(o => o.cb.kind === 'npc');
-  const sidelined = state.session.npcs.map(npcHandle).filter(cb => !e.members.includes(cb.ref));
+  const sidelined = state.session.npcs.map(n => npcHandle(n, state.session.objects))
+    .filter(cb => !e.members.includes(cb.ref));
   const pending = list.filter(o => o.init == null).length;
 
   const setInit = (ref, raw) => commit('editar una iniciativa', s => {

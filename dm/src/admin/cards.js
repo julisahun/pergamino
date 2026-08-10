@@ -13,6 +13,8 @@ import { normaliseReveal } from '../shared/session.js';
 import { applyDelta, applyGoldDelta } from '../shared/combat.js';
 import { handleFor, npcById, currentHP } from '../shared/handles.js';
 import { normaliseBeast, absorbBeast } from '../shared/beasts.js';
+import { heldObjects, effectLines, modSummary } from '../shared/objects.js';
+import { openObjectPicker, removeObjectFrom } from './objetos.js';
 import { portraitSrc } from '../shared/board.js';
 import { metres, slugify } from '../shared/util.js';
 import { urlFor } from './store.js';
@@ -122,17 +124,17 @@ export function CbCard({ cb, opts = {} }) {
     </div>`}
 
     <div class="nums">
-      <span>CA<b>${cb.ac ?? '—'}</b></span>
-      <span>Inic.<b>${signed(cb.initMod || 0)}</b></span>
-      ${cb.pp != null ? html`<span>Perc.<b>${cb.pp}</b></span>` : null}
-      ${cb.speed != null ? html`<span>Vel.<b>${metres(cb.speed)}</b></span>` : null}
+      <span title=${modTip(cb, 'ac')}>CA<b>${cb.ac ?? '—'}</b></span>
+      <span title=${modTip(cb, 'initMod')}>Inic.<b>${signed(cb.initMod || 0)}</b></span>
+      ${cb.pp != null ? html`<span title=${modTip(cb, 'pp')}>Perc.<b>${cb.pp}</b></span>` : null}
+      ${cb.speed != null ? html`<span title=${modTip(cb, 'speed')}>Vel.<b>${metres(cb.speed)}</b></span>` : null}
       ${p.exh ? html`<span>Agot.<b>${p.exh}</b></span>` : null}
     </div>
 
     <div class="hp">
       <div class="bar"><i style=${'width:' + pct + '%'}></i>${tpct ? html`<u style=${'width:' + tpct + '%'}></u>` : null}</div>
       <div class="hpline">
-        <span class="cur">${hp}</span><span class="max">/ ${max} PG</span>
+        <span class="cur">${hp}</span><span class="max" title=${modTip(cb, 'hpMax')}>/ ${max} PG</span>
         ${p.temp ? html`<span class="tmp">+${p.temp} temp</span>` : null}
         ${cardState ? html`<span class="state">${cardState}</span>` : null}
       </div>
@@ -154,6 +156,7 @@ export function CbCard({ cb, opts = {} }) {
     </div>
 
     <${ChipRow} cb=${cb} />
+    <${FxLine} cb=${cb} />
     ${cb.kind === 'npc' ? html`<${RevealRow} cb=${cb} />` : null}
     ${opts.bench && cb.kind === 'pc' ? html`<${BenchRow} cb=${cb} onEdit=${opts.onEdit} />` : null}
     ${down && cb.kind === 'pc' ? html`<${DeathRow} cb=${cb} />` : null}
@@ -165,6 +168,41 @@ export function CbCard({ cb, opts = {} }) {
     ${open ? html`<div class="detail">${cb.kind === 'pc'
       ? html`<${PcDetail} cb=${cb} />` : html`<${NpcDetail} cb=${cb} />`}</div>` : null}
   </article>`;
+}
+
+/* -------------------------------------------------------------- objects */
+
+/** The number in the strip is already adjusted — this only answers "why is
+    it 17" on hover, where an object is part of the answer. */
+function modTip(cb, key) {
+  const m = cb.mods?.[key];
+  return m ? `incluye ${signed(m)} por objetos` : null;
+}
+
+/** The carried effects, on the card face: mid-combat is exactly when
+    "ventaja en sigilo" must not live behind a caret. */
+function FxLine({ cb }) {
+  const fx = effectLines(state.session.objects, cb.play.objects);
+  return fx.length ? html`<div class="fxline">✦ ${fx.join(' · ')}</div>` : null;
+}
+
+/** The carried objects, in the expanded panel — players and npcs alike. */
+function ObjectsBlock({ cb }) {
+  const held = heldObjects(state.session.objects, cb.play.objects);
+  return html`<div class=${cb.kind === 'npc' ? 'wide' : null}><h4>Objetos</h4>
+    ${held.map(({ obj, count }) => {
+      const sum = modSummary(obj.mods);
+      return html`<div class="objrow" key=${obj.id}>
+        <span><b>${obj.name}</b>${count > 1 ? ` ×${count}` : ''}${
+          sum ? html`<span class="muted"> · ${sum}</span>` : null}</span>
+        <button class="small ghost" onClick=${() => removeObjectFrom(cb.ref, obj.id)}>Quitar</button>
+      </div>`;
+    })}
+    <div class="objadd">
+      ${held.length ? null : html`<span class="muted" style="font-size:.84rem">Nada encima.</span>`}
+      <button class="small ghost" onClick=${() => openObjectPicker(cb.ref)}>+ Añadir objeto</button>
+    </div>
+  </div>`;
 }
 
 /* ------------------------------------------------------------ condition */
@@ -383,6 +421,8 @@ function PcDetail({ cb }) {
         })}></textarea>
     </div>
 
+    <${ObjectsBlock} cb=${cb} />
+
     ${c.appearance || c.story?.personality ? html`<div><h4>Quién es</h4>
       <p style="margin:0;font-size:.88rem">${[c.appearance, c.story?.personality].filter(Boolean).join(' · ')}</p>
     </div>` : null}
@@ -449,6 +489,7 @@ function NpcDetail({ cb }) {
       <summary>Habilidades y ataques</summary>
       ${n.abilities.map(a => html`<div class="feat" key=${a.id}><b>${a.name}.</b> ${a.desc}</div>`)}
     </details>` : null}
+    <${ObjectsBlock} cb=${cb} />
     <div class="acts">
       <button class="small ghost" onClick=${() => keepInBestiary(n.id)}>Guardar en los PNJ</button>
       <button class="small ghost" onClick=${() => commit(`quitar ${n.name}`, s => {

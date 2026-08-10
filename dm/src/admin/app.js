@@ -42,8 +42,9 @@ function Gate() {
     <p class="muted" style="font-size:.85rem;margin-top:1rem">
       Una campaña es una carpeta con${' '}
       <code>scenarios/</code>,${' '}<code>assets/</code>,${' '}
-      <code>story/</code>,${' '}<code>players/</code>${' '}y${' '}
-      <code>monsters/</code> — elige una vacía y se crean solas.
+      <code>story/</code>,${' '}<code>players/</code>,${' '}
+      <code>monsters/</code>${' '}y${' '}<code>objects/</code> —
+      elige una vacía y se crean solas.
       Todo lo que cambies aquí se guarda solo, directamente en esos
       archivos — no hay botón de guardar, y nada sale de tu máquina.</p>
   </section></main>`;
@@ -55,6 +56,7 @@ const TAB_TITLES = {
   juego: ['Juego', 'la mesa, ahora mismo'],
   jugadores: ['Jugadores', 'el grupo, fuera de combate'],
   monstruos: ['PNJ', 'cualquiera que no esté sentado a la mesa'],
+  objetos: ['Objetos', 'lo que llevan encima, y lo que hace'],
   escenas: ['Escenas', 'preparación, no partida'],
   story: ['Historia', 'notas de la campaña'],
 };
@@ -63,6 +65,7 @@ const NAV = [
   ['juego', 'Juego'],
   ['jugadores', 'Jugadores'],
   ['monstruos', 'PNJ'],
+  ['objetos', 'Objetos'],
   ['escenas', 'Escenas'],
   ['story', 'Historia'],
 ];
@@ -74,6 +77,7 @@ function TopBar() {
     juego: state.session.encounter.on ? state.session.encounter.members.length : 0,
     jugadores: state.session.party.length,
     monstruos: state.session.bestiary.length,
+    objetos: state.session.objects.length,
     escenas: state.scenes.length,
     story: state.story.notes.length,
   };

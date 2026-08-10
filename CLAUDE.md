@@ -24,6 +24,8 @@ dnd/
       story/           DM notes, .md, grouped by subfolder (editable in Historia too)
       players/         character exports (the creator's .json) — this IS the party
       monsters/        bestiary entries, one .json each
+      objects/         item catalog, one .json each — stat modifiers + effects,
+                       assignable to players and npc instances
       session.json     the live table, autosaved
       trash/           where in-app deletes land, never unlinked
   introduction.md      campaign pitch/premise (narrative, not app docs)

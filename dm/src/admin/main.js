@@ -9,6 +9,7 @@ import { App } from './app.js';
 /* Tab modules register themselves into app.js's `screens` on import. */
 import './jugadores.js';
 import './pnj.js';
+import './objetos.js';
 import './escenas.js';
 import './historia.js';
 import './juego.js';
@@ -20,10 +21,11 @@ import { pickCampaignFolder, hasPermission, verifyPermission, saveHandle,
 import { normalise } from '../rules/character.js';
 import { normaliseSession, blankSession, normalisePlay } from '../shared/session.js';
 import { normaliseBeast } from '../shared/beasts.js';
+import { normaliseObject } from '../shared/objects.js';
 import { normaliseScene } from '../shared/scenes.js';
 import { noteFrom } from '../shared/story.js';
 import { seatAll, applyMove } from '../shared/combat.js';
-import { stats, clearStatCache } from '../shared/handles.js';
+import { pcMaxHP, clearStatCache } from '../shared/handles.js';
 
 const readJSON = text => { try { return JSON.parse(text); } catch { return null; } };
 
@@ -45,6 +47,13 @@ const parseBeasts = files => files
   .map(f => {
     const raw = readJSON(f.text);
     return raw ? normaliseBeast({ ...raw, file: f.path }) : null;
+  })
+  .filter(Boolean);
+
+const parseObjects = files => files
+  .map(f => {
+    const raw = readJSON(f.text);
+    return raw ? normaliseObject({ ...raw, file: f.path }) : null;
   })
   .filter(Boolean);
 
@@ -95,18 +104,22 @@ async function loadCampaign(root, { keepSession = false, changedAssets = [] } = 
   const tree = await fetchTree(root);
   const { party, playerFiles } = parseParty(tree.players);
   const bestiary = parseBeasts(tree.monsters);
+  const objects = parseObjects(tree.objects);
 
   let session;
   if (keepSession) {
     session = state.session;
     session.party = party;
     session.bestiary = bestiary;
+    /* The catalog lands before the clamp below — a held +2 PG object is part
+       of the maximum the clamp compares against. */
+    session.objects = objects;
     for (const c of party) if (!session.play[c.id]) session.play[c.id] = normalisePlay(null);
     for (const c of party) {
       /* A re-imported sheet must never cost the party its wounds — but a
          lowered max must clamp what is left. */
       const p = session.play[c.id];
-      const max = stats(c).hp ?? 0;
+      const max = pcMaxHP(session, c);
       if (p.hp != null) p.hp = Math.min(p.hp, max);
     }
     session.playerFiles = playerFiles;
@@ -116,7 +129,8 @@ async function loadCampaign(root, { keepSession = false, changedAssets = [] } = 
        live — only a *stored* session with no opinion gets the old-save
        defaults of live/grid true. */
     const base = raw && typeof raw === 'object' ? raw : { field: { live: false, grid: false } };
-    session = normaliseSession({ ...base, party, bestiary, playerFiles: { ...base.playerFiles, ...playerFiles } });
+    session = normaliseSession({ ...base, party, bestiary, objects,
+                                 playerFiles: { ...base.playerFiles, ...playerFiles } });
     migrateFieldAssets(session.field);
   }
   clearStatCache();
@@ -143,7 +157,12 @@ let sse = null;
 function wireSSE(room) {
   if (sse) sse.close();
   sse = connectSSE(room, {
-    hello: d => update(s => { s.admins = d.admins; }),
+    /* hello fires on every (re)connect. The relay keeps boards in RAM, so a
+       restarted server (a deploy) greets us empty-handed — and any TV that
+       loads before the next play mutation would wait forever. Re-push here:
+       it also heals pushes lost while this tab was offline, and the initial
+       double-push with adopt() collapses in syncBoard's queue. */
+    hello: d => { update(s => { s.admins = d.admins; }); syncBoard(); },
     clients: d => update(s => { s.admins = d.admins; }),
     move: d => {
       if (applyMove(state.session, d.ref, d.x, d.y)) {
@@ -223,7 +242,7 @@ async function adopt(handle) {
 
 /** The gate's "Abrir carpeta…" — must run inside the click, the picker is
     gesture-gated. A folder with nothing in it becomes a campaign on the
-    spot (the 5 subdirs are seeded); anything else opens as it is, missing
+    spot (the 6 subdirs are seeded); anything else opens as it is, missing
     categories simply reading as empty. */
 export async function openFolder() {
   let handle;
