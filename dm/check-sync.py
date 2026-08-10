@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 """
-Asserts that the parts of these three files copied from one another have not
-drifted.
+Asserts that the parts of dm/ copied from creator/index.html have not drifted.
 
-  creator/index.html  ──rules──►  dm/index.html  ──theme──►  dm/tablero.html
+  creator/index.html  ──rules──►  dm/src/rules/{data,engine,character}.js
+  creator/index.html  ──theme──►  dm/src/styles/tokens.css
 
-The DM board calls derive() on the players' exported .json, so it carries a
-verbatim copy of the creator's rules tables and engine; a divergence would mean
-the board quietly showing different numbers than the sheet the player is
-holding. tablero.html carries the design tokens so the television and the laptop
-are the same colour.
+The DM app runs derive() against the .json a player exported from the creator,
+so it carries the creator's rules tables and engine as ES modules; a divergence
+would mean the board quietly showing different numbers than the sheet the
+player is holding. tokens.css carries the design tokens so every window is the
+same colour.
 
-What is checked:
+The modules are the creator's inline text plus mechanical ESM syntax and
+nothing else. Before comparing, that syntax is undone:
 
-  creator → dm       <script id="data">     the frozen rules tables
-                     <script id="engine">   derive() and everything it calls
-                     blankCharacter()       needed to accept an exported file
-                     newId()
-                     normalise()
-
-  creator → dm       theme tokens           the single :root token block
-  creator → tablero  theme tokens
+  data.js       strip leading `export ` on top-level declarations
+  engine.js     drop `import …` lines, then strip `export `
+  character.js  strip `export `, then extract the three functions the same
+                brace-balance way they are extracted from the creator
+  tokens.css    nothing — the file keeps the creator's own start/end markers
 
 Usage:  python3 check-sync.py         (run it from anywhere)
 Exit:   0 identical, 1 drift, 2 could not extract
 
-Fix drift in the file on the left of the arrow, then copy across. The creator
-is the source of the rules; it is also the source of the look.
+Fix drift in creator/index.html first (it is the source of the rules and the
+look), then re-apply to the module. When the creator itself is rebuilt onto
+these modules, this script retires.
 """
 
 import pathlib
@@ -35,37 +34,37 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 CREATOR = HERE.parent / 'creator' / 'index.html'
-DM = HERE / 'index.html'
-TV = HERE / 'tablero.html'
+RULES = HERE / 'src' / 'rules'
+TOKENS = HERE / 'src' / 'styles' / 'tokens.css'
 
 
 def script_block(html, name, where):
-    """The whole <script id="name"> … </script>, tags included."""
-    m = re.search(r'<script id="%s">.*?</script>' % re.escape(name), html, re.S)
+    """Inner text of <script id="name"> … </script>."""
+    m = re.search(r'<script id="%s">(.*?)</script>' % re.escape(name), html, re.S)
     if not m:
         sys.exit('%s: no <script id="%s"> block found' % (where, name))
-    return m.group(0)
+    return m.group(1).strip()
 
 
-def function(html, name, where):
+def function(text, name, where):
     """A top-level `function name(...) { … }`, found by brace balance.
 
     Brace counting is enough here because these three functions contain no
-    string or comment holding an unbalanced brace — asserted below, so this
-    stops being true loudly rather than silently.
+    string or comment holding an unbalanced brace — this stops being true
+    loudly rather than silently.
     """
-    m = re.search(r'^function %s\(' % re.escape(name), html, re.M)
+    m = re.search(r'^function %s\(' % re.escape(name), text, re.M)
     if not m:
         sys.exit('%s: no top-level `function %s(` found' % (where, name))
     start = m.start()
     depth = 0
-    for i in range(start, len(html)):
-        if html[i] == '{':
+    for i in range(start, len(text)):
+        if text[i] == '{':
             depth += 1
-        elif html[i] == '}':
+        elif text[i] == '}':
             depth -= 1
             if depth == 0:
-                return html[start:i + 1]
+                return text[start:i + 1]
     sys.exit('%s: `function %s(` never closes' % (where, name))
 
 
@@ -73,53 +72,68 @@ THEME_START = '/* ----------------------------------------------------------- sh
 THEME_END = '* { box-sizing: border-box; }'
 
 
-def theme_tokens(html, where):
-    """The whole :root token block, from its comment down to the reset.
-
-    tablero.html has no components and no print section, so the tokens are the
-    only stylesheet the three files have any business sharing.
-    """
+def theme_tokens(text, where):
+    """The token block from its banner comment down to (not including) the
+    box-sizing reset — the same region in creator's <style> and tokens.css."""
     try:
-        start = html.index(THEME_START)
-        end = html.index(THEME_END, start)
+        start = text.index(THEME_START)
+        end = text.index(THEME_END, start)
     except ValueError:
         sys.exit('%s: could not find the theme token block' % where)
-    return html[start:end].rstrip()
+    return text[start:end].rstrip()
+
+
+def unesm(text):
+    """Undo the mechanical ESM wrapping: import lines out, export prefix off."""
+    text = re.sub(r'^import .*\n', '', text, flags=re.M)
+    return re.sub(r'^export (const |function |let )', r'\1', text, flags=re.M).strip()
 
 
 def main():
-    for path in (CREATOR, DM, TV):
+    files = {
+        'creator': CREATOR,
+        'data.js': RULES / 'data.js',
+        'engine.js': RULES / 'engine.js',
+        'character.js': RULES / 'character.js',
+        'tokens.css': TOKENS,
+    }
+    for label, path in files.items():
         if not path.exists():
             sys.exit('missing file: %s' % path)
+    text = {k: p.read_text(encoding='utf-8') for k, p in files.items()}
 
-    creator = CREATOR.read_text(encoding='utf-8')
-    dm = DM.read_text(encoding='utf-8')
-    tv = TV.read_text(encoding='utf-8')
-
-    parts = []
-    for name in ('data', 'engine'):
-        parts.append(('<script id="%s">' % name, 'creator', 'dm',
-                      script_block(creator, name, 'creator'),
-                      script_block(dm, name, 'dm')))
+    character_flat = unesm(text['character.js'])
+    parts = [
+        ('<script id="data">', 'creator', 'data.js',
+         script_block(text['creator'], 'data', 'creator'),
+         unesm(text['data.js'])),
+        ('<script id="engine">', 'creator', 'engine.js',
+         script_block(text['creator'], 'engine', 'creator'),
+         unesm(text['engine.js'])),
+    ]
     for name in ('blankCharacter', 'newId', 'normalise'):
-        parts.append(('%s()' % name, 'creator', 'dm',
-                      function(creator, name, 'creator'),
-                      function(dm, name, 'dm')))
-    parts.append(('theme tokens', 'creator', 'dm',
-                  theme_tokens(creator, 'creator'), theme_tokens(dm, 'dm')))
-    parts.append(('theme tokens', 'creator', 'tablero',
-                  theme_tokens(creator, 'creator'), theme_tokens(tv, 'tablero')))
+        parts.append(('%s()' % name, 'creator', 'character.js',
+                      function(text['creator'], name, 'creator'),
+                      function(character_flat, name, 'character.js')))
+    parts.append(('theme tokens', 'creator', 'tokens.css',
+                  theme_tokens(text['creator'], 'creator'),
+                  theme_tokens(text['tokens.css'], 'tokens.css')))
 
-    names = {'creator': 'creator/index.html', 'dm': 'dm/index.html', 'tablero': 'dm/tablero.html'}
+    names = {'creator': 'creator/index.html',
+             'data.js': 'dm/src/rules/data.js',
+             'engine.js': 'dm/src/rules/engine.js',
+             'character.js': 'dm/src/rules/character.js',
+             'tokens.css': 'dm/src/styles/tokens.css'}
     drift = [p for p in parts if p[3] != p[4]]
 
     for label, src, dst, a, b in parts:
         mark = 'DRIFT' if a != b else 'ok   '
-        print('%s  %-22s %-8s → %-8s %7d bytes' % (mark, label, src, dst, len(a)))
+        print('%s  %-22s %-8s → %-12s %7d bytes' % (mark, label, src, dst, len(a)))
 
     if drift:
         label, src, dst, a, b = drift[0]
-        print('\n%d copied part(s) differ. Fix in %s, copy into %s.' % (len(drift), names[src], names[dst]))
+        print('\n%d copied part(s) differ. Fix in %s, re-apply to %s.'
+              % (len(drift), names[src], names[dst]))
         print('A diff of the first one:\n')
         import difflib
         sys.stdout.writelines(difflib.unified_diff(

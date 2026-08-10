@@ -3653,7 +3653,7 @@ function quizResultHTML(r) {
 
   const row = (label, value) => `<tr><td style="white-space:nowrap;padding-right:1rem"><b>${esc(label)}</b></td><td>${value}</td></tr>`;
 
-  return `<fieldset class="result"><legend>Esto es lo que sale</legend>
+  return `<fieldset class="result"><legend>La propuesta</legend>
     <p class="lead">Un personaje jugable y legal. Aplícalo y revísalo paso a paso, o cambia lo
     que quieras: los pasos siguientes siguen funcionando igual.</p>
 
@@ -3838,11 +3838,16 @@ STEP_VIEWS.equipo = () => {
   const kit = loadout(state);
   const a = armor(kit.armor);
 
-  const packs = (table, field, current) => `<div class="opts">${Object.entries(table).map(([key, p]) =>
-    `<label class="opt"><input type="radio" name="${field}" data-set="${field}" data-value="${key}"
+  const packs = (table, field, current) => `<div class="opts">${Object.entries(table).map(([key, p]) => {
+    const sub = [...p.items, p.gp ? `${p.gp} po` : ''].filter(Boolean).join(' · ');
+    /* The gold-only option's contents ARE its label; repeating "50 po" under
+       "50 po" read like a bug, so it explains itself instead. */
+    const detail = sub && sub !== p.label ? sub : 'Solo el oro: tú eliges qué comprar con él.';
+    return `<label class="opt"><input type="radio" name="${field}" data-set="${field}" data-value="${key}"
       ${current === key ? 'checked' : ''}>
       <span><b>${esc(p.label || key)}</b><br><span class="muted" style="font-size:.88em">${
-        esc([...p.items, p.gp ? `${p.gp} po` : ''].filter(Boolean).join(' · ')) || '—'}</span></span></label>`).join('')}</div>`;
+        esc(detail)}</span></span></label>`;
+  }).join('')}</div>`;
 
   return `<h2>Equipo</h2>
     <p class="lead">Con qué empiezas. Cada opción está ya equilibrada: coge la que encaje con

@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- ======================================================================
+  Tablero — the television window. A renderer, and nothing else: it knows
+  how to draw one object (the board projection the admin pushes over SSE)
+  and how to send a moved token back. It has no session, no rules and no
+  secrets — what is not in the payload was never revealed.
+
+  Open it from the admin's "Tablero ↗", or point ANY device on the same
+  wifi at  http://<ip-del-portátil>:8420/tv  — a smart TV's browser, a
+  tablet, anything.
+====================================================================== -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero</title>
+<link rel="stylesheet" href="/src/styles/fonts.css">
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/tv.css">
+</head>
+<body>
+<div id="tv"></div>
+<div id="sound"><b>♪</b><span>Toca aquí para el sonido</span></div>
+<div id="link" hidden>reconectando…</div>
+<script type="module" src="/src/tv/main.js"></script>
+</body>
+</html>
