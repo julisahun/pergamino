@@ -59,50 +59,44 @@ function ObjectWizard(draft) {
     flash(`${entry.name} guardado.`);
   };
 
-  return html`<div class="scrim" onClick=${e => {
-      if (e.target === e.currentTarget) closeModal();
-    }}>
-    <div class="modal" role="dialog" aria-modal="true">
-      <h3>${editing ? 'Editar objeto' : 'Nuevo objeto'}</h3>
-      <form class="mform" onSubmit=${e => { e.preventDefault(); saveObject(e.target); }}>
-        <label class="wide">Nombre
-          <input name="name" required placeholder="Anillo de protección" autocomplete="off"
-            defaultValue=${o.name || ''} /></label>
-        <label class="wide">Descripción — qué es, de dónde salió, qué aspecto tiene
-          <textarea name="description" rows="2"
-            placeholder="Un aro de plata deslustrada con runas casi borradas">${o.description || ''}</textarea></label>
-        <div class="wide abilities">
-          <label>Modificadores — se suman a los números de quien lo lleve</label>
-          ${draft.mods.map((row, i) => html`<div class="modrow" key=${row.id}>
-            <select aria-label="Propiedad" onChange=${e => { row.key = e.target.value; }}>
-              ${MOD_KEYS.map(([k, es]) => html`<option value=${k} selected=${row.key === k}>${es}</option>`)}
-            </select>
-            <input type="number" step="1" placeholder="+1" aria-label="Cuánto"
-              defaultValue=${row.value} onChange=${e => { row.value = e.target.value; }} />
-            <button type="button" class="small ghost"
-              onClick=${() => { draft.mods.splice(i, 1); update(); }}>Quitar</button>
-          </div>`)}
+  return html`<${ModalFrame} title=${editing ? 'Editar objeto' : 'Nuevo objeto'}
+    onSubmit=${saveObject} acts=${html`
+      <button type="button" class="ghost" onClick=${closeModal}>Cancelar</button>
+      <button class="primary">Guardar</button>`}>
+    <div class="mform">
+      <label class="wide">Nombre
+        <input name="name" required placeholder="Anillo de protección" autocomplete="off"
+          defaultValue=${o.name || ''} /></label>
+      <label class="wide">Descripción — qué es, de dónde salió, qué aspecto tiene
+        <textarea name="description" rows="2"
+          placeholder="Un aro de plata deslustrada con runas casi borradas">${o.description || ''}</textarea></label>
+      <div class="wide abilities">
+        <label>Modificadores — se suman a los números de quien lo lleve</label>
+        ${draft.mods.map((row, i) => html`<div class="modrow" key=${row.id}>
+          <select aria-label="Propiedad" onChange=${e => { row.key = e.target.value; }}>
+            ${MOD_KEYS.map(([k, es]) => html`<option value=${k} selected=${row.key === k}>${es}</option>`)}
+          </select>
+          <input type="number" step="1" placeholder="+1" aria-label="Cuánto"
+            defaultValue=${row.value} onChange=${e => { row.value = e.target.value; }} />
           <button type="button" class="small ghost"
-            onClick=${() => { draft.mods.push({ id: newId(), key: 'ac', value: 1 }); update(); }}>+ Añadir modificador</button>
-        </div>
-        <div class="wide abilities">
-          <label>Efectos — texto que se muestra en la carta, no se calcula</label>
-          ${draft.effects.map((row, i) => html`<div class="fxrow" key=${row.id}>
-            <input placeholder="Ventaja en tiradas de sigilo" autocomplete="off"
-              defaultValue=${row.text} onChange=${e => { row.text = e.target.value; }} />
-            <button type="button" class="small ghost"
-              onClick=${() => { draft.effects.splice(i, 1); update(); }}>Quitar</button>
-          </div>`)}
+            onClick=${() => { draft.mods.splice(i, 1); update(); }}>Quitar</button>
+        </div>`)}
+        <button type="button" class="small ghost"
+          onClick=${() => { draft.mods.push({ id: newId(), key: 'ac', value: 1 }); update(); }}>+ Añadir modificador</button>
+      </div>
+      <div class="wide abilities">
+        <label>Efectos — texto que se muestra en la carta, no se calcula</label>
+        ${draft.effects.map((row, i) => html`<div class="fxrow" key=${row.id}>
+          <input placeholder="Ventaja en tiradas de sigilo" autocomplete="off"
+            defaultValue=${row.text} onChange=${e => { row.text = e.target.value; }} />
           <button type="button" class="small ghost"
-            onClick=${() => { draft.effects.push({ id: newId(), text: '' }); update(); }}>+ Añadir efecto</button>
-        </div>
-        <div class="acts">
-          <button type="button" class="ghost" onClick=${closeModal}>Cancelar</button>
-          <button class="primary">Guardar</button>
-        </div>
-      </form>
+            onClick=${() => { draft.effects.splice(i, 1); update(); }}>Quitar</button>
+        </div>`)}
+        <button type="button" class="small ghost"
+          onClick=${() => { draft.effects.push({ id: newId(), text: '' }); update(); }}>+ Añadir efecto</button>
+      </div>
     </div>
-  </div>`;
+  </>`;
 }
 
 /* ------------------------------------------------- who carries what

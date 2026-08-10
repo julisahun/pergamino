@@ -7,6 +7,7 @@ import { state, update, flash, saveEntity } from './store.js';
 import { deleteFile } from './api.js';
 import { screens } from './app.js';
 import { Portrait } from './cards.js';
+import { ModalFrame, closeModal } from './frame.js';
 import { signed } from '../rules/engine.js';
 import { newId } from '../rules/character.js';
 import { normaliseBeast, absorbBeast } from '../shared/beasts.js';
@@ -51,47 +52,41 @@ function BeastWizard(draft) {
     flash(`${entry.name} guardado.`);
   };
 
-  return html`<div class="scrim" onClick=${e => {
-      if (e.target === e.currentTarget) update(s => { s.ui.modal = null; });
-    }}>
-    <div class="modal" role="dialog" aria-modal="true">
-      <h3>${editing ? 'Editar PNJ' : 'Nuevo PNJ'}</h3>
-      <form class="mform" onSubmit=${e => { e.preventDefault(); saveBeast(e.target); }}>
-        <div class="wide" style="display:flex;justify-content:center">
-          <${Portrait} name=${b.name || 'Nuevo PNJ'} portrait=${draft.portrait} big
-            onPick=${stamp => { draft.portrait = { src: null, stamp }; update(); }} /></div>
-        <label class="wide">Nombre
-          <input name="name" required placeholder="Goblin" autocomplete="off" defaultValue=${b.name || ''} /></label>
-        <label class="wide">Tipo — para agrupar y filtrar: monstruo, aldeano, aliado…
-          <input name="tag" list="npctags" placeholder="monstruo" autocomplete="off" defaultValue=${b.tag || ''} /></label>
-        <datalist id="npctags">${tags.map(t => html`<option value=${t} key=${t} />`)}</datalist>
-        <label>CA <input name="ac" type="number" inputmode="numeric" defaultValue=${b.ac ?? 12} /></label>
-        <label>PG <input name="hpMax" type="number" inputmode="numeric" defaultValue=${b.hpMax ?? 7} /></label>
-        <label>Mod. inic. <input name="initMod" type="number" inputmode="numeric" defaultValue=${b.initMod ?? 0} /></label>
-        <label class="wide">Notas — resistencias, comportamiento, lo que quieras tener delante
-          <textarea name="note" rows="3"
-            placeholder="Resistente al fuego · Huye por debajo de la mitad de PG">${b.note || ''}</textarea></label>
-        <div class="wide abilities">
-          <label>Habilidades y ataques</label>
-          ${draft.abilities.map((a, i) => html`<div class="abrow" key=${a.id || i}>
-            <input placeholder="Mordisco" autocomplete="off" defaultValue=${a.name}
-              onChange=${e => { a.name = e.target.value; }} />
-            <textarea rows="2" defaultValue=${a.desc}
-              placeholder="Ataque de arma cuerpo a cuerpo: +4, alcance 1,5 m, un objetivo. Impacto: 1d6+2 perforante."
-              onChange=${e => { a.desc = e.target.value; }}></textarea>
-            <button type="button" class="small ghost"
-              onClick=${() => { draft.abilities.splice(i, 1); update(); }}>Quitar</button>
-          </div>`)}
+  return html`<${ModalFrame} title=${editing ? 'Editar PNJ' : 'Nuevo PNJ'}
+    onSubmit=${saveBeast} acts=${html`
+      <button type="button" class="ghost" onClick=${closeModal}>Cancelar</button>
+      <button class="primary">Guardar</button>`}>
+    <div class="mform">
+      <div class="wide" style="display:flex;justify-content:center">
+        <${Portrait} name=${b.name || 'Nuevo PNJ'} portrait=${draft.portrait} big
+          onPick=${stamp => { draft.portrait = { src: null, stamp }; update(); }} /></div>
+      <label class="wide">Nombre
+        <input name="name" required placeholder="Goblin" autocomplete="off" defaultValue=${b.name || ''} /></label>
+      <label class="wide">Tipo — para agrupar y filtrar: monstruo, aldeano, aliado…
+        <input name="tag" list="npctags" placeholder="monstruo" autocomplete="off" defaultValue=${b.tag || ''} /></label>
+      <datalist id="npctags">${tags.map(t => html`<option value=${t} key=${t} />`)}</datalist>
+      <label>CA <input name="ac" type="number" inputmode="numeric" defaultValue=${b.ac ?? 12} /></label>
+      <label>PG <input name="hpMax" type="number" inputmode="numeric" defaultValue=${b.hpMax ?? 7} /></label>
+      <label>Mod. inic. <input name="initMod" type="number" inputmode="numeric" defaultValue=${b.initMod ?? 0} /></label>
+      <label class="wide">Notas — resistencias, comportamiento, lo que quieras tener delante
+        <textarea name="note" rows="3"
+          placeholder="Resistente al fuego · Huye por debajo de la mitad de PG">${b.note || ''}</textarea></label>
+      <div class="wide abilities">
+        <label>Habilidades y ataques</label>
+        ${draft.abilities.map((a, i) => html`<div class="abrow" key=${a.id || i}>
+          <input placeholder="Mordisco" autocomplete="off" defaultValue=${a.name}
+            onChange=${e => { a.name = e.target.value; }} />
+          <textarea rows="2" defaultValue=${a.desc}
+            placeholder="Ataque de arma cuerpo a cuerpo: +4, alcance 1,5 m, un objetivo. Impacto: 1d6+2 perforante."
+            onChange=${e => { a.desc = e.target.value; }}></textarea>
           <button type="button" class="small ghost"
-            onClick=${() => { draft.abilities.push({ id: newId(), name: '', desc: '' }); update(); }}>+ Añadir habilidad</button>
-        </div>
-        <div class="acts">
-          <button type="button" class="ghost" onClick=${() => update(s => { s.ui.modal = null; })}>Cancelar</button>
-          <button class="primary">Guardar</button>
-        </div>
-      </form>
+            onClick=${() => { draft.abilities.splice(i, 1); update(); }}>Quitar</button>
+        </div>`)}
+        <button type="button" class="small ghost"
+          onClick=${() => { draft.abilities.push({ id: newId(), name: '', desc: '' }); update(); }}>+ Añadir habilidad</button>
+      </div>
     </div>
-  </div>`;
+  </>`;
 }
 
 /* -------------------------------------------------------------- screen */

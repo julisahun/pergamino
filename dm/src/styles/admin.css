@@ -977,8 +977,10 @@ button.danger:hover:not(:disabled) { background: var(--seal); color: #fdf6e6; }
 .modal > h2 button { margin-left: auto; min-height: 2rem; padding: .1rem .5rem; }
 .modal > .body { padding: .8rem .85rem; overflow: auto; flex: 1; }
 .modal > .body > p:first-child { margin-top: 0; }
+/* The bar is the frame's own child, never the body's, so it stays put while
+   the body scrolls. Buttons sit at the end; a `.count` claims the left. */
 .modal > .acts {
-  display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: flex-end; gap: .45rem; flex-wrap: wrap;
   padding: .7rem .85rem; border-top: 1px solid var(--rule); background: var(--panel-2);
 }
 .modal > .acts .count { font-size: .82rem; color: var(--ink-soft); margin-right: auto; }
