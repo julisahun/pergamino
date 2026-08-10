@@ -155,7 +155,7 @@ export function CbCard({ cb, opts = {} }) {
 
     <${ChipRow} cb=${cb} />
     ${cb.kind === 'npc' ? html`<${RevealRow} cb=${cb} />` : null}
-    ${opts.bench && cb.kind === 'pc' ? html`<${BenchRow} cb=${cb} />` : null}
+    ${opts.bench && cb.kind === 'pc' ? html`<${BenchRow} cb=${cb} onEdit=${opts.onEdit} />` : null}
     ${down && cb.kind === 'pc' ? html`<${DeathRow} cb=${cb} />` : null}
     ${opts.bare
       ? html`<div class="more"><button class="small ghost" aria-expanded=${open}
@@ -233,7 +233,7 @@ function RevealRow({ cb }) {
 
 /* ---------------------------------------------------------------- bench */
 
-function BenchRow({ cb }) {
+function BenchRow({ cb, onEdit }) {
   const benched = state.session.field.benched.includes(cb.ref);
   return html`<div class="benchrow">
     <button class="small ghost" onClick=${() => commit(`banquillo: ${cb.name}`, s => {
@@ -241,6 +241,9 @@ function BenchRow({ cb }) {
       if (benched) s.session.field.benched = b.filter(r => r !== cb.ref);
       else { b.push(cb.ref); delete s.session.field.tokens[cb.ref]; }
     })}>${benched ? 'Volver a la mesa' : 'Quitar de la mesa'}</button>
+    ${onEdit ? html`<button class="small ghost"
+      title="Cambiar la ficha — escribe en players/, igual que una importación"
+      onClick=${onEdit}>Editar ficha</button>` : null}
     ${benched ? html`<span class="muted" style="font-size:.78rem">Fuera del tablero</span>` : null}
   </div>`;
 }

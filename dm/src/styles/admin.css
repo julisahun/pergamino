@@ -963,6 +963,10 @@ button.danger:hover:not(:disabled) { background: var(--seal); color: #fdf6e6; }
    stat line and a control — at 30rem the names truncate and the stat line
    wraps word by word. Only this modal gets the width it actually needs. */
 .modal:has(.musterpick) { width: min(44rem, 100%); }
+/* The character editor holds the creator's own choice cards, three across —
+   at 30rem they stack one per row and the whole sheet becomes a mile of
+   scroll. */
+.modal:has(.chareditor) { width: min(52rem, 100%); max-height: min(92vh, 56rem); }
 .modal > h2 {
   display: flex; align-items: center; gap: .5rem; margin: 0;
   padding: .7rem .85rem; border-bottom: 3px double var(--sepia);
@@ -991,6 +995,31 @@ button.danger:hover:not(:disabled) { background: var(--seal); color: #fdf6e6; }
   margin: 0; font-size: 1.05rem; color: var(--seal); font-weight: 600;
   user-select: all; -webkit-user-select: all; word-break: break-all; text-align: center;
 }
+
+/* ----------------------------------------------------- character editor
+   Almost everything here is the creator's own chrome (.cards, .opts,
+   .buyrows, fieldset/legend, .counter, .notice) reused verbatim; what is
+   left is the folding, which the creator's Edit screen does with the same
+   `.editor details` rules. */
+.chareditor .idrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .6rem; }
+.chareditor .idrow .field { margin-bottom: .6rem; }
+.chareditor details > summary { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.chareditor details > summary .chose {
+  font-family: var(--serif); font-variant: normal; letter-spacing: 0;
+  font-size: .85rem; color: var(--ink-soft);
+}
+.chareditor .bad { color: var(--seal); font-weight: 700; }
+.chareditor fieldset { margin: .9rem 0 0; }
+.chareditor fieldset:first-child { margin-top: 0; }
+/* Inside a modal the cards want to stay three across, not two. */
+.chareditor .cards { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
+.chareditor h4 {
+  font-family: var(--display); font-variant: var(--head-variant); letter-spacing: var(--head-ls);
+  color: var(--sepia); margin: 1rem 0 .3rem; font-size: 1rem;
+}
+.chareditor p { margin: .35rem 0; }
+.chareditor .verdict { margin-top: .9rem; }
+.chareditor .verdict .notice:last-child { margin-bottom: 0; }
 
 /* One row per statblock: tick it, then say how many. Three goblins and an
    ogre is one trip through this list, not four. */

@@ -44,7 +44,7 @@ save buttons and no merge rules:
 | What | File | Written when |
 |---|---|---|
 | play state (hp, npcs, encounter, field) | `session.json` | autosaved, 500ms debounce |
-| a party member | `players/<slug>.json` | on import only — the DM app never edits sheets |
+| a party member | `players/<slug>.json` | on import, and when the Jugadores editor (`src/admin/crear.js`) creates or saves one — same `{kind,version,character}` envelope the creator exports, so the file stays interchangeable. A member keeps the path it arrived on: renaming does not move the file |
 | a bestiary entry | `monsters/<slug>.json` | wizard save / "Guardar en los PNJ" |
 | a scene | `scenarios/<slug>.json` | editor Guardar |
 | a dropped map | `assets/maps/<epoch>.jpg` | on drop (≤1920px JPEG) |
@@ -103,10 +103,31 @@ src/admin/          fs.js (File System Access + IndexedDB handle), api.js
                     (fs wrappers + SSE + asset uploads + Autosaver), store.js
                     (state + undo + urlFor/relay caches + board push), app.js,
                     main.js (boot + 5s poll), one module per tab, field.js
-                    (the drag board), modals.js
+                    (the drag board), modals.js, crear.js (the character
+                    editor, lazily imported), party.js + frame.js (the two
+                    things crear.js shares — see the cycle note below)
 src/tv/             main.js (SSE), board-view.js (renderer), audio.js (crossfade)
 src/styles/         tokens.css (check-synced), fonts.css, admin.css, tv.css
 ```
+
+**A sheet can be built here, not only imported.** Jugadores' `+ Nueva ficha`
+(and `Editar ficha` on a party card) opens `crear.js`: the creator's Edit
+screen — one page, collapsible sections — driven entirely by `src/rules/`.
+It invents nothing: every number is `derive()`, every complaint `validate()`,
+and `Rellenar` is the creator's own `quizResult()` run over random answers
+plus the handful of picks the quiz has no opinion about (the species skill,
+the Human's extra feat, the feat tool/skill pickers, Magic Initiate). A
+verified 200-sheet sweep across all 12 classes leaves zero `validate()`
+errors, so treat a Rellenar that produces an incomplete sheet as a bug.
+
+`main.js` is the only entry point, and `jugadores.js` → `app.js` →
+`main.js` → `jugadores.js` is a real cycle it survives only because it is
+*first*. So anything reachable from a non-boot entry keeps out of it:
+`absorbCharacter()` (the one door a sheet uses to reach the party and the
+disk) lives in `party.js`, and `ModalFrame` in `frame.js`, precisely so
+`crear.js` can import them without dragging `app.js` in half-initialised.
+The symptom when that is broken is `Cannot access 'screens' before
+initialization`.
 
 `store.js` has the three verbs: `update()` (re-render only — ui state,
 drags, volume), `commit(label, fn)` (undo step + autosave + board push —
@@ -202,7 +223,13 @@ Beyond units, the pattern that works (see git history for examples):
 ## Scope
 
 Everything the old app did (see `instructions.md`) **minus Preparar**
-(staged scenes) — "A la tele" is the only scene action. Still deliberately
-out: dice, spell slots, statblocks beyond name/AC/HP/initiative/note,
-encounter building, XP, walls, line of sight, fog of war, anything above
-level 1.
+(staged scenes) — "A la tele" is the only scene action — **plus** building a
+sheet in Jugadores. Still deliberately out: dice, spell slots, statblocks
+beyond name/AC/HP/initiative/note, encounter building, XP, walls, line of
+sight, fog of war, anything above level 1.
+
+The editor is deliberately *not* a second creator: no questionnaire screens,
+no roster, no A4 sheet, no printing, no `.json` export — those stay in
+`creator/`, which is still where a player builds their own character and
+still the source of truth for the rules. This is the DM's version of the
+same thing, for the player who turns up without a sheet.

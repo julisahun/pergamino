@@ -1,33 +1,23 @@
 /* Jugadores — the party out of combat: who is hurt, who is conditioned, and
    every number a DM looks up without asking the player to read their own
    sheet aloud. Importing a .json here also writes it to players/ — the
-   folder IS the party now. */
+   folder IS the party now, and so does building one in the editor
+   (crear.js), which writes the same envelope the creator exports. */
 
 import { html } from './html.js';
-import { state, commit, update, flash, saveEntity } from './store.js';
+import { state, commit, flash, saveEntity } from './store.js';
 import { screens } from './app.js';
 import { CbCard, PickBar } from './cards.js';
+import { absorbCharacter } from './party.js';
 import { normalise } from '../rules/character.js';
 import { normaliseSession } from '../shared/session.js';
-import { partyHandles, playOf, stats, clearStatCache } from '../shared/handles.js';
+import { partyHandles, clearStatCache } from '../shared/handles.js';
 import { longRest, seatAll } from '../shared/combat.js';
 import { slugify } from '../shared/util.js';
 
-/** A re-import must never cost the party its wounds — but a lowered max
-    clamps what is left. New members start at full. */
-function mergeParty(s, c) {
-  const at = s.session.party.findIndex(x => x.id === c.id);
-  if (at >= 0) {
-    s.session.party[at] = c;
-    const p = playOf(s.session, c.id);
-    const max = stats(c).hp ?? 0;
-    if (p.hp != null) p.hp = Math.min(p.hp, max);
-    return 'updated';
-  }
-  s.session.party.push(c);
-  playOf(s.session, c.id).hp = stats(c).hp ?? 0;
-  return 'added';
-}
+/* The editor is a whole screen's worth of rules UI that most sessions never
+   open — it loads on the click, not at boot. */
+const openEditor = id => import('./crear.js').then(m => m.openCharacterEditor(id));
 
 export function importCharacterFiles(files) {
   for (const f of Array.from(files || [])) {
@@ -42,17 +32,7 @@ export function importCharacterFiles(files) {
         return;
       }
       const c = normalise(raw.character || raw);
-      clearStatCache();
-      let result;
-      commit(`importar ${c.name || f.name}`, s => {
-        result = mergeParty(s, c);
-        const rel = s.session.playerFiles[c.id] || ('players/' + (slugify(c.name || '') || c.id) + '.json');
-        s.session.playerFiles[c.id] = rel;
-        seatAll(s.session);
-        /* The exact envelope the creator exports, so the file on disk stays
-           interchangeable with the one the player sent. */
-        saveEntity(rel, { kind: 'dnd-creator-character', version: 2, character: c });
-      });
+      const result = absorbCharacter(c, 'importar');
       flash(`${result === 'updated' ? 'Actualizado' : 'Importado'}: ${c.name || 'sin nombre'}.`);
     }).catch(() => flash(`No se pudo leer ${f.name}.`));
   }
@@ -99,6 +79,8 @@ function Jugadores() {
   const party = partyHandles(state.session);
   return html`<main><section class="panel wide">
     <div class="quickadd">
+      <button class="primary" title="Construye una ficha de nivel 1 aquí mismo, con las mismas reglas que el creador"
+        onClick=${() => openEditor(null)}>+ Nueva ficha</button>
       <button class="ghost" onClick=${pickCharacterFiles}>Importar</button>
       ${party.length ? html`<button class="ghost" onClick=${() => {
         commit('descanso largo', s => longRest(s.session));
@@ -106,11 +88,15 @@ function Jugadores() {
       }}>Descanso largo</button>` : null}
     </div>
     ${party.length
-      ? html`<div class="board">${party.map(cb => html`<${CbCard} cb=${cb} opts=${{ bench: true }} key=${cb.ref} />`)}</div>`
+      ? html`<div class="board">${party.map(cb =>
+          html`<${CbCard} cb=${cb} key=${cb.ref}
+            opts=${{ bench: true, onEdit: () => openEditor(cb.id) }} />`)}</div>`
       : html`<div class="drop" onClick=${pickCharacterFiles}>
           <b>Arrastra aquí las fichas de tus jugadores</b>
           Los <code>.json</code> que exporta el creador de personajes. También puedes${' '}
-          <button class="link">elegir los archivos</button>.
+          <button class="link">elegir los archivos</button>${' '}o${' '}
+          <button class="link" onClick=${e => { e.stopPropagation(); openEditor(null); }}>construir
+            una aquí mismo</button>.
           <p class="muted" style="font-size:.85rem;margin:.8rem 0 0">
             Cada ficha trae sus propios números: PG, CA, iniciativa, percepción pasiva.
             Si un jugador cambia su ficha, vuelve a importarla y se actualiza sin perder

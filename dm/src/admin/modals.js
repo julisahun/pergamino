@@ -5,6 +5,7 @@
    one stores the component in ui.modal. */
 
 import { html } from './html.js';
+import { ModalFrame, closeModal } from './frame.js';
 import { state, update, commit, flash } from './store.js';
 import { signed } from '../rules/engine.js';
 import { partyHandles, npcHandle, handleFor, currentHP } from '../shared/handles.js';
@@ -15,16 +16,7 @@ import { SceneCard } from './escenas.js';
 import { goLiveScene } from './juego.js';
 import { qrToCanvas } from '../shared/qr.js';
 
-const close = () => update(s => { s.ui.modal = null; });
-
-export function ModalFrame({ title, children, acts }) {
-  return html`<div class="scrim" onClick=${e => { if (e.target === e.currentTarget) close(); }}>
-    <div class="modal" role="dialog" aria-modal="true" aria-label=${title}>
-      <h2>${title}<button class="ghost" aria-label="Cerrar" onClick=${close}>✕</button></h2>
-      <div class="body">${children}</div>
-      <div class="acts">${acts}</div>
-    </div></div>`;
-}
+const close = closeModal;
 
 /* -------------------------------------------------------- connect the TV
    The television is any browser on the wifi. The address only lived in a
