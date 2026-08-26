@@ -6,7 +6,9 @@ television (`tv.html` + `src/tv/`). **The app runs on the home Pi at
 `https://dm.sigint-pm.uk` — that is the only way it is played**; a local
 `python3 dm/server.py` exists purely for dev and headless verification.
 See the root `CLAUDE.md` for repo-wide rules; `instructions.md` is the full
-behavioral reference.
+behavioral reference, and `importing.md` is the spec for converting an outside
+campaign into a campaign folder (written to be handed to a language model,
+checked by `check-campaign.js`).
 
 **Campaign files never touch the server.** The admin page holds a File
 System Access grant (Chromium-only; needs a secure context — https or
@@ -95,6 +97,8 @@ the campaign's name.
 ```
 server.py           stdlib HTTP: statics + SSE relay + ephemeral asset cache
                     (~350 lines, no pip deps, $DM_PORT override)
+check-sync.py       guards the parts copied from creator/
+check-campaign.js   lints a campaign folder (node, imports src/rules + validate())
 index.html, tv.html thin shells; all logic in native ES modules
 vendor/             preact.mjs + htm.mjs, committed, no npm
 src/rules/          data.js, engine.js, character.js — creator copies (check-sync)
@@ -156,6 +160,21 @@ on them. Retires when creator/ is rebuilt onto these modules.
 node --test dm/src/lint.test.js dm/src/shared/shared.test.js dm/src/shared/qr.test.js dm/src/tv/audio.test.js
 python3 dm/check-sync.py
 ```
+
+After touching a normaliser (`src/shared/beasts.js`, `objects.js`, `scenes.js`,
+`story.js`) or anything under `src/rules/`, also run the campaign linter — it
+asserts the tolerances those modules promise, and `importing.md` documents them
+to outsiders:
+
+```bash
+node dm/check-campaign.js campaigns/example
+```
+
+It reads a folder the way `readTree()` does and reports only what the app would
+read *differently* from what the file says. Exit 0 clean, 1 warnings, 2 errors.
+It deliberately imports `src/rules/data.js` and calls `engine.validate()`
+instead of restating the vocabulary — there is one list of species in this repo,
+and check-sync.py exists because of what happens otherwise.
 
 Beyond units, the pattern that works (see git history for examples):
 

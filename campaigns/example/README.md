@@ -2,7 +2,7 @@
 
 A small, self-contained campaign that ships with the repo (unlike every other
 folder under `campaigns/`, which `.gitignore` treats as personal session data
-and keeps out of git). Its only job is to show the file shapes `dm/README.md`
+and keeps out of git). Its only job is to show the file shapes `dm/importing.md`
 describes, filled in with something a stranger can open and immediately
 understand — one case, five scenes, five NPCs, one pre-made player.
 

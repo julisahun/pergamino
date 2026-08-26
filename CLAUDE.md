@@ -11,6 +11,9 @@ dnd/
     server.py         stdlib-only Python server (static + SSE relay + asset cache;
                       campaign files never pass through it) — runs on the Pi
                       (https://dm.sigint-pm.uk), never locally except for dev/tests
+    importing.md      how an outside DM maps their campaign onto this format
+                      (an LLM-facing conversion spec)
+    check-campaign.js lints a campaign folder against that spec
     index.html        admin window (served at /; reads/writes the campaign
                       folder itself via the File System Access API)
     tv.html           television window (served at /tv, works on any LAN device)
@@ -18,7 +21,7 @@ dnd/
     vendor/           preact.mjs + htm.mjs, committed verbatim
     check-sync.py     guards the parts copied from creator/
   campaigns/           campaign content, gitignored — not app code
-    campaign-01/
+    marea-baja/
       scenarios/       one .json per prepared scene
       assets/          images, assets/audio/ for music, assets/maps/ for dropped maps
       story/           DM notes, .md, grouped by subfolder (editable in Historia too)
