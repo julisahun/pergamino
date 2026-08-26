@@ -18,6 +18,8 @@ import { coarseWord, tokenHP, buildBoard } from './board.js';
 import { noteFrom, noteTitle, storyIndex, noteTags, noteLinks, backlinksFor,
          mdToHtml, domToMd } from './story.js';
 import { esc, slugify, encodePath } from './util.js';
+import { classify, runRel, runPrefix, runSlugOf, runLabel, mesaName,
+         isRunPath, PREP_SLUG } from './runs.js';
 
 const urlFor = p => '/campaigns/test/' + encodePath(p);
 const flatAspect = (src, fallback) => fallback;
@@ -628,4 +630,80 @@ test('board party rows carry the object-raised hpMax', () => {
   const b = buildBoard(s, { master: .7, muted: false }, urlFor);
   assert.equal(b.party[0].hpMax, 2);              // blank sheet: base 0 + 2
   assert.equal(b.party[0].hp, 2);                 // hp: null = full at the raised max
+});
+
+/* ------------------------------------------------------------------- runs
+   The path arithmetic that decides which mesa a file belongs to. fs.js walks
+   a real folder with classify() and check-campaign.js lints one with it, so
+   a mistake here is a party that silently reads empty. */
+
+test('runPrefix/runRel: a flat campaign is the root itself', () => {
+  assert.equal(runPrefix(''), '');
+  assert.equal(runPrefix(null), '');
+  assert.equal(runPrefix('guils'), 'runs/guils');
+  assert.equal(runRel('', 'session.json'), 'session.json');
+  assert.equal(runRel('runs/guils', 'session.json'), 'runs/guils/session.json');
+  assert.equal(runRel('runs/guils', 'players/el-muro.json'), 'runs/guils/players/el-muro.json');
+});
+
+test('classify: an open run reads its own table and nobody else\'s', () => {
+  const c = p => classify(p, 'runs/guils');
+  assert.equal(c('runs/guils/session.json'), 'session');
+  assert.equal(c('runs/guils/players/el-muro.json'), 'players');
+  /* Another mesa's identical files are invisible — the whole point. */
+  assert.equal(c('runs/last/session.json'), null);
+  assert.equal(c('runs/last/players/el-cantor.json'), null);
+  /* Preparation is campaign-level and shared by every mesa. */
+  assert.equal(c('monsters/raimo.json'), 'monsters');
+  assert.equal(c('objects/arpon-de-nasa.json'), 'objects');
+  assert.equal(c('scenarios/faro.json'), 'scenarios');
+  assert.equal(c('story/actos/00-llegada.md'), 'story');
+  assert.equal(c('assets/maps/1756.jpg'), 'assets');
+  /* A run's own notes are not story notes yet, and a stray root session
+     belongs to no mesa. */
+  assert.equal(c('runs/guils/estado.md'), null);
+  assert.equal(c('runs/guils/bitacora/01.md'), null);
+  assert.equal(c('session.json'), null);
+  assert.equal(c('players/el-muro.json'), null);
+});
+
+test('classify: a flat campaign reads exactly what it always did', () => {
+  const c = p => classify(p, '');
+  assert.equal(c('session.json'), 'session');
+  assert.equal(c('players/pip-nosewick.json'), 'players');
+  assert.equal(c('monsters/sewer-cheese-rat.json'), 'monsters');
+  assert.equal(c('story/00-the-vanishing.md'), 'story');
+  /* Still only one level down, still only .json — the old isTop() rule. */
+  assert.equal(c('monsters/undead/lich.json'), null);
+  assert.equal(c('players/notes.md'), null);
+  assert.equal(c('players/old/pip.json'), null);
+});
+
+test('classify: preparation mode has no table at all', () => {
+  const c = p => classify(p, null);
+  assert.equal(c('session.json'), null);
+  assert.equal(c('players/pip-nosewick.json'), null);
+  assert.equal(c('runs/guils/session.json'), null);
+  assert.equal(c('monsters/raimo.json'), 'monsters');
+  assert.equal(c('story/actos/00-llegada.md'), 'story');
+});
+
+test('runSlugOf / isRunPath', () => {
+  assert.equal(runSlugOf('runs/guils/session.json'), 'guils');
+  assert.equal(runSlugOf('runs/guils'), 'guils');
+  assert.equal(runSlugOf('runs'), null);
+  assert.equal(runSlugOf('monsters/raimo.json'), null);
+  assert.equal(isRunPath('runs/guils/players/x.json'), true);
+  assert.equal(isRunPath('runsomething/x.json'), false);
+  assert.equal(PREP_SLUG.startsWith('#'), true);   // never a real folder name
+});
+
+test('runLabel / mesaName: the picker shows the name the DM wrote', () => {
+  assert.equal(runLabel('guils'), 'Guils');
+  assert.equal(runLabel('la-otra_mesa'), 'La otra mesa');
+  assert.equal(mesaName('---\nmesa: Guils\ncampana: Marea Baja\n---\n\n# Guils'), 'Guils');
+  assert.equal(mesaName('---\nmesa:\n---\n'), null);      // empty field, use the slug
+  assert.equal(mesaName('# Guils\n\nno frontmatter'), null);
+  assert.equal(mesaName(''), null);
+  assert.equal(mesaName(null), null);
 });

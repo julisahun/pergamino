@@ -1514,6 +1514,25 @@ main.gate { display: grid; place-items: center; min-height: 92vh; padding: 1rem;
 }
 .gatecard h1::before { content: var(--orn-head); color: var(--gold); }
 
+/* The mesa picker: one row per run, the name reading first and the state of
+   that table under it, because "sin empezar" is what tells two mesas apart
+   when both are called something short. */
+.runlist { display: grid; gap: .4rem; margin: .9rem 0 .2rem; }
+.runpick {
+  display: grid; gap: .1rem; justify-items: start; text-align: left;
+  padding: .55rem .7rem; width: 100%;
+}
+.runpick b {
+  font-family: var(--display); font-variant: var(--head-variant);
+  letter-spacing: var(--head-ls); font-size: 1.05rem;
+}
+.runpick .muted { font-size: .78rem; }
+/* The mesa chip sits next to the campaign chip and has to read as the
+   narrower thing: same shape, sepia lettering. Preparation is not a mesa, so
+   it wears small caps instead of a name. */
+header.top .camp.mesa { color: var(--ink); border-color: var(--sepia); }
+header.top .camp.mesa.prep { font-variant: small-caps; letter-spacing: .04em; }
+
 /* --------------------------------------------------- historia, two panes
    With room for it, the index stays put on the left while a note reads on
    the right — jumping between notes stops costing a round-trip through the

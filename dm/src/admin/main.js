@@ -14,16 +14,18 @@ import './escenas.js';
 import './historia.js';
 import './juego.js';
 import { state, subscribe, update, flash, attachSaver, detachSaver, saveSession,
-         syncBoard, refreshAssetUrls } from './store.js';
+         syncBoard, refreshAssetUrls, sessionPath } from './store.js';
 import { ping, fetchTree, connectSSE, checkExternalChanges } from './api.js';
 import { pickCampaignFolder, hasPermission, verifyPermission, saveHandle,
-         loadHandle, isEmptyDir, createCampaignSubdirs, readRoomCode } from './fs.js';
+         loadHandle, isEmptyDir, createCampaignSubdirs, readRoomCode,
+         listRuns, saveRun, loadRun } from './fs.js';
 import { normalise } from '../rules/character.js';
 import { normaliseSession, blankSession, normalisePlay } from '../shared/session.js';
 import { normaliseBeast } from '../shared/beasts.js';
 import { normaliseObject } from '../shared/objects.js';
 import { normaliseScene } from '../shared/scenes.js';
 import { noteFrom } from '../shared/story.js';
+import { PREP_SLUG, FLAT_RUN, PREP_RUN, runFrom } from '../shared/runs.js';
 import { seatAll, applyMove } from '../shared/combat.js';
 import { pcMaxHP, clearStatCache } from '../shared/handles.js';
 
@@ -101,7 +103,10 @@ function migrateFieldAssets(f) {
     simply re-adopted — except session.json, where memory wins while a table
     is open (see pollChanges below). */
 async function loadCampaign(root, { keepSession = false, changedAssets = [] } = {}) {
-  const tree = await fetchTree(root);
+  /* state.run is set before the first read (adopt below), so the tree knows
+     which mesa's session and party to pick up — and preparation-only mode
+     (`path: null`) finds neither, on purpose. */
+  const tree = await fetchTree(root, state.run.path);
   const { party, playerFiles } = parseParty(tree.players);
   const bestiary = parseBeasts(tree.monsters);
   const objects = parseObjects(tree.objects);
@@ -143,8 +148,11 @@ async function loadCampaign(root, { keepSession = false, changedAssets = [] } = 
     s.scenes = parseScenes(tree.scenarios);
     s.assets = tree.assets;
     s.story = parseStory(tree.story);
-    /* Land in the fight if there is one, on the party if there is not. */
-    if (!keepSession) s.ui.tab = session.encounter.on ? 'juego' : 'jugadores';
+    /* Land in the fight if there is one, on the party if there is not — and
+       in preparation-only mode neither tab exists, so land in the scenes. */
+    if (!keepSession) {
+      s.ui.tab = s.run.prep ? 'escenas' : session.encounter.on ? 'juego' : 'jugadores';
+    }
   });
   await refreshAssetUrls(root, tree.assets, changedAssets);
 }
@@ -196,11 +204,14 @@ async function pollChanges() {
     const diff = await checkExternalChanges(state.root);
     const touched = [...diff.changed, ...diff.removed];
     if (!touched.length) return;
-    if (touched.includes('session.json')) {
+    /* The scan covers the whole campaign, other mesas included — only this
+       run's session is the one memory refuses to give up. */
+    const mine = sessionPath();
+    if (mine && touched.includes(mine)) {
       update(s => { s.ui.sessionConflict = true; });
-      flash('session.json cambió en disco; se ignora mientras la mesa está abierta.');
+      flash(mine + ' cambió en disco; se ignora mientras la mesa está abierta.');
     }
-    if (touched.some(p => p !== 'session.json')) {
+    if (touched.some(p => p !== mine)) {
       const changedAssets = touched.filter(p => p.startsWith('assets/'));
       await loadCampaign(state.root, { keepSession: true, changedAssets });
       syncBoard();
@@ -227,17 +238,58 @@ function stopPolling() {
 
 let rememberedHandle = null;
 
-async function adopt(handle) {
-  const room = await readRoomCode(handle);   // minted on first open, stable after
+async function adopt(handle, run) {
+  update(s => { s.run = run; });
+  /* Preparation has no table: no room, no channel, no session file. */
+  const room = run.prep ? null : await readRoomCode(handle, run.path);
   await loadCampaign(handle);
+  /* Only now — App() shows the picker while pendingRoot stands, and dropping
+     it before the folder is read would flash the gate in between. */
+  update(s => { s.pendingRoot = null; s.runs = []; });
   state.room = room;
   rememberedHandle = handle;
   state.rememberedName = handle.name;
-  wireSSE(room);
+  if (room) wireSSE(room); else unwireSSE();
   attachSaver(handle);
   saveSession();                   // a fresh table gets its session.json immediately
   syncBoard();
   startPolling();
+  try { await saveRun(run.slug); } catch { /* private mode — just not remembered */ }
+}
+
+/** Between the grant and the table: which mesa? A campaign with no runs/
+    folder has only its implicit one and opens straight away; otherwise the
+    remembered mesa is taken if it is still on disk, and the picker shows
+    when it is not. */
+async function enterCampaign(handle, remembered = null) {
+  const runs = await listRuns(handle);
+  if (!runs.length) return adopt(handle, FLAT_RUN);
+  if (remembered === PREP_SLUG) return adopt(handle, PREP_RUN);
+  const hit = remembered ? runs.find(r => r.slug === remembered) : null;
+  if (hit) return adopt(handle, runFrom(hit));
+  rememberedHandle = handle;
+  update(s => { s.pendingRoot = handle; s.runs = runs; s.rememberedName = handle.name; });
+}
+
+/** The mesa picker's buttons. `run` is a listRuns() entry, or PREP_RUN. */
+export async function chooseRun(run) {
+  const handle = state.pendingRoot;
+  if (!handle) return;
+  try {
+    await adopt(handle, run.prep ? PREP_RUN : runFrom(run));
+  } catch (e) {
+    flash('No se pudo abrir la partida: ' + e.message);
+  }
+}
+
+/** Back to the mesa picker without giving up the folder grant. */
+export function switchRun() {
+  const handle = state.root;
+  if (!handle) return;
+  closeTable();
+  update(s => { s.pendingRoot = handle; });
+  listRuns(handle).then(runs => update(s => { s.runs = runs; }))
+    .catch(() => flash('No se pudieron leer las partidas de la carpeta.'));
 }
 
 /** The gate's "Abrir carpeta…" — must run inside the click, the picker is
@@ -249,7 +301,7 @@ export async function openFolder() {
   try { handle = await pickCampaignFolder(); } catch { return; /* cancelled */ }
   try {
     if (await isEmptyDir(handle)) await createCampaignSubdirs(handle);
-    await adopt(handle);
+    await enterCampaign(handle);
   } catch (e) {
     flash('No se pudo abrir la carpeta: ' + e.message);
     return;
@@ -267,13 +319,15 @@ export async function reopenLast() {
       flash('El navegador no ha dado permiso sobre esa carpeta.');
       return;
     }
-    await adopt(handle);
+    await enterCampaign(handle, await loadRun().catch(() => null));
   } catch (e) {
     flash('No se pudo reabrir la carpeta: ' + e.message);
   }
 }
 
-export function leaveCampaign() {
+/** Everything the open table owns, torn down — shared by leaving the
+    campaign and by switching mesa within it. */
+function closeTable() {
   stopPolling();
   detachSaver();
   unwireSSE();
@@ -281,9 +335,15 @@ export function leaveCampaign() {
     s.root = null;
     s.rootName = null;
     s.room = null;
+    s.run = { ...FLAT_RUN };
     s.session = blankSession();
     s.scenes = []; s.assets = []; s.story = { notes: [] };
   });
+}
+
+export function leaveCampaign() {
+  closeTable();
+  update(s => { s.pendingRoot = null; s.runs = []; });
 }
 
 /* ----------------------------------------------------------------- boot */
@@ -307,8 +367,12 @@ async function boot() {
          the browser anyway. Granted means the last folder reopens by itself;
          anything else leaves the gate showing Reabrir. */
       if (await hasPermission(remembered)) {
+        let lastRun = null;
+        try { lastRun = await loadRun(); } catch { /* first run */ }
         try {
-          await adopt(remembered);
+          /* Straight back to the mesa this device was at; the picker only
+             appears when that folder no longer has it. */
+          await enterCampaign(remembered, lastRun);
         } catch { /* folder moved or gone — the gate stays up */ }
       }
     }

@@ -5,7 +5,7 @@
    (crear.js), which writes the same envelope the creator exports. */
 
 import { html } from './html.js';
-import { state, commit, flash, saveEntity } from './store.js';
+import { state, commit, flash, saveEntity, playerPath } from './store.js';
 import { screens } from './app.js';
 import { CbCard, PickBar } from './cards.js';
 import { absorbCharacter } from './party.js';
@@ -52,7 +52,7 @@ function importLegacySession(rawSession) {
        disk, not in any session, so the one already loaded survives the swap. */
     incoming.objects = s.session.objects;
     for (const c of incoming.party) {
-      const rel = incoming.playerFiles[c.id] || ('players/' + (slugify(c.name || '') || c.id) + '.json');
+      const rel = incoming.playerFiles[c.id] || playerPath(slugify(c.name || '') || c.id);
       incoming.playerFiles[c.id] = rel;
       saveEntity(rel, { kind: 'dnd-creator-character', version: 2, character: c });
     }

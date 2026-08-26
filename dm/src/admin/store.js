@@ -20,6 +20,7 @@
 
 import { blankSession, serialiseSession } from '../shared/session.js';
 import { buildBoard } from '../shared/board.js';
+import { runRel } from '../shared/runs.js';
 import { Autosaver, postBoard, putAsset, sha256 } from './api.js';
 import { readAssetBlob } from './fs.js';
 
@@ -27,7 +28,14 @@ export const state = {
   booted: false,
   root: null,                // the picked campaign folder's directory handle
   rootName: null,            // its name, for the top bar
-  room: null,                // this campaign's relay room code (.dm-room)
+  /* Which mesa is sitting at this campaign. `path` is the run's folder
+     ('runs/guils', or '' for a flat campaign's implicit run) and prefixes
+     every table-owned file; `prep` is preparation-only mode, where there is
+     no mesa at all — no session, no room, no board. */
+  run: { path: '', slug: null, label: null, prep: false },
+  runs: [],                  // what listRuns() found, for the picker
+  pendingRoot: null,         // a granted folder waiting for its mesa to be picked
+  room: null,                // this run's relay room code (.dm-room)
   rememberedName: null,      // last folder's name, for the gate's Reabrir
   lanUrl: null,              // http://192.168.x.x:8420 — shown beside Tablero ↗
   admins: 1,                 // SSE-reported admin count; >1 shows a warning
@@ -150,8 +158,18 @@ export function detachSaver() {
   saver = null;
 }
 
+/** The open run's session file — `runs/<mesa>/session.json`, or plain
+    `session.json` in a flat campaign. Preparation-only mode has no table, so
+    it has no session file either. */
+export const sessionPath = () => (state.run.prep ? null : runRel(state.run.path, 'session.json'));
+
+/** Where a party member's sheet goes: always inside the run, because the
+    party is the one thing that is unambiguously this mesa's. */
+export const playerPath = name => runRel(state.run.path, `players/${name}.json`);
+
 export function saveSession() {
-  if (saver) saver.mark('session.json',
+  const rel = sessionPath();
+  if (saver && rel) saver.mark(rel,
     () => JSON.stringify(serialiseSession(state.session), null, 2));
 }
 

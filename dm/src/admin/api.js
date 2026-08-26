@@ -30,8 +30,8 @@ let baseline = new Map();           // relpath -> mtime as of the last scan
 const ownWrites = new Map();        // relpath -> mtime our last write produced
 const ownDeletes = new Set();       // relpaths we trashed since the last scan
 
-export async function fetchTree(root) {
-  const { tree, mtimes } = await readTree(root);
+export async function fetchTree(root, runPath = '') {
+  const { tree, mtimes } = await readTree(root, runPath);
   baseline = mtimes;
   ownWrites.clear();
   ownDeletes.clear();

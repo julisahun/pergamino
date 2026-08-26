@@ -5,7 +5,8 @@
 
 import { html } from './html.js';
 import { state, update, updateSession, undo, undoDepth, undoLabel } from './store.js';
-import { openFolder, reopenLast, leaveCampaign } from './main.js';
+import { openFolder, reopenLast, leaveCampaign, chooseRun, switchRun } from './main.js';
+import { PREP_RUN } from '../shared/runs.js';
 
 /* Dynamic on purpose: modals.js reaches back into the tab modules, and a
    static import here would close a cycle through this file before `screens`
@@ -50,6 +51,42 @@ function Gate() {
   </section></main>`;
 }
 
+/* ------------------------------------------------------------- mesa gate
+   A campaign with a runs/ folder is played by a *table*: the preparation is
+   shared, and each mesa keeps its own party, its own session and its own
+   relay room. Which one are we sitting at? (A campaign without runs/ never
+   sees this — it has one implicit run and opens straight through.) */
+
+function RunGate() {
+  const runs = state.runs;
+  return html`<main class="gate"><section class="panel gatecard">
+    <h1>${state.rememberedName}</h1>
+    <p class="muted">Esta campaña la juegan varias mesas.
+      ¿En cuál nos sentamos?</p>
+    <div class="runlist">
+      ${runs.map(r => html`<button key=${r.slug} class="runpick"
+        onClick=${() => chooseRun(r)}>
+        <b>${r.label}</b>
+        <span class="muted">${r.players
+          ? `${r.players} ficha${r.players === 1 ? '' : 's'}`
+          : 'sin fichas'}${r.played ? ' · empezada' : ' · sin empezar'}</span>
+      </button>`)}
+    </div>
+    <div class="quickadd" style="margin-top:1rem;flex-wrap:wrap">
+      <button class="ghost" onClick=${() => chooseRun(PREP_RUN)}
+        title="La campaña sin mesa: escenas, PNJ, objetos y notas. Sin tablero.">
+        Sólo preparación</button>
+      <button class="ghost" onClick=${() => leaveCampaign()}>Otra carpeta…</button>
+    </div>
+    <p class="muted" style="font-size:.85rem;margin-top:1rem">
+      Cada mesa es una carpeta en <code>runs/</code> con su${' '}
+      <code>players/</code> y su <code>session.json</code>; la preparación
+      —${' '}<code>story/</code>, <code>scenarios/</code>,${' '}
+      <code>monsters/</code>, <code>objects/</code> — la comparten todas.
+      Para estrenar una mesa, crea su carpeta.</p>
+  </section></main>`;
+}
+
 /* ------------------------------------------------------------------ rail */
 
 const TAB_TITLES = {
@@ -70,7 +107,13 @@ const NAV = [
   ['story', 'Historia'],
 ];
 
+/* Preparation-only mode has no mesa: no party, no session, no tablero — so
+   the two tabs that are nothing but the live table are not there either. */
+const TABLE_TABS = new Set(['juego', 'jugadores']);
+const navFor = prep => (prep ? NAV.filter(([k]) => !TABLE_TABS.has(k)) : NAV);
+
 function TopBar() {
+  const prep = state.run.prep;
   const paused = state.session.field.paused;
   const tvUrl = `${state.lanUrl || ''}/tv?room=${state.room || ''}`;
   const counts = {
@@ -91,9 +134,16 @@ function TopBar() {
       <span class="app dsp">Mesa del DM</span>
       <button class="camp" title="Volver a la puerta para abrir otra carpeta"
         onClick=${() => leaveCampaign()}>${state.rootName} <span class="sw">⇄</span></button>
+      ${state.run.slug ? html`<button class=${'camp mesa' + (prep ? ' prep' : '')}
+        title=${prep
+          ? 'Estás en la preparación de la campaña, sin mesa — pulsa para sentarte a una'
+          : 'La mesa que está jugando — pulsa para cambiar de mesa'}
+        onClick=${() => switchRun()}>${prep ? 'Preparación' : state.run.label}${' '}
+        <span class="sw">⇄</span></button>` : null}
       <div class="actions">
         ${undoDepth() ? html`<button class="ghost" title=${'Deshacer: ' + undoLabel()}
           onClick=${() => undo()}>⟲</button>` : null}
+        ${prep ? null : html`
         <span class=${'bstate' + (paused ? ' paused' : '')}
           title=${paused
             ? 'La mesa está congelada donde la dejaste; nada llega hasta que lo envíes'
@@ -108,11 +158,11 @@ function TopBar() {
         <button class="ghost" title=${'También vale cualquier aparato del wifi: ' + tvUrl}
           onClick=${() => window.open(`/tv?room=${state.room || ''}`, 'tablero')}>Tablero ↗</button>
         <button class="ghost" title="Conectar otro aparato — dirección y código QR"
-          onClick=${() => openConnectModal()}>▦</button>
+          onClick=${() => openConnectModal()}>▦</button>`}
       </div>
     </div>
     <nav class="tabs" aria-label="Secciones">
-      ${NAV.map(([key, label]) => html`<button key=${key}
+      ${navFor(prep).map(([key, label]) => html`<button key=${key}
         aria-current=${state.ui.tab === key ? 'true' : null}
         onClick=${() => go(key)}>
         ${label}${counts[key] ? html`<span class="n">${counts[key]}</span>` : null}
@@ -134,18 +184,26 @@ function ScreenHead() {
 export function App() {
   if (!state.booted) return html`<main class="gate"><section class="panel">
     <p class="muted">Abriendo…</p></section></main>`;
+  if (state.pendingRoot) return html`${RunGate()}${Flash()}`;
   if (!state.root) return html`${Gate()}${Flash()}`;
-  const Screen = screens[state.ui.tab];
-  const [title] = TAB_TITLES[state.ui.tab] || TAB_TITLES.juego;
+  /* A tab that only exists at a table cannot be the open one in preparation
+     mode — a remembered ui.tab from the last table would render a screen
+     with no session behind it. */
+  const tab = state.run.prep && TABLE_TABS.has(state.ui.tab) ? 'escenas' : state.ui.tab;
+  const Screen = screens[tab];
+  const [title] = TAB_TITLES[tab] || TAB_TITLES.juego;
   return html`<div class="shell">
     <${TopBar} />
     <div class="content">
       ${state.admins > 1 ? html`<div class="pausedbar warn">⚠ Hay ${state.admins} ventanas de administración
         abiertas a la vez — la última que toque algo gana. Cierra una.</div>` : null}
-      ${state.session.field.paused ? html`<div class="pausedbar">⏸ La mesa está congelada donde la
+      ${state.run.prep ? html`<div class="pausedbar">✎ Preparación de la campaña — ninguna
+        mesa está sentada, así que no hay tablero ni grupo. Lo que cambies aquí lo verán
+        todas las mesas.</div>` : null}
+      ${!state.run.prep && state.session.field.paused ? html`<div class="pausedbar">⏸ La mesa está congelada donde la
         dejaste — nada de lo que cambies aquí llega hasta que pulses <b>Enviar al tablero</b>.</div>` : null}
       ${ScreenHead()}
-      ${state.ui.showTV && screens.tvPanel ? screens.tvPanel() : null}
+      ${!state.run.prep && state.ui.showTV && screens.tvPanel ? screens.tvPanel() : null}
       ${Screen ? Screen() : stub(title)}
     </div>
     ${state.ui.modal ? state.ui.modal() : null}

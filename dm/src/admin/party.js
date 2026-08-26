@@ -4,7 +4,7 @@
    so anything importing it inherits the boot cycle. This one only knows the
    store and the model. */
 
-import { commit, saveEntity } from './store.js';
+import { commit, saveEntity, playerPath } from './store.js';
 import { playOf, pcMaxHP, clearStatCache } from '../shared/handles.js';
 import { seatAll } from '../shared/combat.js';
 import { slugify } from '../shared/util.js';
@@ -36,7 +36,7 @@ export function absorbCharacter(c, verb) {
     result = mergeParty(s, c);
     /* An existing member keeps the path it came in on — renaming someone
        must not orphan the file the party already lives in. */
-    const rel = s.session.playerFiles[c.id] || ('players/' + (slugify(c.name || '') || c.id) + '.json');
+    const rel = s.session.playerFiles[c.id] || playerPath(slugify(c.name || '') || c.id);
     s.session.playerFiles[c.id] = rel;
     seatAll(s.session);
     /* The exact envelope the creator exports, so the file on disk stays
