@@ -1,255 +1,186 @@
-# dm — combat tracker and battle map (File System Access storage)
+# dm — the DM's table
 
-A small relay server (`server.py`) plus two pages it serves: `/` is the
-admin window (what the DM drives, `index.html` + `src/admin/`), `/tv` is the
-television (`tv.html` + `src/tv/`). **The app runs on the home Pi at
-`https://dm.sigint-pm.uk` — that is the only way it is played**; a local
-`python3 dm/server.py` exists purely for dev and headless verification.
+Two pages served by a static Python file host: `/` is the admin window (what
+the DM drives), `/tv` is the television (what the players look at). The
+campaign folder is the database, read and written by the browser itself.
+
 See the root `CLAUDE.md` for repo-wide rules; `instructions.md` is the full
-behavioral reference, and `importing.md` is the spec for converting an outside
-campaign into a campaign folder (written to be handed to a language model,
-checked by `check-campaign.js`).
-
-**Campaign files never touch the server.** The admin page holds a File
-System Access grant (Chromium-only; needs a secure context — https or
-localhost, which is why the Pi deployment fronts it with cloudflared) on
-whatever folder the DM picked, reads and writes it directly
-(`src/admin/fs.js`), and remembers the handle in IndexedDB. The server is
-static files + the board/move relay + an ephemeral RAM asset cache
-(`/api/asset/<sha256>`) the TV fetches maps/audio/portraits from — there is
-no endpoint that can read or write a campaign file, which is what makes the
-always-on public deployment a non-question for the data.
-
-**Simultaneous tables are rooms.** Every campaign folder carries a stable
-6-char code (`.dm-room`, minted on first open from the unambiguous alphabet
-`A-HJ-NP-Z2-9`); the SSE channel, the board post and the move post are all
-scoped to it, so two DMs on two folders never see each other's television.
-The TV joins via the `?room=` the QR/`Tablero ↗` carries, or its code
-screen (bare `/tv`); it remembers the room in localStorage, M switches.
+behavioural reference, and `importing.md` is the spec for converting an outside
+campaign into a campaign folder.
 
 ```bash
-python3 dm/server.py --no-browser                # dev/verification only
-DM_PORT=8085 python3 dm/server.py --no-browser   # the Pi unit's invocation
+python3 dm/server.py --no-browser --dev     # dev; --dev also serves probes/
+node --test "dm/src/**/*.test.js"           # the model
+tsc -p dm/jsconfig.json                     # the types (global typescript)
+node dm/check-campaign.js campaigns/example # the campaign linter
+dm/probes/run.sh mesa                       # one browser probe
 ```
 
-**It invents no rules and rolls no dice.** Every player number comes from
-`derive()` in `src/rules/engine.js` — a copy of the creator's engine, guarded
-by `check-sync.py` — run against the `.json` a player exported. Every roll at
-the table is physical: initiative, damage and death saves are *entered*.
+## The one rule this app is organised around
 
-## The one storage story
+**No state reaches the television without being stated, in one vocabulary, in
+one place.**
 
-The campaign folder — any folder the DM picks; `campaigns/<name>/` by repo
-convention — **is** the database. Nothing lives anywhere else; there are no
-save buttons and no merge rules:
+The previous version was rebuilt because it broke that rule six ways at once:
+the television's rendering was computed from `live` and `grid` at push time, so
+what the players were looking at existed nowhere — not in the file, not on the
+DM's screen. The header said "En vivo" when it meant "not paused". A dropped
+map silently cleared the scene. `ui.tab` was written from eleven places.
 
-| What | File | Written when |
+Everything below is a consequence of that rule.
+
+## The nine invariants
+
+1. **Two mutation verbs, no third path.** `commit(label, fn)` is an undo step;
+   `tweak(fn)` is not, and every `tweak` call site says in one line why not.
+   Nothing else touches the session. `store.js` owns both.
+2. **Nothing navigates for you.** `ui.tab` is written by a tab click and by
+   boot (`firstTab()`), and by nothing else — not by an import, not by putting
+   something on the television, not by a scene going up.
+3. **One vocabulary for the television**: *nada · escena · tablero*, and
+   *en pausa*. "En vivo" is not a phrase this app uses. `MODES` in
+   `shared/field.js` is that vocabulary; the control, the header chip and the
+   mirror all render from it.
+4. **The admin mirrors the television.** Both windows render
+   `shared/view/tablero.js` over the same `buildProjection()` output; the only
+   difference is `audience`, which decides whether hidden creatures survive
+   (marked) or are absent.
+5. **No fact stored twice.** `field.mode` is stored and nothing derives it;
+   every number on a character card is derived and nothing stores it.
+6. **Every write names where it went.** `wrote()` flashes the file and the
+   layer: «Vann guardado en `runs/guils/monsters/vann.json` — sólo esta mesa.»
+7. **`tsc -p dm/jsconfig.json` is clean, always.** The model is typed first
+   (`shared/types.js`); that is what would have caught the flag confusion.
+8. **Spanish UI and rules text, English code, identifiers, comments and docs.**
+9. **No npm, no pip, no build output, no bundler, no `package.json`.**
+
+## Storage: the campaign folder is the database
+
+The admin holds a File System Access grant on the folder the DM picked
+(Chromium-only, secure context — https, or localhost). No server reads or
+writes a campaign file, and `server.py` has no endpoint that could.
+
+| What | Where | When |
 |---|---|---|
-| play state (hp, npcs, encounter, field) | `session.json` | autosaved, 500ms debounce |
-| a party member | `players/<slug>.json` | on import, and when the Jugadores editor (`src/admin/crear.js`) creates or saves one — same `{kind,version,character}` envelope the creator exports, so the file stays interchangeable. A member keeps the path it arrived on: renaming does not move the file |
-| a bestiary entry | `monsters/<slug>.json` | wizard save / "Guardar en los PNJ" |
-| an object (item) | `objects/<slug>.json` | wizard save. The catalog: name, description, `mods` over the five handle stats (ac, hpMax, initMod, speed, pp), free-text `effects`. Holders keep only ids — `play[id].objects` / the npc instance — and inherit the modifiers in `pcHandle`/`npcHandle`, never inside the sync-guarded `derive()` |
-| a scene | `scenarios/<slug>.json` | editor Guardar |
-| a dropped map | `assets/maps/<epoch>.jpg` | on drop (≤1920px JPEG) |
-| a note | `story/**/*.md` | Historia's WYSIWYG editor (`domToMd`), autosaved — or any text editor, same file. An in-app edit re-serialises the file from the rendered subset: wrapped lines unwrap, constructs the renderer flattens get flattened. |
+| play state | `session.json` in the open run | autosaved, 500ms debounce |
+| a party member | `runs/<mesa>/players/<slug>.json` | on import and on levelling, in the creator's own envelope |
+| a monster · an object · a scene | `monsters/` `objects/` `scenarios/`, in the layer the DM picked | on Guardar |
+| a dropped map | `assets/maps/<epoch>.jpg`, in the layer the DM picked | on drop |
+| notes | `story/**/*.md` and every `.md` inside the mesa | **never** — notes are read only |
 
-Deletes go to the campaign's `trash/`, never `unlink` (a copy plus
-`removeEntry` — the FS API has no rename). Editing any file on disk shows up
-in the app by itself: the admin re-scans mtimes every 5s (hidden tab: paused;
-its own writes: suppressed) and re-reads what moved. `session.json` is the
-one exception — while a table is open, memory wins over external edits.
+Deletes are moves into `trash/`, never unlinks. Edits made outside the app
+arrive by themselves: a 5s mtime scan (paused while hidden, own writes excluded
+by the mtime they landed with) re-reads whatever moved. `session.json` is the
+exception — memory wins while a table is open.
 
-`field.map`/`field.audio` hold **campaign-relative paths** (that is what
-`session.json` persists). This window resolves them through `urlFor` (an
-object-URL cache over the local files); the board push resolves them — and
-portraits — to `/api/asset/<sha256>` relay URLs, uploading whatever the
-current board references that the relay does not already hold.
+## Two layers
 
-The admin's device preferences: the remembered folder handle (IndexedDB
-`dnd-dm`) and master volume/mute (localStorage `dnd-dm-audio`). The TV
-device keeps its own local volume (`dnd-dm-tv-audio`, arrow keys) and its
-joined room (`dnd-dm-tv-room`). None of that is session state. The room
-code itself lives in the campaign folder (`.dm-room` — a dotfile, so the
-walkers never surface it), which is what makes it travel across devices.
+A campaign holds the preparation every table shares. `runs/<mesa>/` holds one
+table's own party, play state, notes, and its own monsters/objects/scenes/
+assets, which **shadow the campaign's by id**. A campaign with no `runs/` is
+flat: the root is its one implicit run, there is one layer, and nothing ever
+asks. `shared/runs.js` is the whole arithmetic, and `classify()` is the single
+answer to "what can the app see".
+
+- **Every save asks which layer**, when there are two — new entities and edits
+  alike, a map dropped mid-combat included (`admin/layers.js`).
+- **Saving «a la campaña» something the mesa has its own copy of promotes it**:
+  the shared file is written and the run-local one is trashed, because leaving
+  both means the copy you just made goes on hiding the file you just saved.
+- **Deletes**: a mesa's own files from inside it; the campaign's from
+  preparation-only mode, which is a real third choice in the picker.
+- `layerOf(path)` is a fact about the path; `isMine(run, path)` is a fact about
+  who is asking. Conflating them made another table's file look deletable.
 
 ## The two windows
 
-The **admin tab is authoritative**; the server is a relay (all game logic in
-JS, none in Python). Sync is Server-Sent Events on `/api/events`, one
-channel **per room** — rooms exist implicitly on first use, live in RAM,
-and idle clientless ones are LRU-pruned past a cap:
+The television is a second window on the same machine, so they talk over a
+`BroadcastChannel` (`shared/bus.js`): no relay, no room codes, no network hop,
+and **no campaign byte leaves the browser** — asserted in `probes/tele.html`
+against the TV window's own resource timeline.
 
-- Admin mutation → `buildBoard()` → `POST /api/board` → broadcast → TVs
-  render. `field.paused` gates that POST (**Pausar/Enviar al tablero**).
-- TV drag → `POST /api/move` → admin folds it into `session.field.tokens`,
-  saves, re-broadcasts. Positions are the only thing that flows back.
-- A late/reconnecting TV catches up from the `hello` snapshot the server
-  replays on connect; EventSource reconnects on its own.
-- Two admin tabs = last-writer-wins plus a visible warning (`admins` count).
-
-`dnd-dm-board` is gone; the projection (see `src/shared/board.js`) travels
-over SSE only, with every asset path pre-resolved to a URL — a hidden npc is
-**absent** from the payload, not unrendered, and the TV never even learns
-the campaign's name.
+- `hello` (tv → admin) is what lets a window that opened second catch up.
+- `state` (admin → tv) carries the projection **and the directory handle**, so
+  the television opens pictures and sound for itself. Paths travel as paths.
+- `move` (tv → admin) is the only thing that flows back.
+- `trouble` (tv → admin) is the television saying it cannot read the folder —
+  out loud, on both screens, rather than quietly showing nothing.
 
 ## Code layout
 
 ```
-server.py           stdlib HTTP: statics + SSE relay + ephemeral asset cache
-                    (~350 lines, no pip deps, $DM_PORT override)
-check-sync.py       guards the parts copied from creator/
-check-campaign.js   lints a campaign folder (node, imports src/rules + validate())
-index.html, tv.html thin shells; all logic in native ES modules
-vendor/             preact.mjs + htm.mjs, committed, no npm
-src/rules/          data.js, engine.js, character.js — creator copies (check-sync)
-src/shared/         pure model: session, beasts, scenes, combat, board, story, util, qr
-                    (node --test-able; DOM needs are injected: aspectOf, urlFor)
-src/admin/          fs.js (File System Access + IndexedDB handle), api.js
-                    (fs wrappers + SSE + asset uploads + Autosaver), store.js
-                    (state + undo + urlFor/relay caches + board push), app.js,
-                    main.js (boot + 5s poll), one module per tab, field.js
-                    (the drag board), modals.js, crear.js (the character
-                    editor, lazily imported), party.js + frame.js (the two
-                    things crear.js shares — see the cycle note below)
-src/tv/             main.js (SSE), board-view.js (renderer), audio.js (crossfade)
-src/styles/         tokens.css (check-synced), fonts.css, admin.css, tv.css
+server.py           static host; /, /tv, /src, /vendor, /api/ping. --dev adds /probes
+check-campaign.js   the campaign linter (node, no deps; knows about runs/)
+jsconfig.json       tsc --checkJs, noEmit, strict
+index.html tv.html  thin shells
+vendor/             preact.mjs + htm.mjs verbatim, plus hand-written .d.mts
+src/rules/          data, engine, character, levels — the numbers. Ours now:
+                    the creator is a supported input format, not a sibling
+src/shared/         types (the model), field, session, runs, combat, play,
+                    projection, scenes, story, beasts, objects, handles, bus,
+                    files, util, view/tablero (drawn by BOTH windows)
+src/admin/          fs (grants + tree), disk (writes + poll), store (state and
+                    the two verbs), campaign (open/read/poll), app (screens and
+                    tabs), one module per tab, layers (the layer question),
+                    entities, cards, combate, subir, broadcast
+src/tv/             main (bus + resolve + render), audio (crossfade)
+probes/             headless-Chrome verification; run.sh <name>
 ```
-
-**A sheet can be built here, not only imported.** Jugadores' `+ Nueva ficha`
-(and `Editar ficha` on a party card) opens `crear.js`: the creator's Edit
-screen — one page, collapsible sections — driven entirely by `src/rules/`.
-It invents nothing: every number is `derive()`, every complaint `validate()`,
-and `Rellenar` is the creator's own `quizResult()` run over random answers
-plus the handful of picks the quiz has no opinion about (the species skill,
-the Human's extra feat, the feat tool/skill pickers, Magic Initiate). A
-verified 200-sheet sweep across all 12 classes leaves zero `validate()`
-errors, so treat a Rellenar that produces an incomplete sheet as a bug.
-
-`main.js` is the only entry point, and `jugadores.js` → `app.js` →
-`main.js` → `jugadores.js` is a real cycle it survives only because it is
-*first*. So anything reachable from a non-boot entry keeps out of it:
-`absorbCharacter()` (the one door a sheet uses to reach the party and the
-disk) lives in `party.js`, and `ModalFrame` in `frame.js`, precisely so
-`crear.js` can import them without dragging `app.js` in half-initialised.
-The symptom when that is broken is `Cannot access 'screens' before
-initialization`.
-
-`store.js` has the three verbs: `update()` (re-render only — ui state,
-drags, volume), `commit(label, fn)` (undo step + autosave + board push —
-every play mutation), `updateSession()` (persist + push, NOT an undo step —
-token drags, pause, resize). The undo stack is 25 deep, whole-session
-snapshots, and never rewrites entity files.
-
-## check-sync.py
-
-```
-creator/index.html ──rules──► dm/src/rules/{data,engine,character}.js
-creator/index.html ──theme──► dm/src/styles/tokens.css
-```
-
-Same contract as always (exit 0/1/2, diff on drift), but the right side is
-now the modules: it strips `export ` prefixes and `import` lines before
-comparing. Run it after touching the creator's data/engine/theme blocks or
-anything under `src/rules/`. `tokens.css` keeps the creator's literal
-`shared tokens` banner and `* { box-sizing }` line — the extractor anchors
-on them. Retires when creator/ is rebuilt onto these modules.
-
-## Verifying changes
-
-```bash
-node --test dm/src/lint.test.js dm/src/shared/shared.test.js dm/src/shared/qr.test.js dm/src/tv/audio.test.js
-python3 dm/check-sync.py
-```
-
-After touching a normaliser (`src/shared/beasts.js`, `objects.js`, `scenes.js`,
-`story.js`) or anything under `src/rules/`, also run the campaign linter — it
-asserts the tolerances those modules promise, and `importing.md` documents them
-to outsiders:
-
-```bash
-node dm/check-campaign.js campaigns/example
-```
-
-It reads a folder the way `readTree()` does and reports only what the app would
-read *differently* from what the file says. Exit 0 clean, 1 warnings, 2 errors.
-It deliberately imports `src/rules/data.js` and calls `engine.validate()`
-instead of restating the vocabulary — there is one list of species in this repo,
-and check-sync.py exists because of what happens otherwise.
-
-Beyond units, the pattern that works (see git history for examples):
-
-1. **Bare load**: headless Chrome `--timeout=6000 --dump-dom` against
-   `http://127.0.0.1:8420/`, grep stderr for `CONSOLE.*rror`. (`--timeout`
-   alone freezes timers; `--virtual-time-budget` advances them but races
-   ahead of real network and hangs on the never-idle SSE stream.)
-2. **Behavioral probes**: a temporary page under `src/` (so the server will
-   serve it) with a `<script type=module>` that imports the real modules and
-   drives them, run plain headless (no dump flags) for N real seconds, and
-   have the probe **report via `POST /api/board`** with a `probeReport`
-   field (and a valid 6-char `room` — pick a fixed one for the probe) —
-   read it back from that room's SSE `hello` snapshot with curl.
-   `--dump-dom` fires at the load event, before any async work, so it only
-   ever shows the empty shell. For a campaign folder without a picker
-   gesture, use OPFS: `navigator.storage.getDirectory()` hands you a real
-   `FileSystemDirectoryHandle` (fs.js's `hasPermission` treats its missing
-   `queryPermission` as granted for exactly this). Delete the probe page
-   after.
-3. The TV's audio unlock cannot be probed (synthetic taps are
-   `isTrusted: false`) — that one is a manual check.
 
 ## Traps worth knowing before "fixing" them
 
-- **htm does NOT auto-close void elements.** `<input>` without `/>` adopts
-  its following siblings as children; the symptom is an `insertBefore`
-  TypeError on the *second* render, far from the cause. `lint.test.js`
-  scans for it — keep it passing.
-- **Grammar boxes are uncontrolled** (`defaultValue`, commit on
-  change/Enter). Making them controlled re-renders under the caret.
-- A JS block comment cannot contain a glob like `story/**` followed by
-  `*.md` — the `*/` inside ends the comment.
-- `Number(null) === 0`: `hp: null` means "untouched, therefore full" and is
-  guarded with `!= null` everywhere. Never "simplify" that.
-- `??` doesn't catch `NaN` — `Number.isFinite` before any `<audio>.volume`.
-- Real monster files carry `ac: "10"` and `speed: "None"` — `normaliseBeast`
-  coerces; unparseable speed is `null` (reach unknown), not `NaN`.
-- `setPointerCapture` throws on synthetic pointers and some TV browsers —
-  both drag handlers wrap it in try/catch on purpose.
+- **htm does NOT auto-close void elements.** `<input>` without `/>` adopts its
+  following siblings as children; the symptom is an `insertBefore` TypeError on
+  the *second* render, far from the cause. `lint.test.js` scans for it — and
+  scans only the static chunks of template literals, because stripping comments
+  first eats `accept="image/*"` and everything after it.
+- **A JS block comment cannot contain a glob** whose star-slash closes it. This
+  repo has paid for that twice; `lint.test.js` says so at the top.
+- **`@import` in JSDoc only works inside `/** … *&#47;`**, not a plain `/* … *&#47;`.
+  The symptom is `Cannot find name 'Session'` in a file that plainly imports it.
+- **Grammar boxes are uncontrolled** (`defaultValue`, commit on change/Enter).
+  Making them controlled re-renders the input under the caret.
+- **`Number(null) === 0`**: `hp: null` means "untouched, therefore full" and is
+  guarded with `!= null` everywhere. Never "simplify" it.
+- **A fresh table has no `live`/`grid` to migrate**, so it shows *nada*. Reading
+  the legacy default there opened every new campaign on a bare grid.
+- **`??` doesn't catch `NaN`** — `Number.isFinite` before any `<audio>.volume`.
+- Real monster files carry `ac: "10"` and `speed: "None"`; `normaliseBeast`
+  coerces, and an unparseable speed is `null` (reach unknown), not `NaN`.
+- **`setPointerCapture` throws** on synthetic pointers and some TV browsers —
+  the drag works without it, so it is wrapped in try/catch on purpose.
 - **`backdrop-filter` makes an element the containing block for its `fixed`
-  descendants.** `header.top` carries a blur — never put a
-  `position: fixed` element inside it (or any blurred ancestor); it will pin
-  to the ancestor's box instead of the viewport.
-- Headless Chrome clamps the window to ~500px wide even with
-  `--window-size=390,…` — the PNG comes out 390 wide but *cropped*, so a
-  "phone" screenshot can show fake horizontal overflow. Verify at ≥500px or
-  probe `innerWidth` before trusting it.
-- Percentage `top`/`height` resolve against the containing block's *width*
-  — the grid keeps two units, `--sq` and `--sqy`; token labels are capped in
-  `cqw`; drop math subtracts the field's border (padding-box rule).
-- Spaced filenames (`Medalla del Tratado.md`): `encodePath()` for URLs,
-  quoted `url("…")` in CSS.
-- SSE responses must not set Content-Length, must flush per event, and the
-  handler thread dies via `BrokenPipeError` — that's the reaper, not a bug.
-- An HTTP handler that rejects a PUT **without reading its body** poisons
-  the keep-alive connection — the unread bytes parse as the next request
-  (symptom: a stray 501 on the following call). Drain or set
-  `self.close_connection = True` before failing.
-- Chromium's `createWritable()` stages into a sibling `.crswap` file —
-  fs.js's walkers skip them (and dotfiles, and `trash/`) or every autosave
-  would look like an external edit.
-- The 5s poll tells its own writes apart by mtime (`api.js` keeps
-  `baseline`/`ownWrites`); bypassing `putFile`/`deleteFile` for a write
-  makes it look external and triggers a re-read.
+  descendants.** Never put one on an ancestor of the flash or a modal.
+- **Percentage `height` resolves against the containing block's width** unless
+  that block has a definite height. The board gets its shape from
+  `aspect-ratio`, which is what keeps a square square.
+- **The board is sized in container units** (`cqh`/`cqw`), never viewport
+  units, because the same component fills a television and a 20rem mirror.
+- Chromium's `createWritable()` stages into a sibling `.crswap` file — the
+  walkers skip them (and dotfiles, and `trash/`) or every autosave would look
+  like an edit made outside the app.
+- The 5s poll tells its own writes apart by mtime; bypassing `disk.js` for a
+  write makes it look external and triggers a pointless re-read.
 
-## Scope
+## Verifying changes
 
-Everything the old app did (see `instructions.md`) **minus Preparar**
-(staged scenes) — "A la tele" is the only scene action — **plus** building a
-sheet in Jugadores. Still deliberately out: dice, spell slots, statblocks
-beyond name/AC/HP/initiative/note, encounter building, XP, walls, line of
-sight, fog of war, anything above level 1.
+`node --test` for the model. For anything on screen, a probe: a page under
+`probes/` that imports the real modules, drives the real components, and
+reports by `console.log` — `probes/run.sh <name>` reads it back off Chrome's
+stderr. `probes/kit.js` wraps every probe so an exception becomes a failed
+check rather than a silent hang.
 
-The editor is deliberately *not* a second creator: no questionnaire screens,
-no roster, no A4 sheet, no printing, no `.json` export — those stay in
-`creator/`, which is still where a player builds their own character and
-still the source of truth for the rules. This is the DM's version of the
-same thing, for the player who turns up without a sheet.
+Headless-Chrome traps that still bite: `--dump-dom` fires at the load event and
+shows only the empty shell; `--timeout` alone freezes timers;
+`--virtual-time-budget` races real work and hangs; `window.open` needs
+`--disable-popup-blocking`; and the window clamps to ~500px wide regardless of
+`--window-size`.
+
+## Deliberately not here
+
+Dice of any kind. Walls, line of sight, fog of war. Encounter building, XP.
+Monster attack statblocks beyond name/AC/HP/initiative/speed/note/abilities.
+Keyboard-driven combat. An auto-written bitácora. Staged scenes. Multiclassing.
+A character creator — a sheet is built in `creator/`, and this app reads it.
+Class features as data: what a feature *does* is free text the DM writes, which
+is why `rules/levels.js` is a hundred lines and not a transcription project.

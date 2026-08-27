@@ -1,0 +1,161 @@
+/* ================================================== THE BOARD, BOTH TIMES
+   One stylesheet for the television and for the admin's mirror, because they
+   are one component (shared/view/tablero.js).
+
+   Every size is a CONTAINER unit — cqh, cqw — never a viewport unit. That is
+   what lets the same markup be right on a 55" panel and inside a 20rem panel
+   beside the DM's controls, with no media query, no second sheet and no
+   transform scaling. Whoever mounts it owns a `container-type: size` box.
+========================================================================= */
+
+.tb {
+  height: 100%; width: 100%;
+  display: grid; grid-template-rows: auto 1fr;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------- nothing, waiting */
+
+.tb.waiting, .tb.nada {
+  place-content: center; place-items: center; text-align: center;
+  grid-template-rows: 1fr;
+  gap: 1.5cqh;
+}
+.tb.waiting b { font-size: 7cqh; color: var(--seal); }
+.tb.waiting span { font-size: 2.6cqh; color: var(--ink-soft); }
+.tb.nada .orn { font-size: 9cqh; color: var(--gold); opacity: .55; }
+
+/* ---------------------------------------------------------------- banner */
+
+.banner {
+  display: flex; align-items: baseline; gap: 1.5cqw; padding: 1cqh 2cqw;
+  border-bottom: 3px double var(--sepia); background: var(--panel);
+}
+.banner .round { font-size: 3cqh; color: var(--seal); }
+.banner .round b { font-size: 4.2cqh; font-variant-numeric: tabular-nums; }
+/* Big enough to read from a sofa: ~31px of cap height on a 1080p television is
+   where a name stops being something you lean forward for. */
+.banner .who { font-size: 4.4cqh; }
+.banner .who small {
+  font-size: 2.2cqh; color: var(--ink-soft); font-family: var(--serif);
+  font-variant: normal; letter-spacing: 0; margin-right: .6cqw;
+}
+
+/* ------------------------------------------------------------ middle band
+   Roster left, the stage in the middle, turn order right — the two panes
+   players scan during a fight flank the thing they are watching, instead of
+   queueing up underneath it where a glance at your own hit points costs you
+   the field. */
+
+.mid { display: grid; grid-template-columns: auto 1fr auto; min-height: 0; }
+.stage { display: grid; place-items: center; padding: 1cqh 1cqw; min-height: 0; min-width: 0; }
+
+.pane {
+  background: var(--panel); padding: 1cqh 1cqw;
+  min-width: 12cqw; max-width: 20cqw;
+  display: flex; flex-direction: column; gap: .5cqh;
+  overflow: hidden;
+}
+.pane .who, .pane .turn {
+  display: flex; align-items: center; gap: .6cqw;
+  font-size: 2.2cqh; line-height: 1.25;
+}
+.pane .face {
+  width: 4cqh; height: 4cqh; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--rule); flex: none;
+}
+.pane .nm { font-family: var(--display); letter-spacing: var(--head-ls); color: var(--ink); }
+.pane .who .nm { color: var(--ink); border-left: .6cqw solid var(--ink, currentColor); padding-left: .5cqw; }
+.pane .hp { margin-left: auto; font-variant-numeric: tabular-nums; }
+.pane .hp small { color: var(--ink-soft); }
+.pane .hp em { color: var(--seal); font-style: normal; margin-left: .3cqw; }
+.pane .state { color: var(--seal); font-size: 1.8cqh; }
+.pane .turn.active { background: var(--panel-2); border-left: .5cqw solid var(--seal); }
+.pane .turn.down { opacity: .45; text-decoration: line-through; }
+/* Only ever seen in the DM's mirror: audience 'tv' never carries these. */
+.pane .hidden { opacity: .5; outline: 1px dashed var(--sepia); }
+
+/* ------------------------------------------------------------------- art */
+
+.art {
+  width: 100%; height: 100%;
+  background-size: contain; background-position: center; background-repeat: no-repeat;
+}
+.art.none {
+  display: grid; place-content: center; place-items: center; gap: 1cqh;
+  color: var(--ink-soft);
+}
+.art.none b { font-size: 4cqh; color: var(--sepia); }
+.art.none span { font-size: 2.2cqh; }
+
+/* ----------------------------------------------------------------- field
+   The grid gets its shape from aspect-ratio, so a square is square by
+   construction. Percentages inside it resolve against a box with a definite
+   size in both directions, which is what keeps `top` honest — a percentage
+   height against an indefinite box resolves against WIDTH, and that is the
+   bug that used to need two custom properties to work around. */
+
+.field {
+  position: relative;
+  max-width: 100%; max-height: 100%;
+  width: 100%;
+  background-size: cover; background-position: center;
+  border: 1px solid var(--sepia);
+  background-color: var(--field);
+}
+.field .lines {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(43,33,24,.28) 0 1px,
+      transparent 1px calc(100% / var(--cols))),
+    repeating-linear-gradient(0deg, rgba(43,33,24,.28) 0 1px,
+      transparent 1px calc(100% / var(--rows)));
+}
+.token {
+  position: absolute;
+  left: calc(var(--x) * 100% / var(--cols));
+  top: calc(var(--y) * 100% / var(--rows));
+  width: calc(100% / var(--cols));
+  height: calc(100% / var(--rows));
+  display: grid; place-items: center;
+  touch-action: none;
+}
+.token::before {
+  content: ''; position: absolute; inset: 12%;
+  border-radius: 50%; background: var(--ink);
+  border: 2px solid rgba(255,252,240,.75);
+  box-shadow: 0 1px 3px rgba(43,33,24,.4);
+}
+.token.active::before { outline: .35cqh solid var(--seal); outline-offset: .2cqh; }
+.token .name {
+  position: absolute; bottom: -1.1cqh; z-index: 1;
+  font-size: 1.6cqh; max-width: 200%; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  background: rgba(255,252,240,.8); padding: 0 .3cqw; border-radius: var(--radius);
+}
+.token.hidden::before { opacity: .45; border-style: dashed; }
+
+/* A selected token lights its reach: one box, because Chebyshev reach IS a
+   box — the diagonal costs what the straight line costs. */
+.field .reach {
+  position: absolute; pointer-events: none;
+  left: calc(var(--x) * 100% / var(--cols));
+  top: calc(var(--y) * 100% / var(--rows));
+  width: calc(var(--w) * 100% / var(--cols));
+  height: calc(var(--h) * 100% / var(--rows));
+  background: rgba(142, 43, 32, .13);
+  outline: 2px solid rgba(142, 43, 32, .35);
+}
+.token { cursor: grab; }
+.token.sel::before { outline: .3cqh solid var(--gold); outline-offset: .15cqh; }
+.token .thp {
+  position: absolute; top: -1cqh; font-size: 1.4cqh;
+  background: rgba(255,252,240,.85); padding: 0 .3cqw; border-radius: var(--radius);
+  white-space: nowrap;
+}
+.token .tcond {
+  position: absolute; right: 4%; top: 4%; width: 1.8cqh; height: 1.8cqh;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--seal); color: #fdf6e6; font-size: 1.2cqh;
+}

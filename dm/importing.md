@@ -14,8 +14,10 @@ the folder every 5 seconds).
 
 ## 0. Instructions to the converting model
 
-1. Produce **only** the files described in §2–§6. Never write `session.json`,
-   `.dm-room`, or anything under `trash/` — those belong to the app.
+1. Produce **only** the files described in §2–§6. Never write `session.json`
+   or anything under `trash/` — those belong to the app. Never write anything
+   under `runs/` either: a mesa is one table's own history, made in the app
+   (§9), not something a conversion can know about.
 2. **Never generate `players/*.json`.** Read §7 and report to the DM instead.
 3. Every parser in this app is deliberately forgiving: a wrong field is
    coerced or dropped, never refused. **Nothing will tell you that you got it
@@ -63,8 +65,15 @@ is missing, and it loads as «Sin nombre» with default stats. (`scenarios/` and
 table plays in. The app's own chrome is Spanish; it does not care what language
 the campaign is in.
 
-**This app is level 1 only**, by design, and it rolls no dice. Every number in
-a file is a number the DM reads out or types in.
+**It rolls no dice.** Every number in a file is a number the DM reads out or
+types in.
+
+**Characters are converted at level 1** and levelled up inside the app (§7).
+The app tracks levels 1–20: the proficiency bonus, hit dice, spell slots,
+ability increases and a subclass are computed from tables, and what each class
+feature *does* is free text the DM writes as they take it. A conversion never
+writes a `levels` array — it is the app's own field, and the level-1 build is
+what the creator can express.
 
 ---
 
@@ -233,8 +242,12 @@ but write it — it makes the file self-identifying.
 | `grid` | `{"cols": n}`, 4…60, or omit to use the table's current grid. **Never write `rows`** — rows always derive from the art's real proportions. |
 | `note` | free text, the DM's own prep. |
 
-Scene art is full-bleed by default; the grid is a separate toggle the DM
-decides per scene at the table. Do not assume a scene is a battle map.
+Putting a scene on the table writes its picture, its sound, its board size and
+its roster — and decides **nothing** about what the television is showing. That
+is one control the DM sets: *nada*, *escena* (the picture full-bleed) or
+*tablero* (the grid, with tokens). So do not assume a scene is a battle map, and
+do not try to express "this one is a map" in the file: it is not a property a
+scene has.
 
 One scene per meaningful location or beat. Rooms a party walks through without
 stopping do not need scenes; a room where a fight happens does.
@@ -257,6 +270,19 @@ a path under `assets/` is simpler and smaller.
 
 ---
 
+## 6b. `runs/` — do not generate these either
+
+A campaign may have a second layer: one folder per table under `runs/<mesa>/`,
+holding that table's own party, play state, notes, and its own versions of
+monsters, objects, scenes and assets, which **shadow the campaign's by id**.
+
+That is history — what one group did with the material — and a conversion has
+none of it. Convert everything into the shared campaign at the top level. The
+DM makes a mesa in the app, and the app is what decides, per save, which layer
+a change belongs to.
+
+---
+
 ## 7. `players/*.json` — do not generate these
 
 A player file is not a statblock. It is a **build recipe** in the character
@@ -274,8 +300,10 @@ an illegal build, and the exported file is exactly what this app wants.
 Your job is to tell the DM, per character, **whether the build can be expressed
 at all** before they sit down. It can only if all of these hold:
 
-- **Level 1.** No exceptions. A level-5 party cannot be imported at any level
-  other than 1.
+- **Level 1 is where a sheet starts.** A level-5 character is rebuilt at level
+  1 in the creator and then levelled up in the app, which is where hit points
+  per level, ability increases, the subclass and the features get recorded. Say
+  so per character rather than trying to express level 5 in the file.
 - Species is one of: `aasimar`, `draconido`, `enano`, `elfo`, `gnomo`,
   `goliat`, `humano`, `mediano`, `orco`, `tiflin` — with a lineage where the
   species has one (draconido: 10 colours; elfo: drow/alto/bosque; gnomo:
@@ -309,9 +337,8 @@ compromise / not expressible. Homebrew species, custom subclasses, non-SRD
 spells and anything above level 1 fall in the last bucket, and the honest
 answer there is that this app is the wrong tool for that character.
 
-A rescue path exists for a party that already has files: dropping an older
-`mesa.json` export on the admin window restores party, bestiary and play state.
-That is for this app's own history, not for other tools' formats.
+There is no import path for another tool's format, and no rescue path for this
+app's own older exports: the campaign folder is the only thing it reads.
 
 ---
 

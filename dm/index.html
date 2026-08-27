@@ -2,15 +2,14 @@
 <!-- ======================================================================
   Mesa del DM — the admin window.
 
-  Served by dm/server.py — live at https://dm.sigint-pm.uk (a local run is
-  dev-only). This file is only the shell: the app lives in src/admin/*.js
-  as native ES modules, the look in src/styles/*.css, the rules engine in
-  src/rules/* (copied from the creator — check-sync.py guards the copy).
-  The television window is /tv, joined per-table via a room code.
+  A shell, nothing more: the app is native ES modules under src/admin/, the
+  look is src/styles/, and the campaign folder — read and written directly by
+  this browser through the File System Access API — is the only database.
+  Nothing it holds ever reaches a server; server.py hands out these files
+  and knows nothing else.
 
-  There is no save button anywhere: the campaign folder — read and written
-  directly by this browser via the File System Access API — is the single
-  source of truth and every change autosaves into it.
+  The television is /tv, a second window on this same machine. The two talk
+  over a BroadcastChannel: same origin, no network, no relay, no room codes.
 ====================================================================== -->
 <html lang="es">
 <head>
@@ -19,6 +18,7 @@
 <title>Mesa del DM</title>
 <link rel="stylesheet" href="/src/styles/fonts.css">
 <link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
 <link rel="stylesheet" href="/src/styles/admin.css">
 </head>
 <body>

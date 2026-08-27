@@ -1,0 +1,205 @@
+<!doctype html><meta charset=utf-8><title>probe · combate</title>
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
+<link rel="stylesheet" href="/src/styles/admin.css">
+<body><div id="app"></div><pre id=out></pre>
+<script type="module">
+/* Stage 4's gate: a fight, run through the real screens, with a television
+   window watching — and dragging back.
+
+   Two claims matter more than the rest, and both are asserted against the
+   payload rather than against pixels:
+
+     a hidden npc is ABSENT from what the television gets, not greyed out
+     a token dragged on either screen moves on the other one */
+
+import { h, render } from '/src/html.js';
+import { App } from '/src/admin/app.js';
+import { state, subscribe, commit, update, onAfterMutation, attachSaver } from '/src/admin/store.js';
+import { loadCampaign } from '/src/admin/campaign.js';
+import { pushState, openTV, sentProjection } from '/src/admin/broadcast.js';
+import { writeFile } from '/src/shared/files.js';
+import { loadNpc } from '/src/shared/combat.js';
+import { normaliseBeast } from '/src/shared/beasts.js';
+import { probe, check, sleep, until, $, $$, byText, type, freshRoot } from './kit.js';
+
+await probe('COMBATE', async () => {
+
+onAfterMutation(pushState);
+subscribe(() => render(h(App, null), $('#app')));
+
+const root = await freshRoot();
+await writeFile(root, 'players/pip.json', JSON.stringify({
+  kind: 'dnd-creator-character', version: 2,
+  character: {
+    id: 'pip', name: 'Pip', player: 'Ana',
+    species: 'gnomo', lineage: 'bosque', class: 'bardo', background: 'artista',
+    classSkills: ['acrobacias', 'engano', 'interpretacion'],
+    boosts: { CAR: 2, DES: 1 },
+    buy: { FUE: 8, DES: 14, CON: 12, INT: 10, SAB: 12, CAR: 15 },
+    equipmentClass: 'A', equipmentBackground: 'A',
+  },
+}));
+await loadCampaign(root);
+attachSaver(root);
+state.booted = true;
+render(h(App, null), $('#app'));
+await sleep(120);
+
+/* Two goblins at the table. Loading is not fighting. */
+commit('cargar goblins', s => {
+  loadNpc(s.session, normaliseBeast({ id: 'gob', name: 'Goblin', ac: 13, hpMax: 7, initMod: 2, speed: 9 }), 2);
+});
+check('two goblins are loaded, and no fight has started',
+  [state.session.npcs.length, state.session.encounter.on], [2, false]);
+
+/* ------------------------------------------------------- the television */
+
+commit('poner el tablero', s => { s.session.field.mode = 'tablero'; s.session.field.hud = true; });
+openTV();
+const tv = await until(() => {
+  const w = window.open('', 'dnd-dm-tv');
+  return w && w.location.pathname === '/tv' ? w : null;
+});
+check('the television is open', !!tv, true);
+await until(() => tv.document.querySelector('.field'));
+
+check('THE HIDDEN GOBLINS ARE ABSENT from what it was sent, not hidden in it',
+  JSON.stringify(sentProjection()).includes('Goblin'), false);
+check('and the players see only the party on the board',
+  tv.document.querySelectorAll('.token').length, 1);
+check("while the DM's own board has all three, the goblins marked",
+  [$$('.board .token').length, $$('.board .token.hidden').length], [3, 2]);
+
+/* -------------------------------------------------------- the muster */
+
+byText('.fight button', 'Empezar combate').click();
+await sleep(80);
+check('the muster picker opens with nobody ticked',
+  [!!$('.modal .muster'), $$('.muster-row input:checked').length], [true, 0]);
+
+/* Tick the player and the first goblin, and reveal that goblin. */
+$$('.muster-row input[type=checkbox]')[0].click();
+$$('.muster-row input[type=checkbox]')[1].click();
+await sleep(60);
+$$('.muster-row .eye')[0].click();
+await sleep(60);
+check('one goblin is now revealed, the other is not',
+  Object.values(state.session.field.reveal).map(r => r.on), [true, false]);
+
+byText('.modal-foot button', 'Tirar iniciativa').click();
+await sleep(80);
+check('the initiative wizard asks once per name', $$('.init-row').length, 2);
+
+/* One number typed, one left blank on purpose. */
+type($$('.init-row input')[0], '17', 'input');
+await sleep(30);
+byText('.modal-foot button', 'Empezar el combate').click();
+await sleep(100);
+
+check('the fight is on, with the two who were ticked',
+  [state.session.encounter.on, state.session.encounter.members.length], [true, 2]);
+check('a blank box means «has not rolled», not «out of the fight»',
+  [$$('.order li').length, $$('.order li b').map(b => b.textContent)],
+  [2, ['17', '—']]);
+check('and the third goblin is still at the table, out of it',
+  state.session.npcs.length, 2);
+check('starting a fight did not touch the television', state.session.field.mode, 'tablero');
+
+/* ---------------------------------------------------------- the turns */
+
+byText('.fight .bar button', 'turno →').click();
+await sleep(80);
+check('the first turn is the highest total', state.session.encounter.activeRef, 'pc:pip');
+check('and the television says whose it is',
+  (await until(() => tv.document.querySelector('.banner .who')))?.textContent.includes('Pip'), true);
+
+/* Drop the revealed goblin: its turn is skipped, its card stays. */
+const gobRef = state.session.encounter.members.find(r => r.startsWith('npc:'));
+commit('tumbar al goblin', s => {
+  const id = gobRef.slice(4);
+  s.session.npcs.find(n => n.id === id).hp = 0;
+});
+byText('.fight .bar button', 'turno →').click();
+await sleep(80);
+check('a monster on the floor loses its turn but keeps its place',
+  [state.session.encounter.activeRef, state.session.encounter.round,
+   state.session.encounter.members.length],
+  ['pc:pip', 2, 2]);
+check('the television shows it struck through',
+  tv.document.querySelectorAll('.turn.down').length, 1);
+
+/* ------------------------------------------------- coarse hit points */
+
+commit('revelar por palabras', s => {
+  const id = gobRef.slice(4);
+  s.session.field.reveal[id] = { on: true, hp: 'coarse' };
+});
+await sleep(80);
+const npcRow = sentProjection().npcs.find(n => n.name.startsWith('Goblin'));
+check('what the players learn about its hit points is a word, never a number',
+  [npcRow.hp.mode, npcRow.hp.word, JSON.stringify(npcRow.hp).includes('7')],
+  ['coarse', 'fuera de combate', false]);
+
+/* ---------------------------------------------------------- dragging */
+
+/* On the DM's board: pointer down, move, up — the same code path a finger
+   takes. The token to drag is the player's. */
+const pcToken = () => $('.board .token.pc');
+const boardField = () => $('.board .field');
+function dragOn(doc, tokenEl, fieldEl, col, row) {
+  const r = fieldEl.getBoundingClientRect();
+  const cs = doc.defaultView.getComputedStyle(fieldEl);
+  const bl = parseFloat(cs.borderLeftWidth) || 0, bt = parseFloat(cs.borderTopWidth) || 0;
+  const w = r.width - bl * 2, h = r.height - bt * 2;
+  const cols = Number(fieldEl.style.getPropertyValue('--cols'));
+  const rows = Number(fieldEl.style.getPropertyValue('--rows'));
+  const x = r.left + bl + (col + .5) * (w / cols);
+  const y = r.top + bt + (row + .5) * (h / rows);
+  const opts = { bubbles: true, pointerId: 1, clientX: x, clientY: y };
+  tokenEl.dispatchEvent(new PointerEvent('pointerdown', { ...opts, clientX: r.left + 5, clientY: r.top + 5 }));
+  doc.defaultView.dispatchEvent(new PointerEvent('pointermove', opts));
+  doc.defaultView.dispatchEvent(new PointerEvent('pointerup', opts));
+}
+
+dragOn(document, pcToken(), boardField(), 5, 3);
+await sleep(120);
+check('a drag on the DM board moves the token', state.session.field.tokens['pc:pip'], { x: 5, y: 3 });
+check('and the television is looking at the same square',
+  await until(() => {
+    const t = tv.document.querySelector('.token');
+    return t && t.style.getPropertyValue('--x') === '5' ? [t.style.getPropertyValue('--x'), t.style.getPropertyValue('--y')] : null;
+  }), ['5', '3']);
+
+/* And back the other way: the one thing that flows television → admin. */
+const tvToken = tv.document.querySelector('.token');
+dragOn(tv.document, tvToken, tv.document.querySelector('.field'), 9, 7);
+check('a drag on the television reaches the admin',
+  await until(() => {
+    const at = state.session.field.tokens['pc:pip'];
+    return at && at.x === 9 ? at : null;
+  }), { x: 9, y: 7 });
+
+/* A tap, not a drag, selects — and lights the reach. */
+const t2 = pcToken();
+const r2 = boardField().getBoundingClientRect();
+t2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 2, clientX: r2.left + 20, clientY: r2.top + 20 }));
+dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 2, clientX: r2.left + 21, clientY: r2.top + 20 }));
+await sleep(80);
+check('a tap selects instead of dragging, and lights the reach',
+  [state.ui.selectedToken, !!$('.board .reach')], ['pc:pip', true]);
+check('the reach is a Chebyshev box: 6 squares each way at 9 m',
+  $('.board .reach').style.getPropertyValue('--w'), '13');
+
+/* ----------------------------------------------------------- ending it */
+
+byText('.fight .bar button', 'Terminar').click();
+await sleep(80);
+check('ending the fight keeps everybody, exactly as wounded as they were',
+  [state.session.encounter.on, state.session.npcs.length,
+   state.session.npcs.find(n => n.id === gobRef.slice(4)).hp],
+  [false, 2, 0]);
+check('and the television stops reporting a round', sentProjection().banner, null);
+
+});
+</script>

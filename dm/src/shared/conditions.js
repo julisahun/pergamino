@@ -1,7 +1,6 @@
-/* ============================================================ DM RULES DATA
-   Frozen tables the character creator has no use for, so they are dm-owned
-   and outside check-sync's remit — unlike src/rules/*, which must stay
-   byte-identical to the creator's blocks.
+/* ============================================================ CONDITIONS
+   The fifteen conditions, in the words the DM reads out when somebody asks
+   "what does apresado do again?".
 
    Text paraphrased from SRD 5.2 (CC-BY-4.0), (c) Wizards of the Coast.
    Nothing is copied from the Player's Handbook.
@@ -45,4 +44,9 @@ export const CONDITIONS = Object.freeze([
     d: 'No es una condición: es un recordatorio. Al recibir daño, salvación de Constitución con CD 10 o la mitad del daño, la que sea mayor. Se pierde al quedar incapacitado.' },
 ]);
 
+/** @param {string} key */
 export const CONDITION = key => CONDITIONS.find(c => c.key === key) || null;
+
+/** Whether a key names a real condition — what filters a hand-edited or an
+    outdated session file. @param {unknown} key */
+export const isCondition = key => typeof key === 'string' && !!CONDITION(key);

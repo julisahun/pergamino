@@ -1,3 +1,6 @@
+/** @import { Character } from '../shared/types.js' */
+
+/** @returns {Character} */
 export function blankCharacter() {
   return {
     id: newId(),
@@ -21,6 +24,9 @@ export function newId() {
   return 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
 }
 
+/** A character as it arrived — the creator's export envelope already
+    unwrapped — filled out with everything this app expects to find.
+    @param {any} c @returns {Character} */
 export function normalise(c) {
   const merged = Object.assign(blankCharacter(), c);
   merged.id = c.id || newId();

@@ -1,14 +1,15 @@
 <!doctype html>
 <!-- ======================================================================
-  Tablero — the television window. A renderer, and nothing else: it knows
-  how to draw one object (the board projection the admin pushes over SSE)
-  and how to send a moved token back. It has no session, no rules and no
-  secrets — what is not in the payload was never revealed.
+  Tablero — the television window.
 
-  Every table is a ROOM: open this page from the admin's "Tablero ↗" (the
-  ?room= is carried along), scan the QR in "Conectar la tele", or open /tv
-  bare on any device and type the 6-char table code once — it is remembered.
-  Press M to switch tables.
+  A renderer, and nothing else: it draws one object — the projection the
+  admin window hands it over a BroadcastChannel — and sends back the one
+  thing that flows the other way, a dragged token's position. It has no
+  session, no rules and no secrets: what is not in the projection was never
+  revealed, so opening devtools here teaches a player nothing.
+
+  Open it from the admin's «Tablero ↗». There is no code to type and no
+  table to join: it is a window on the same machine, on the same origin.
 ====================================================================== -->
 <html lang="es">
 <head>
@@ -17,23 +18,15 @@
 <title>Tablero</title>
 <link rel="stylesheet" href="/src/styles/fonts.css">
 <link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
 <link rel="stylesheet" href="/src/styles/tv.css">
 </head>
 <body>
 <div id="tv"></div>
-<div id="room" hidden>
-  <form id="roomform">
-    <b>Código de mesa</b>
-    <input id="roomcode" maxlength="6" autocomplete="off" spellcheck="false"
-           placeholder="······" aria-label="Código de mesa">
-    <span>Son 6 letras y números — están en la ventana del DM, en el botón ▦
-      («Conectar la tele»). Este aparato lo recuerda; pulsa <b>M</b> para
-      cambiar de mesa.</span>
-    <button type="submit">Entrar</button>
-  </form>
-</div>
-<div id="sound"><b>♪</b><span>Toca aquí para el sonido</span></div>
-<div id="link" hidden>reconectando…</div>
+<!-- The browser refuses to play anything until this window has been touched.
+     That is not an error to log, it is a thing to ask for — and only on a
+     genuine NotAllowedError, never because a file is missing. -->
+<div id="sound" hidden>Toca la pantalla para oír</div>
 <script type="module" src="/src/tv/main.js"></script>
 </body>
 </html>

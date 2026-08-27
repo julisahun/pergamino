@@ -1,0 +1,188 @@
+<!doctype html><meta charset=utf-8><title>probe · prep</title>
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
+<link rel="stylesheet" href="/src/styles/admin.css">
+<body><div id="app"></div><pre id=out></pre>
+<script type="module">
+/* Stage 5's gate, on screen: the bestiary, the objects, the scenes and the
+   notes, driven through the real tabs.
+
+   The claim that matters here is the one about scenes: putting one on the
+   table writes the picture, the sound, the board size and the roster — and
+   decides NOTHING about what the television is showing, because that is one
+   stated control and not a side effect of preparation. */
+
+import { h, render } from '/src/html.js';
+import { App } from '/src/admin/app.js';
+import { state, subscribe, commit, update, onAfterMutation, attachSaver, flushSaves } from '/src/admin/store.js';
+import { loadCampaign } from '/src/admin/campaign.js';
+import { pushState, sentProjection } from '/src/admin/broadcast.js';
+import { writeFile, readText } from '/src/shared/files.js';
+import { probe, check, sleep, until, $, $$, byText, type, freshRoot } from './kit.js';
+
+await probe('PREP', async () => {
+
+onAfterMutation(pushState);
+subscribe(() => render(h(App, null), $('#app')));
+
+/* ------------------------------------------------------- a prepared campaign */
+
+const root = await freshRoot();
+const write = (path, obj) => writeFile(root, path,
+  typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
+
+await write('monsters/vann.json',
+  { id: 'vann', name: 'Vann', tag: 'contrabandista', ac: 13, hpMax: 9, initMod: 2, speed: 9,
+    note: 'Habla primero, corre después.',
+    abilities: [{ id: 'a1', name: 'Garfio', desc: '+4 al ataque, 1d6+2 perforante.' }] });
+await write('monsters/raimo.json', { id: 'raimo', name: 'Raimo', ac: '11', hpMax: 5, speed: 'None' });
+await write('objects/arpon.json',
+  { id: 'arpon', name: 'Arpón de nasa', description: 'Oxidado.',
+    mods: { ac: 1, hpMax: 2 }, effects: ['Ventaja para agarrar redes.'] });
+await write('assets/maps/cala.jpg', 'x');
+await write('assets/audio/mar.mp3', 'x');
+await write('scenarios/cala.json', {
+  kind: 'dnd-dm-scene', version: 1,
+  scene: { id: 'cala', name: 'La cala', art: 'assets/maps/cala.jpg',
+           audio: { music: { src: 'assets/audio/mar.mp3', volume: .4 }, ambience: null },
+           roster: [{ beastId: 'vann', x: 3, y: 2 }], grid: { cols: 16 },
+           note: 'Marea baja: el paso se abre.' },
+});
+await write('story/lore/roquena.md',
+  '# Roquena\n\nLa isla. Ver [[La cala|la cala]] y #marea.\n\n- Un puerto\n- Un faro\n');
+await write('story/cala.md', '# La cala\n\nSe seca dos veces al día.\n');
+
+await loadCampaign(root);
+attachSaver(root);
+state.booted = true;
+render(h(App, null), $('#app'));
+await sleep(150);
+
+check('the prep came off disk, both folders and the notes',
+  [state.session.bestiary.length, state.session.objects.length,
+   state.scenes.length, state.story.length],
+  [2, 1, 1, 2]);
+check('a hand-written monster survives its string numbers',
+  [state.session.bestiary.find(b => b.id === 'raimo').ac,
+   state.session.bestiary.find(b => b.id === 'raimo').speed],
+  [11, null]);
+
+/* ------------------------------------------------------------------ PNJ */
+
+byText('.tab-btn', 'PNJ').click();
+await sleep(80);
+check('the bestiary is on screen, in an order somebody chose',
+  $$('.beast .who b').map(b => b.textContent), ['Raimo', 'Vann']);
+const vannCard = () => $$('.beast').find(el => el.textContent.includes('Vann'));
+check('with what a card at a table needs',
+  vannCard().querySelector('.fine').textContent.replace(/\s+/g, ' ').trim(),
+  'CA 13 · 9 PG · ini +2 · 9 m');
+
+/* Two of them onto the table. Loading is not fighting, and not revealing. */
+type(vannCard().querySelector('.loader input'), '2', 'input');
+byText('.beast .loader button', 'a la mesa');
+[...vannCard().querySelectorAll('button')].find(b => b.textContent.includes('a la mesa')).click();
+await sleep(80);
+check('loading makes instances, each with its own hit points',
+  state.session.npcs.map(n => n.name), ['Vann 1', 'Vann 2']);
+check('hidden, and in no fight',
+  [Object.values(state.session.field.reveal).every(r => !r.on), state.session.encounter.on],
+  [true, false]);
+
+/* -------------------------------------------------------------- objects */
+
+byText('.tab-btn', 'Objetos').click();
+await sleep(80);
+check('the catalog shows what it computes and what it only shows',
+  [$('.item-card .fine').textContent.trim(), $('.item-card .effect').textContent.trim()],
+  ['CA +1 · PG máx +2', 'Ventaja para agarrar redes.']);
+
+/* Give it to the first goblin and watch the numbers move. */
+const npcId = state.session.npcs[0].id;
+commit('dar el arpón', s => {
+  const n = s.session.npcs.find(x => x.id === npcId);
+  n.objects = [...n.objects, 'arpon'];
+});
+await sleep(60);
+const { npcHandle } = await import('/src/shared/handles.js');
+const held = npcHandle(state.session.npcs[0], state.session.objects);
+check('a held object is layered on top of the statblock', [held.ac, held.hpMax], [14, 11]);
+
+/* --------------------------------------------------------------- scenes */
+
+byText('.tab-btn', 'Escenas').click();
+await sleep(80);
+check('the library is on screen', $$('.scene').length, 1);
+check('and it says what the scene carries',
+  $('.scene .fine').textContent.replace(/\s+/g, ' ').trim(),
+  '1 figura · 16 columnas · música');
+
+/* The television is showing nothing at all. Putting a scene up must not
+   change that: it is a stated control, not a consequence of preparation. */
+check('nothing is on the television yet', state.session.field.mode, 'nada');
+byText('.scene .acts button', 'A la mesa').click();
+await sleep(120);
+check('the scene wrote the picture, the sound and its own board size',
+  [state.session.field.map?.src, state.session.field.audio?.music?.src,
+   state.session.field.audio?.music?.volume, state.session.field.cols],
+  ['assets/maps/cala.jpg', 'assets/audio/mar.mp3', .4, 16]);
+check('AND IT DECIDED NOTHING ABOUT WHAT THE TELEVISION SHOWS',
+  state.session.field.mode, 'nada');
+check('so nothing has reached the players', sentProjection().map, null);
+check('the roster seated a fresh instance at its square',
+  state.session.npcs.length >= 3
+    && state.session.field.tokens['npc:' + state.session.npcs.at(-1).id], { x: 3, y: 2 });
+check('and the tab did not move on its own', state.ui.tab, 'escenas');
+
+/* Now say so, with the one control that says it. */
+byText('.tab-btn', 'Juego').click();
+await sleep(60);
+byText('.modes .mode', 'Escena').click();
+await sleep(100);
+check('the picture reaches the television when the DM says it should',
+  [state.session.field.mode, sentProjection().map?.src],
+  ['escena', 'assets/maps/cala.jpg']);
+check('and the sound goes with it', sentProjection().audio?.music?.src, 'assets/audio/mar.mp3');
+
+/* ------------------------------------------------------------- historia */
+
+byText('.tab-btn', 'Historia').click();
+await sleep(80);
+check('the notes are grouped, loose ones first and folders after',
+  $$('.index .group h3').map(h => h.textContent), ['General', 'lore']);
+byText('.note-link', 'Roquena').click();
+await sleep(80);
+check('a note renders its subset', [
+  !!$('.note-body h3'),
+  $$('.note-body li').length,
+  !!$('.note-body .wikilink'),
+  !!$('.note-body .tag'),
+], [true, 2, true, true]);
+check('a piped wikilink shows its label',
+  $('.note-body .wikilink').textContent.trim(), 'la cala');
+
+$('.note-body .wikilink').click();
+await sleep(80);
+check('and clicking it navigates', state.ui.openNote, 'story/cala.md');
+check('the target lists who mentions it',
+  byText('.backlinks button', 'Roquena') ? true : false, true);
+
+/* --------------------------------------------------- writing prep back */
+
+byText('.tab-btn', 'PNJ').click();
+await sleep(60);
+[...vannCard().querySelectorAll('.link')].find(b => b.textContent.includes('editar')).click();
+await sleep(80);
+type($('.modal input'), 'Vann el Calafate');
+byText('.modal-foot button', 'Guardar').click();
+await sleep(80);
+flushSaves();
+await sleep(400);
+const saved = JSON.parse(await readText(root, 'monsters/vann.json'));
+check('an edited monster goes back into its own file, under its own name',
+  [saved.name, saved.id, saved.abilities.length], ['Vann el Calafate', 'vann', 1]);
+check('and the flash said which file it was',
+  (state.flash || '').includes('monsters/vann.json'), true);
+
+});
+</script>

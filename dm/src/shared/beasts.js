@@ -3,8 +3,10 @@
    carry `ac: "10"` (string numbers) and `speed: "None"`, so everything is
    coerced and an unparseable speed reads as "no speed", not NaN. */
 
+/** @import { Beast } from './types.js' */
 import { newId } from '../rules/character.js';
 
+/** @param {any} b @returns {Beast} */
 export function normaliseBeast(b) {
   const speedRaw = b?.speed;
   const speed = speedRaw === '' || speedRaw == null || !Number.isFinite(Number(speedRaw))
@@ -23,10 +25,13 @@ export function normaliseBeast(b) {
           stamp: typeof b.portrait.stamp === 'string' ? b.portrait.stamp : null }
       : null,
     abilities: Array.isArray(b?.abilities)
-      ? b.abilities.map(a => ({ id: a?.id || newId(), name: String(a?.name || ''), desc: String(a?.desc || '') }))
-        .filter(a => a.name || a.desc)
+      ? b.abilities.map((/** @type {any} */ a) =>
+          ({ id: a?.id || newId(), name: String(a?.name || ''), desc: String(a?.desc || '') }))
+        .filter((/** @type {any} */ a) => a.name || a.desc)
       : [],
-    file: typeof b?.file === 'string' ? b.file : null,    // monsters/<name>.json, when it came from disk
+    objects: Array.isArray(b?.objects)
+      ? b.objects.filter((/** @type {any} */ x) => typeof x === 'string' && x) : [],
+    file: typeof b?.file === 'string' ? b.file : undefined,    // monsters/<name>.json, when it came from disk
   };
 }
 
@@ -36,6 +41,7 @@ export function normaliseBeast(b) {
     `b` has already been through `normaliseBeast()`, which invents an id when
     the file has none — and an invented id can never match anything already in
     the bestiary, so a file with no `id` always lands as a new entry. */
+/** @param {Beast[]} bestiary @param {Beast} b */
 export function absorbBeast(bestiary, b) {
   const at = bestiary.findIndex(x => x.id === b.id);
   if (at >= 0) bestiary[at] = b;

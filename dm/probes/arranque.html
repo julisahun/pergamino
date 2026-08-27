@@ -1,0 +1,45 @@
+<!doctype html><meta charset=utf-8><title>probe · arranque</title>
+<link rel="stylesheet" href="/src/styles/fonts.css">
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
+<link rel="stylesheet" href="/src/styles/admin.css">
+<body><div id="app"></div><div id="tv"></div><pre id=out></pre>
+<script type="module">
+/* The cutover check: both pages boot from their real entry points, with no
+   campaign folder at all — which is what the DM sees on a machine that has
+   never opened one. Nothing may throw, and nothing may be logged as an error.
+
+   It also asserts the claim the whole app rests on, from the outside: after a
+   full boot, everything this origin has fetched is the app itself. */
+
+import { probe, check, sleep, $ } from './kit.js';
+
+await probe('ARRANQUE', async () => {
+
+const errors = [];
+addEventListener('error', e => errors.push('error: ' + e.message));
+addEventListener('unhandledrejection', e => errors.push('reject: ' + e.reason));
+const realError = console.error;
+console.error = (...a) => { errors.push('console.error: ' + a.join(' ')); realError(...a); };
+
+await import('/src/admin/main.js');
+await import('/src/tv/main.js');
+await sleep(400);
+
+check('the admin booted to its gate, with no folder open',
+  $('#app .gate') !== null, true);
+check('and offers the one thing there is to do',
+  $('#app .gate button')?.textContent.includes('Abrir carpeta'), true);
+check('the television booted, waiting for the other window',
+  $('#tv .tb.waiting') !== null, true);
+check('nothing threw, and nothing was logged as an error', errors, []);
+
+const fetched = performance.getEntriesByType('resource')
+  .map(e => new URL(e.name).pathname)
+  /* /favicon.ico is the browser asking on its own, and it 404s. */
+  .filter(p => !(p.startsWith('/src/') || p.startsWith('/vendor/')
+                 || p.startsWith('/probes/') || p === '/favicon.ico'));
+check('and this origin fetched nothing but the app itself', fetched, []);
+
+});
+</script>

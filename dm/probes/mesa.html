@@ -1,0 +1,236 @@
+<!doctype html><meta charset=utf-8><title>probe · mesa</title>
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<link rel="stylesheet" href="/src/styles/board.css">
+<link rel="stylesheet" href="/src/styles/admin.css">
+<body><div id="app"></div><pre id=out></pre>
+<script type="module">
+/* Stage 3's gate: a session, rendered, driven through the real UI.
+
+   This is not a unit test with a DOM attached — it mounts the actual App,
+   points the store at an OPFS campaign, and then does what a DM does: reads a
+   party off disk, types into the damage box, taps a condition, spends a slot,
+   rests. What it asserts is what ends up on disk and on screen. */
+
+import { h, render } from '/src/html.js';
+import { App } from '/src/admin/app.js';
+import { state, subscribe, commit, onAfterMutation, flushSaves, attachSaver } from '/src/admin/store.js';
+import { loadCampaign } from '/src/admin/campaign.js';
+import { pushState, sentProjection } from '/src/admin/broadcast.js';
+import { absorbCharacter } from '/src/admin/jugadores.js';
+import { writeFile, readText } from '/src/shared/files.js';
+import { normalise } from '/src/rules/character.js';
+import { partyHandles, currentHP } from '/src/shared/handles.js';
+import { poolsOf } from '/src/shared/play.js';
+import { probe, check, sleep, until, $, $$, byText, type, freshRoot } from './kit.js';
+
+await probe('MESA', async () => {
+
+onAfterMutation(pushState);
+subscribe(() => render(h(App, null), $('#app')));
+
+/* ------------------------------------------------------- a campaign with a party */
+
+const root = await freshRoot();
+
+/* A real sheet, in the creator's own envelope: a level-1 gnome bard. */
+const PIP = {
+  kind: 'dnd-creator-character', version: 2,
+  character: {
+    id: 'pip', name: 'Pip Nosewick', player: 'Ana',
+    species: 'gnomo', lineage: 'bosque', class: 'bardo', background: 'artista',
+    classSkills: ['acrobacias', 'engano', 'interpretacion'],
+    boosts: { CAR: 2, DES: 1 },
+    buy: { FUE: 8, DES: 14, CON: 12, INT: 10, SAB: 12, CAR: 15 },
+    spells: { cantrips: ['Vicious Mockery', 'Prestidigitation'],
+              level1: ['Healing Word', 'Charm Person', 'Dissonant Whispers', 'Faerie Fire'] },
+    equipmentClass: 'A', equipmentBackground: 'A',
+  },
+};
+await writeFile(root, 'players/pip.json', JSON.stringify(PIP));
+
+await loadCampaign(root);
+/* What adopt() does at a real table: nothing is written anywhere without a
+   saver, and this probe is about what ends up on disk. */
+attachSaver(root);
+state.booted = true;
+subscribe(() => render(h(App, null), $('#app')));
+render(h(App, null), $('#app'));
+await sleep(150);
+
+check('the party came out of players/*.json', state.session.party.map(c => c.name), ['Pip Nosewick']);
+check('the app landed on Juego, and nothing has navigated since', state.ui.tab, 'juego');
+
+/* Everything below is on the party tab, so go there the way a person does. */
+byText('.tab-btn', 'Jugadores').click();
+await sleep(80);
+check('clicking a tab is what changes the tab', state.ui.tab, 'jugadores');
+const pip = () => partyHandles(state.session)[0];
+check('and every number on the card is computed, not stored',
+  [pip().hpMax, pip().ac, pip().initMod, pip().pp, pip().level],
+  [9, 13, 2, 11, 1]);
+
+/* --------------------------------------------------------------- the card */
+
+const card = () => $('.card');
+check('a card is on screen', !!card(), true);
+check('with the name and what they are',
+  [$('.card .who b').textContent, $('.card .sub').textContent.includes('Bardo 1')],
+  ['Pip Nosewick', true]);
+check('unwounded reads as full, not as zero',
+  [$('.card .hp .num').textContent, currentHP(pip())], ['9', 9]);
+
+/* -------------------------------------------------------------- the box */
+
+type($('.card input.dmg'), '4');
+await sleep(50);
+check('typing 4 into the box takes four off', currentHP(pip()), 5);
+
+type($('.card input.dmg'), 't3');
+await sleep(50);
+check('t3 gives temporary hit points, which do not touch the total',
+  [currentHP(pip()), pip().play.temp], [5, 3]);
+
+type($('.card input.dmg'), '5');
+await sleep(50);
+check('and the temporary ones soak first', [currentHP(pip()), pip().play.temp], [3, 0]);
+
+type($('.card input.dmg'), '+99');
+await sleep(50);
+check('healing caps at the maximum', currentHP(pip()), 9);
+
+type($('.card input.dmg'), 'tres');
+await sleep(50);
+check('nonsense is refused, out loud, and changes nothing',
+  [currentHP(pip()), (state.flash || '').includes('No entiendo')], [9, true]);
+
+/* ------------------------------------------------------------ the details */
+
+byText('.card .more', 'más').click();
+await sleep(50);
+check('the card opens', !!$('.card .details'), true);
+
+byText('.cond', 'Envenenado').click();
+await sleep(50);
+check('a condition goes on the card', pip().play.conditions, ['envenenado']);
+check('and it is showing as on', byText('.cond', 'Envenenado').className.includes('on'), true);
+
+const pools = () => poolsOf(state.session, state.session.party[0]);
+check('a level-1 bard has two first-level slots',
+  pools().map(p => [p.label, p.max]), [['Nivel 1', 2]]);
+$$('.pool .pip')[0].click();
+await sleep(50);
+check('tapping a pip spends one', pools()[0].spent, 1);
+$$('.pool .pip')[0].click();
+await sleep(50);
+check('tapping it again gives it back', pools()[0].spent, 0);
+
+/* ------------------------------------------------------------- gold, rests */
+
+type($('.card input.gold'), '+25');
+await sleep(50);
+check('gold has its own grammar', pip().play.gold, 25);
+
+commit('herir', s => { s.session.play.pip.hp = 1; s.session.play.pip.exh = 2; });
+$$('.pool .pip')[0].click();
+await sleep(50);
+byText('.bar button', 'Descanso largo').click();
+await sleep(50);
+check('a long rest puts everything back and takes one level of exhaustion off',
+  [currentHP(pip()), pip().play.exh, pip().play.conditions.length, pools()[0].spent],
+  [9, 1, 0, 0]);
+
+/* -------------------------------------------------------------- the bench */
+
+byText('.bench', 'al banquillo').click();
+await sleep(50);
+check('a benched player leaves the board but keeps their sheet',
+  [state.session.field.benched, state.session.party.length], [['pc:pip'], 1]);
+check('and is not in what the television gets', sentProjection()?.party ?? [], []);
+byText('.benched .link', 'volver').click();
+await sleep(50);
+check('and comes back', state.session.field.benched, []);
+
+/* ------------------------------------------------------- a re-import keeps wounds */
+
+commit('herir de nuevo', s => { s.session.play.pip.hp = 3; });
+const levelled = normalise({
+  ...PIP.character,
+  levels: [{ level: 2, hp: 5, asi: {}, subclass: '', features: [] },
+           { level: 3, hp: 5, asi: {}, subclass: 'Colegio del Saber', features: [] },
+           { level: 4, hp: 5, asi: { CAR: 2 }, subclass: '', features: [] }],
+});
+absorbCharacter(levelled);
+await sleep(50);
+check('a re-imported sheet does not cost the party its wounds', currentHP(pip()), 3);
+check('the level moved everything that depends on it',
+  [pip().level, pip().hpMax, pip().d.proficiencyBonus, pip().d.casting.dc,
+   JSON.stringify(pip().d.casting.slots)],
+  /* +2 is still the bonus at 4th — it steps at 5th. The save DC moved anyway,
+     because the ability increase taken at 4th went into the score. */
+  [4, 27, 2, 14, '{"1":4,"2":3}']);
+check('and the card says the new level', $('.card .sub').textContent.includes('Bardo 4'), true);
+
+/* A lowered maximum clamps what is left, rather than leaving a character
+   standing on hit points they no longer have. */
+commit('a tope', s => { s.session.play.pip.hp = 27; });
+absorbCharacter(normalise(PIP.character));
+await sleep(50);
+check('and a maximum that dropped clamps the wounds it can no longer hold',
+  [pip().hpMax, currentHP(pip())], [9, 9]);
+
+/* ------------------------------------------------------- the level wizard */
+
+/* Back to level 1, and up one through the wizard the way a DM does. */
+absorbCharacter(normalise(PIP.character));
+await sleep(80);
+byText('.card .more', 'más')?.click();
+await sleep(60);
+byText('.levels .link', 'subir de nivel').click();
+await sleep(80);
+check('the wizard asks about the level, and nothing else',
+  [!!byText('.modal h3', 'sube a nivel 2'),
+   /* No species, no background, no point buy: those are level-1 facts. */
+   !!byText('.modal', 'especie'), !!byText('.modal', 'trasfondo')],
+  [true, false, false]);
+check('it offers the fixed average, and lets a rolled number replace it',
+  Number($('.modal input[type=number]').value), 5);
+check('at 2nd there is no increase to spend and no subclass to pick',
+  [!!byText('.modal .f span', 'Mejora de característica'), !!byText('.modal .f span', 'Subclase')],
+  [false, false]);
+
+/* What it gained, in the DM's words. */
+byText('.modal button', '+ rasgo').click();
+await sleep(60);
+type($$('.modal .ability input')[0], 'Canción de descanso');
+type($$('.modal .ability input')[1], 'Cura 1d6 extra en un descanso corto.');
+byText('.modal-foot button', 'Subir a nivel 2').click();
+await sleep(120);
+
+check('the level was taken, and the numbers moved with it',
+  [pip().level, pip().hpMax, JSON.stringify(pip().d.casting.slots)],
+  [2, 15, '{"1":3}']);
+check('and the card shows the feature that was written, at its level',
+  [$('.card .feat b').textContent, $('.card .feat').textContent.includes('nivel 2')],
+  ['Canción de descanso', true]);
+
+/* --------------------------------------------------------- what is on disk */
+
+flushSaves();
+await sleep(400);
+const onDisk = JSON.parse(await readText(root, 'players/pip.json'));
+check('the sheet was written back in the creator envelope',
+  [onDisk.kind, onDisk.character.id, onDisk.character.name],
+  ['dnd-creator-character', 'pip', 'Pip Nosewick']);
+check('with the level this app owns appended to it, and nothing else touched',
+  [onDisk.character.levels.length, onDisk.character.levels[0].features[0].name,
+   onDisk.character.buy.CAR],
+  [1, 'Canción de descanso', 15]);
+const session = JSON.parse(await readText(root, 'session.json'));
+check('and session.json holds play state only, never the party',
+  [Object.keys(session).sort(), session.play.pip.gold, 'party' in session],
+  [['encounter', 'field', 'play', 'playerFiles', 'npcs', 'version'].sort(), 25, false]);
+check('the flash said where the sheet went',
+  (state.flash || '').includes('players/pip.json'), true);
+
+});
+</script>

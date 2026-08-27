@@ -1,23 +1,55 @@
-import { PROFICIENCY_BONUS, ABILITIES, SKILLS, MASTERIES, ARMORS, WEAPONS, DAMAGE_TYPES, ORIGIN_FEATS, SPECIES, BACKGROUNDS, CLASSES, SPELLS, MAGIC_INITIATE_LISTS, QUIZ, SPELL_PICKS, POINT_BUY_COST, POINT_BUY_TOTAL } from './data.js';
+/* ================================================================= ENGINE
+   Every number on a character card, computed from the build recipe a player
+   exported. Pure functions: each takes what it needs and returns a value, so
+   any rule can be checked by hand.
+
+   Ported from the creator, which is still where a player builds a sheet — its
+   export is a supported input format here. What was left behind is the
+   creator's own half: the questionnaire, the proposals it generates, and the
+   in-app editor that consumed them. This app reads sheets and computes from
+   them; it does not build them.
+
+   Level is the one thing this copy grows that the creator does not have. Where
+   a number used to be "level 1, therefore 2", it now comes from the
+   progression tables (see levels.js) — added in stage 7. */
+
+/** @import { Character } from '../shared/types.js' */
+/** @import { LevelUp } from '../shared/types.js' */
+/** The six ability scores, or the six modifiers derived from them — the same
+    shape either way, which is why one typedef covers both.
+    @typedef {Record<string, number>} Scores */
+
+import { levelOf, proficiencyBonus, slotsAt, averageHitPoints, hitDice } from './levels.js';
+import { ABILITIES, SKILLS, MASTERIES, ARMORS, WEAPONS, DAMAGE_TYPES, ORIGIN_FEATS, SPECIES, BACKGROUNDS, CLASSES, SPELLS, MAGIC_INITIATE_LISTS, POINT_BUY_COST, POINT_BUY_TOTAL } from './data.js';
 /* ================================================================= ENGINE
    Pure functions. No DOM, no state mutation: every function takes what it
    needs and returns a value, so each rule can be checked by hand.
 ========================================================================= */
 
-export const byKey = (list, key) => list.find(x => x.key === key);
-export const skill = key => byKey(SKILLS, key);
-export const weapon = key => byKey(WEAPONS, key);
-export const armor = key => byKey(ARMORS, key);
+/** This sheet's proficiency bonus. A function of level now, not the constant 2
+    it was while the app stopped at level 1 — every bonus below reads it, so a
+    level-up moves attacks, saves, skills and the spell save DC together.
+    @param {Character} state */
+export const pb = state => proficiencyBonus(levelOf(state));
 
-export const signed = n => (n >= 0 ? `+${n}` : `${n}`);
-export const abilityMod = score => Math.floor((score - 10) / 2);
+/** @template {{key: string}} T @param {readonly T[]} list @param {string} key
+    @returns {T|undefined} */
+export const byKey = (list, key) => list.find(x => x.key === key);
+export const skill = (/** @type {string} */ key) => byKey(SKILLS, key);
+export const weapon = (/** @type {string} */ key) => byKey(WEAPONS, key);
+export const armor = (/** @type {string} */ key) => byKey(ARMORS, key);
+
+export const signed = (/** @type {number} */ n) => (n >= 0 ? `+${n}` : `${n}`);
+export const abilityMod = (/** @type {number} */ score) => Math.floor((score - 10) / 2);
 
 /** Point-buy cost of one score, or null if outside the legal 8..15 range. */
+/** @param {number} score */
 export function buyCost(score) {
-  return POINT_BUY_COST[score] ?? null;
+  return /** @type {Record<number, number>} */ (POINT_BUY_COST)[score] ?? null;
 }
 
 /** Total points spent across the six purchased scores. */
+/** @param {Scores} buy */
 export function buySpent(buy) {
   return ABILITIES.reduce((sum, a) => sum + (buyCost(buy[a.key]) ?? 0), 0);
 }
@@ -27,25 +59,39 @@ export function buySpent(buy) {
  * The 8..15 range applies to the purchase only; the background can push a
  * score to 17, which is the single most misread part of the 2024 rules.
  */
+/** @param {Character} state */
 export function finalScores(state) {
+  /** @type {Scores} */
   const out = {};
   for (const a of ABILITIES) out[a.key] = state.buy[a.key];
   for (const [key, bonus] of Object.entries(state.boosts || {})) {
     if (out[key] != null) out[key] += bonus;
   }
+  /* Ability increases taken at 4th, 8th and so on. They are applied to the
+     scores rather than written down as text, because every number this engine
+     computes — armour class, saves, the spell save DC, attack bonuses — has to
+     move with them. The 8…15 range is a rule about the PURCHASE only. */
+  for (const lv of (state.levels || [])) {
+    for (const [key, bonus] of Object.entries(lv?.asi || {})) {
+      if (out[key] != null) out[key] += Number(bonus) || 0;
+    }
+  }
   return out;
 }
 
+/** @param {Scores} scores */
 export function mods(scores) {
+  /** @type {Scores} */
   const out = {};
   for (const a of ABILITIES) out[a.key] = abilityMod(scores[a.key]);
   return out;
 }
 
 /** Every mechanical hook granted by species, background feat and class. */
+/** @param {Character} state */
 export function hooks(state) {
-  const sp = SPECIES[state.species];
-  const bg = BACKGROUNDS[state.background];
+  const sp = SPECIES[state.species ?? ''];
+  const bg = BACKGROUNDS[state.background ?? ''];
   const feats = [];
   if (bg) feats.push(bg.feat);
   if (state.extraFeat) feats.push(state.extraFeat);   // Human's Versatile
@@ -53,7 +99,7 @@ export function hooks(state) {
   let hpPerLevel = 0, initiativeProficiency = false, unarmed = null;
   if (sp?.grants?.hpPerLevel) hpPerLevel += sp.grants.hpPerLevel;
   for (const f of feats) {
-    const h = ORIGIN_FEATS[f]?.hooks || {};
+    const h = ORIGIN_FEATS[f ?? '']?.hooks || {};
     if (h.hpPerLevel) hpPerLevel += h.hpPerLevel;
     if (h.initiativeProficiency) initiativeProficiency = true;
     if (h.unarmed) unarmed = h.unarmed;
@@ -62,11 +108,26 @@ export function hooks(state) {
 }
 
 /** Hit points at level 1: max hit die + CON mod + per-level bonuses. */
+/**
+ * Hit points: the class's full hit die at 1st level, plus what each level
+ * since actually gave (a rolled number the DM typed, or the fixed average),
+ * plus the Constitution modifier and any per-level bonus ONCE PER LEVEL —
+ * Tough and the dwarf's toughness are worth +1 or +2 every level, and adding
+ * them once was right only while this app stopped at level 1.
+ * @param {Character} state @param {Scores} m
+ */
 export function hitPoints(state, m) {
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   if (!cls) return null;
   const h = hooks(state);
-  return cls.hitDie + m.CON + h.hpPerLevel;
+  const level = levelOf(state);
+  let hp = cls.hitDie + m.CON + h.hpPerLevel;
+  for (const lv of (state.levels || [])) {
+    const gained = Number.isFinite(Number(lv?.hp)) && Number(lv.hp) > 0
+      ? Number(lv.hp) : averageHitPoints(state.class);
+    hp += gained + m.CON + h.hpPerLevel;
+  }
+  return hp;
 }
 
 /**
@@ -74,14 +135,17 @@ export function hitPoints(state, m) {
  * background packages. Single source for AC, attacks and the equipment list,
  * so the sheet can never disagree with the package that was picked.
  */
+/** @param {Character} state */
 export function loadout(state) {
   const packs = [
-    CLASSES[state.class]?.equipment?.[state.equipmentClass],
-    BACKGROUNDS[state.background]?.equipment?.[state.equipmentBackground],
+    CLASSES[state.class ?? '']?.equipment?.[state.equipmentClass],
+    BACKGROUNDS[state.background ?? '']?.equipment?.[state.equipmentBackground],
   ].filter(Boolean);
 
+  /** @type {string[]} */
   const items = [];
   let gp = 0, armorKey = 'ninguna', shield = false;
+  /** @type {string[]} */
   const weapons = [];
 
   for (const p of packs) {
@@ -97,9 +161,12 @@ export function loadout(state) {
 }
 
 /** Armor Class from the equipped armor and shield. */
+/** @param {Character} state @param {Scores} m */
 export function armorClass(state, m) {
   const kit = loadout(state);
-  const a = armor(kit.armor) || armor('ninguna');
+  /* 'ninguna' is a row of a frozen table in this repo: its absence would be a
+     broken build, not a case to handle at the table. */
+  const a = armor(kit.armor) ?? /** @type {NonNullable<ReturnType<typeof armor>>} */ (armor('ninguna'));
   let ca = a.ca;
   // 'full' adds Dexterity outright, a number caps it (a negative one still
   // applies), 'none' means heavy armour where Dexterity does not count at all.
@@ -110,7 +177,7 @@ export function armorClass(state, m) {
 
   // Unarmored Defense only applies with no armor. The Barbarian may still use
   // a shield; the Monk may not, so each class declares it.
-  const ud = CLASSES[state.class]?.unarmoredDefense;
+  const ud = CLASSES[state.class ?? '']?.unarmoredDefense;
   if (ud && a.key === 'ninguna' && !(kit.shield && !ud.shield)) {
     ca = Math.max(ca, 10 + m.DES + m[ud.ability] + (kit.shield && ud.shield ? 2 : 0));
   }
@@ -118,6 +185,7 @@ export function armorClass(state, m) {
 }
 
 /** Warns when the armor's Strength requirement is not met. */
+/** @param {Character} state @param {Scores} scores */
 export function armorPenalty(state, scores) {
   const a = armor(loadout(state).armor);
   if (!a || !a.str) return null;
@@ -126,11 +194,12 @@ export function armorPenalty(state, scores) {
 }
 
 /** Set of skill keys the character is proficient in, and which are expertise. */
+/** @param {Character} state */
 export function skillProficiencies(state) {
   const prof = new Set();
   const expertise = new Set();
-  const bg = BACKGROUNDS[state.background];
-  if (bg) bg.skills.forEach(s => prof.add(s));
+  const bg = BACKGROUNDS[state.background ?? ''];
+  if (bg) bg.skills.forEach((/** @type {string} */ s) => prof.add(s));
   for (const s of state.classSkills || []) prof.add(s);
   for (const s of state.speciesSkills || []) prof.add(s);
   for (const s of state.featSkills || []) prof.add(s);
@@ -139,61 +208,71 @@ export function skillProficiencies(state) {
 }
 
 /** Skills granted automatically, mapped to where they came from. */
+/** @param {Character} state */
 export function grantedSkillSources(state) {
   const src = new Map();
-  const bg = BACKGROUNDS[state.background];
-  if (bg) bg.skills.forEach(s => src.set(s, bg.es));
-  for (const s of state.speciesSkills || []) if (!src.has(s)) src.set(s, SPECIES[state.species]?.es || 'Especie');
+  const bg = BACKGROUNDS[state.background ?? ''];
+  if (bg) bg.skills.forEach((/** @type {string} */ s) => src.set(s, bg.es));
+  for (const s of state.speciesSkills || []) if (!src.has(s)) src.set(s, SPECIES[state.species ?? '']?.es || 'Especie');
   for (const s of state.featSkills || []) if (!src.has(s)) src.set(s, 'Dote');
   return src;
 }
 
-export function skillRow(key, m, prof, expertise) {
-  const sk = skill(key);
+/** @param {string} key @param {Scores} m @param {Set<string>} prof
+    @param {Set<string>} expertise @param {number} bonusAt this sheet's proficiency bonus */
+export function skillRow(key, m, prof, expertise, bonusAt = 2) {
+  const sk = /** @type {NonNullable<ReturnType<typeof skill>>} */ (skill(key));
   const base = m[sk.ability];
-  const bonus = expertise.has(key) ? PROFICIENCY_BONUS * 2 : prof.has(key) ? PROFICIENCY_BONUS : 0;
+  const bonus = expertise.has(key) ? bonusAt * 2 : prof.has(key) ? bonusAt : 0;
   return { ...sk, total: base + bonus, prof: prof.has(key), expertise: expertise.has(key) };
 }
 
+/** @param {Character} state @param {Scores} m */
 export function saves(state, m) {
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   const profSaves = new Set(cls?.saves || []);
   return ABILITIES.map(a => ({
     ...a,
     prof: profSaves.has(a.key),
-    total: m[a.key] + (profSaves.has(a.key) ? PROFICIENCY_BONUS : 0),
+    total: m[a.key] + (profSaves.has(a.key) ? pb(state) : 0),
   }));
 }
 
 /** Walking speed in metres. A lineage may override the species value. */
+/** @param {Character} state */
 export function speed(state) {
-  const sp = SPECIES[state.species];
+  const sp = SPECIES[state.species ?? ''];
   if (!sp) return null;
-  return sp.lineages?.[state.lineage]?.speed ?? sp.speed;
+  return sp.lineages?.[state.lineage ?? '']?.speed ?? sp.speed;
 }
 
 /** Size, either fixed by the species or chosen by the player. */
+/** @param {Character} state */
 export function size(state) {
-  const sp = SPECIES[state.species];
+  const sp = SPECIES[state.species ?? ''];
   if (!sp) return null;
   return sp.size.length === 1 ? sp.size[0] : (state.size || null);
 }
 
+/** @param {Character} state @param {Scores} m */
 export function initiative(state, m) {
   const h = hooks(state);
-  return m.DES + (h.initiativeProficiency ? PROFICIENCY_BONUS : 0);
+  return m.DES + (h.initiativeProficiency ? pb(state) : 0);
 }
 
-export function passivePerception(m, prof, expertise) {
-  return 10 + skillRow('percepcion', m, prof, expertise).total;
+/** @param {Scores} m @param {Set<string>} prof @param {Set<string>} expertise
+    @param {number} bonusAt */
+export function passivePerception(m, prof, expertise, bonusAt = 2) {
+  return 10 + skillRow('percepcion', m, prof, expertise, bonusAt).total;
 }
 
 /**
  * Armor and weapon proficiency, after the level-1 class choices that widen it:
  * the Cleric's Protector order and the Druid's Guardian order.
  */
+/** @param {Character} state */
 export function proficiencies(state) {
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   if (!cls) return { armor: [], weapons: [], weaponProf: { simple: false, martial: false } };
   const armorList = [...cls.armor];
   const weaponList = [...cls.weapons];
@@ -211,10 +290,11 @@ export function proficiencies(state) {
 }
 
 /** Whether the character is proficient with a given weapon. */
+/** @param {Character} state @param {any} w */
 export function proficientWithWeapon(state, w) {
   const wp = proficiencies(state).weaponProf;
   if (w.cat === 'simple') return !!wp.simple;
-  const has = p => w.props.some(x => x.startsWith(p));
+  const has = (/** @type {string} */ p) => w.props.some((/** @type {string} */ x) => x.startsWith(p));
   switch (wp.martial) {
     case 'todas': return true;
     case 'sutil-o-ligera': return has('sutil') || has('ligera');
@@ -228,24 +308,26 @@ export function proficientWithWeapon(state, w) {
  * on "monk weapons": Simple melee, or Martial melee with Ligera, never Pesada
  * or a dos manos.
  */
+/** @param {any} w */
 export function isMonkWeapon(w) {
   if (!w.melee) return false;
-  const has = p => w.props.some(x => x.startsWith(p));
+  const has = (/** @type {string} */ p) => w.props.some((/** @type {string} */ x) => x.startsWith(p));
   if (has('pesada') || has('a dos manos')) return false;
   return w.cat === 'simple' || has('ligera');
 }
 
 /** Attack rows for the character's chosen weapons, plus unarmed when it matters. */
+/** @param {Character} state @param {Scores} m */
 export function attacks(state, m) {
   const masteries = new Set(state.masteries || []);
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   const martialArts = cls?.martialArts;
 
   const rows = loadout(state).weapons.map(key => {
     const w = weapon(key);
     if (!w) return null;
     const proficient = proficientWithWeapon(state, w);
-    const finesse = w.props.some(p => p.startsWith('sutil'));
+    const finesse = w.props.some((/** @type {any} */ p) => p.startsWith('sutil'));
     const dexAllowed = !w.melee || finesse || (martialArts && isMonkWeapon(w));
     const useDex = dexAllowed && m.DES >= m.FUE;
     const abilityKey = useDex ? 'DES' : 'FUE';
@@ -255,8 +337,8 @@ export function attacks(state, m) {
       name: w.es,
       en: w.en,
       ability: abilityKey,
-      attack: mod + (proficient ? PROFICIENCY_BONUS : 0),
-      damage: `${w.dmg}${mod ? ' ' + signed(mod) : ''} ${DAMAGE_TYPES[w.type]}`,
+      attack: mod + (proficient ? pb(state) : 0),
+      damage: `${w.dmg}${mod ? ' ' + signed(mod) : ''} ${/** @type {Record<string, string>} */ (DAMAGE_TYPES)[w.type]}`,
       props: w.props,
       mastery: masteries.has(key) ? MASTERIES[w.mastery] : null,
       proficient,
@@ -274,7 +356,7 @@ export function attacks(state, m) {
       name: 'Golpe sin armas',
       en: 'Unarmed Strike',
       ability: useDex ? 'DES' : 'FUE',
-      attack: mod + PROFICIENCY_BONUS,
+      attack: mod + pb(state),
       damage: `${unarmedDie}${mod ? ' ' + signed(mod) : ''} ${DAMAGE_TYPES.c}`,
       props: martialArts ? ['artes marciales'] : ['camorrista'],
       mastery: null,
@@ -284,34 +366,39 @@ export function attacks(state, m) {
   return rows;
 }
 
-/** Level-1 spellcasting numbers, or null for a character who does not cast. */
+/** Spellcasting numbers at the level this sheet has reached, or null for a
+    character who does not cast. `slots` is the whole grid — {'1': 4, '2': 3} —
+    or {'pact': n} for a warlock, whose slots are one pool of one level. */
+/** @param {Character} state @param {Scores} m */
 export function spellcasting(state, m) {
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   if (!cls?.casting) return null;
   const ab = cls.casting.ability;
   return {
     ability: ab,
-    abilityName: byKey(ABILITIES, ab).es,
-    dc: 8 + PROFICIENCY_BONUS + m[ab],
-    attack: PROFICIENCY_BONUS + m[ab],
+    abilityName: byKey(ABILITIES, ab)?.es ?? ab,
+    dc: 8 + pb(state) + m[ab],
+    attack: pb(state) + m[ab],
     cantrips: cls.casting.cantrips || 0,
     prepared: cls.casting.prepared ?? null,
     known: cls.casting.known ?? null,
-    slots: cls.casting.slots1 || 0,
+    slots: slotsAt(state.class, levelOf(state)),
     ritual: !!cls.casting.ritual,
   };
 }
 
 /* Spells are identified by their English name, which is unique in the table. */
-export const spellByEn = en => SPELLS.find(s => s.en === en) || null;
+export const spellByEn = (/** @type {string} */ en) => SPELLS.find(s => s.en === en) || null;
 
 /** The spells one class list offers at a given level. */
+/** @param {string} classKey @param {number} lvl */
 export function spellList(classKey, lvl) {
-  return SPELLS.filter(s => s.lvl === lvl && s.classes.includes(classKey))
+  return SPELLS.filter((/** @type {any} */ s) => s.lvl === lvl && s.classes.includes(classKey))
     .sort((a, b) => a.es.localeCompare(b.es, 'es'));
 }
 
 /** Does this character have a Magic Initiate feat, and from which list? */
+/** @param {Character} state */
 export function magicInitiateFeat(state) {
   const h = hooks(state);
   if (!h.feats.includes('iniciado')) return null;
@@ -323,20 +410,21 @@ export function magicInitiateFeat(state) {
  * feat spells are separate from class spells because they do not use the
  * class's spell slots.
  */
+/** @param {Character} state */
 export function extraSpellSources(state) {
   const out = [];
-  const sp = SPECIES[state.species];
+  const sp = SPECIES[state.species ?? ''];
   if (sp?.grants?.cantrips?.length) {
     out.push({ from: sp.es, cantrips: sp.grants.cantrips, level1: [] });
   }
-  const lineage = sp?.lineages?.[state.lineage];
+  const lineage = sp?.lineages?.[state.lineage ?? ''];
   if (lineage?.cantrips?.length) {
     out.push({ from: lineage.es, cantrips: lineage.cantrips, level1: [] });
   }
   const mi = magicInitiateFeat(state);
   if (mi && (mi.cantrips?.length || mi.level1)) {
     out.push({
-      from: `Iniciado en la magia (${MAGIC_INITIATE_LISTS[mi.list]?.es || '—'})`,
+      from: `Iniciado en la magia (${MAGIC_INITIATE_LISTS[mi.list ?? '']?.es || '—'})`,
       cantrips: mi.cantrips || [],
       level1: mi.level1 ? [mi.level1] : [],
     });
@@ -345,15 +433,17 @@ export function extraSpellSources(state) {
 }
 
 /** True when there is anything at all to put on a spell sheet. */
+/** @param {Character} state */
 export function castsAnything(state) {
-  if (CLASSES[state.class]?.casting) return true;
-  const sp = SPECIES[state.species];
+  if (CLASSES[state.class ?? '']?.casting) return true;
+  const sp = SPECIES[state.species ?? ''];
   if (sp?.grants?.cantrips?.length) return true;
-  if (sp?.lineages?.[state.lineage]?.cantrips?.length) return true;
+  if (sp?.lineages?.[state.lineage ?? '']?.cantrips?.length) return true;
   return !!magicInitiateFeat(state);
 }
 
 /** Class cantrips and level-1 spells the player has actually picked. */
+/** @param {Character} state */
 export function chosenClassSpells(state) {
   return {
     cantrips: (state.spells?.cantrips || []).map(spellByEn).filter(Boolean),
@@ -362,18 +452,22 @@ export function chosenClassSpells(state) {
 }
 
 /** Full derived character. One call, everything the sheet needs. */
+/** @param {Character} state */
 export function derive(state) {
   const scores = finalScores(state);
   const m = mods(scores);
   const { prof, expertise } = skillProficiencies(state);
+  const level = levelOf(state);
+  const bonusAt = proficiencyBonus(level);
   return {
+    level, proficiencyBonus: bonusAt, hitDice: hitDice(state.class, level),
     scores, mods: m,
     hp: hitPoints(state, m),
     ca: armorClass(state, m),
     initiative: initiative(state, m),
     saves: saves(state, m),
-    skills: SKILLS.map(s => skillRow(s.key, m, prof, expertise)),
-    passivePerception: passivePerception(m, prof, expertise),
+    skills: SKILLS.map(s => skillRow(s.key, m, prof, expertise, bonusAt)),
+    passivePerception: passivePerception(m, prof, expertise, bonusAt),
     attacks: attacks(state, m),
     casting: spellcasting(state, m),
     extraSpells: extraSpellSources(state),
@@ -387,244 +481,40 @@ export function derive(state) {
   };
 }
 
-/* ============================================================ QUIZ ENGINE
-   Pure: takes the answers and returns a complete, legal proposal for the
-   background, ability spread, skills, equipment and spells. It never writes
-   to the state — the app applies it, and the player can change all of it.
-========================================================================= */
-
-/** Adds every selected answer's weights into one bucket per channel. */
-export function quizWeights(answers) {
-  const acc = { bg: {}, ab: {}, sk: {}, kit: {}, tone: {} };
-  for (const q of QUIZ) {
-    const pick = answers?.[q.id];
-    if (pick == null) continue;
-    const w = q.options[pick]?.w;
-    if (!w) continue;
-    for (const channel of ['bg', 'ab', 'sk', 'kit', 'tone']) {
-      for (const [key, value] of Object.entries(w[channel] || {})) {
-        acc[channel][key] = (acc[channel][key] || 0) + value;
-      }
-    }
-  }
-  return acc;
-}
-
-/** Keys of a score bucket, highest first, ties broken alphabetically. */
-export function ranked(bucket) {
-  return Object.entries(bucket)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([key]) => key);
-}
-
-export const quizAnswered = answers => QUIZ.filter(q => answers?.[q.id] != null).length;
-
-/**
- * Ability priority. The quiz gives the flavour, but the class decides what the
- * character actually needs, so its primary abilities get a decisive bonus and
- * Constitution a small one — nobody at level 1 wants a d6 class with CON 8.
- */
-export function abilityPriority(state, weights) {
-  const cls = CLASSES[state.class];
-  const score = {};
-  for (const a of ABILITIES) {
-    score[a.key] = (weights.ab[a.key] || 0)
-      + (cls?.primary?.includes(a.key) ? 20 : 0)
-      + (a.key === 'CON' ? 4 : 0);
-  }
-  // A spellcasting class must not end up with a weak casting ability.
-  if (cls?.casting) score[cls.casting.ability] += 20;
-
-  const order = ranked(score);
-
-  // Constitution must land in the top three, which is a 13 or better on the
-  // standard spread. A level-1 character with CON 12 and three players at the
-  // table goes down too easily for the quiz to hand that out by accident.
-  const at = order.indexOf('CON');
-  if (at > 2) {
-    order.splice(at, 1);
-    order.splice(2, 0, 'CON');
-  }
-  return order;
-}
-
-/**
- * The standard 27-point spread, handed out in priority order, plus the
- * background improvement placed as high up that order as the background allows.
- */
-export const QUIZ_SPREAD = Object.freeze([15, 14, 13, 12, 10, 8]);
-
-export function allocateAbilities(priority, backgroundKey) {
-  const buy = {};
-  priority.forEach((key, i) => { buy[key] = QUIZ_SPREAD[i]; });
-
-  // +2/+1, both restricted to the three abilities the background offers.
-  const allowed = BACKGROUNDS[backgroundKey]?.abilities || [];
-  const byPriority = priority.filter(k => allowed.includes(k));
-  const boosts = {};
-  if (byPriority[0]) boosts[byPriority[0]] = 2;
-  if (byPriority[1]) boosts[byPriority[1]] = 1;
-  return { buy, boosts };
-}
-
-/** The package that best matches a fighting style, never the gold-only one. */
-export function packageForStyle(cls, style) {
-  const entries = Object.entries(cls?.equipment || {}).filter(([, p]) => (p.items || []).length);
-  if (!entries.length) return Object.keys(cls?.equipment || { A: 1 })[0];
-
-  const score = ([, p]) => {
-    const weapons = (p.grants?.weapons || []).map(weapon).filter(Boolean);
-    const has = pred => weapons.some(pred);
-    const prop = (w, name) => w.props.some(x => x.startsWith(name));
-    let n = 0;
-    if (style === 'distancia' && has(w => !w.melee)) n += 3;
-    if (style === 'cuerpo' && has(w => w.melee && !prop(w, 'ligera'))) n += 2;
-    if (style === 'cuerpo' && (p.grants?.shield || armor(p.grants?.armor || 'ninguna')?.cat === 'pesada')) n += 2;
-    if (style === 'sutil' && has(w => prop(w, 'sutil') || prop(w, 'ligera'))) n += 3;
-    if (style === 'apoyo' && p.grants?.shield) n += 2;
-    return n;
-  };
-  return entries.slice().sort((a, b) => score(b) - score(a))[0][0];
-}
-
-/** Class skills, chosen by affinity and skipping anything already granted. */
-export function pickClassSkills(state, weights, backgroundKey) {
-  const cls = CLASSES[state.class];
-  if (!cls) return [];
-  const taken = new Set([
-    ...(BACKGROUNDS[backgroundKey]?.skills || []),
-    ...(state.speciesSkills || []),
-  ]);
-  const pool = cls.skills.from.filter(k => !taken.has(k));
-  const order = pool.slice().sort((a, b) =>
-    (weights.sk[b] || 0) - (weights.sk[a] || 0) || a.localeCompare(b));
-  return order.slice(0, cls.skills.n);
-}
-
-/** Spells from the curated list, trimmed to what the class may actually take. */
-export function pickSpells(state, slant) {
-  const cls = CLASSES[state.class];
-  if (!cls?.casting) return { cantrips: [], level1: [] };
-  const picks = SPELL_PICKS[state.class]?.[slant];
-  if (!picks) return { cantrips: [], level1: [] };
-
-  const legal = (names, lvl) => {
-    const allowed = new Set(spellList(state.class, lvl).map(s => s.en));
-    return names.filter(n => allowed.has(n));
-  };
-  const wantL1 = cls.casting.book ?? cls.casting.prepared ?? cls.casting.known ?? 0;
-  return {
-    cantrips: legal(picks.c, 0).slice(0, cls.casting.cantrips),
-    level1: legal(picks.l, 1).slice(0, wantL1),
-  };
-}
-
-/**
- * Weapon masteries. Mastery only pays off on a weapon you actually swing, so
- * the ones in the chosen starting package come first; after that, whatever
- * fits the fighting style and hits hardest, so the count is always filled.
- */
-export function pickMasteries(state, cls, style, carried = []) {
-  const usable = WEAPONS.filter(w => proficientWithWeapon(state, w));
-  const wantsRanged = style === 'distancia';
-  const fitsStyle = w => wantsRanged ? !w.melee
-    : style === 'sutil' ? w.props.some(p => p.startsWith('sutil') || p.startsWith('ligera'))
-    : w.melee;
-
-  // Average damage, only used to break ties sensibly.
-  const avg = w => {
-    const m = /^(\d+)d(\d+)$/.exec(w.dmg);
-    return m ? Number(m[1]) * (Number(m[2]) + 1) / 2 : Number(w.dmg) || 0;
-  };
-  const score = w =>
-    (carried.includes(w.key) ? 100 : 0) +
-    (fitsStyle(w) ? 20 : 0) +
-    (w.cat === 'marcial' ? 5 : 0) +
-    avg(w);
-
-  return usable.slice().sort((a, b) => score(b) - score(a) || a.key.localeCompare(b.key))
-    .slice(0, cls.mastery.n).map(w => w.key);
-}
-
-/** The full proposal. `null` until the questionnaire is finished. */
-export function quizResult(state) {
-  const answers = state.quiz?.answers || {};
-  if (quizAnswered(answers) < QUIZ.length) return null;
-
-  const weights = quizWeights(answers);
-  const background = ranked(weights.bg)[0] || 'trotamundos';
-  const priority = abilityPriority(state, weights);
-  const { buy, boosts } = allocateAbilities(priority, background);
-  const style = ranked(weights.kit)[0] || 'cuerpo';
-  const tones = ranked(weights.tone).slice(0, 3);
-
-  const cls = CLASSES[state.class];
-  const classSkills = pickClassSkills(state, weights, background);
-
-  // Expertise, for the Rogue, follows the same affinity order.
-  let expertise = [];
-  if (cls?.expertise) {
-    const proficient = [...new Set([...classSkills, ...(BACKGROUNDS[background]?.skills || []),
-      ...(state.speciesSkills || [])])];
-    expertise = proficient
-      .sort((a, b) => (weights.sk[b] || 0) - (weights.sk[a] || 0) || a.localeCompare(b))
-      .slice(0, cls.expertise.n);
-  }
-
-  // A support-leaning character gets the support spell list.
-  const slant = (style === 'apoyo' || tones[0] === 'protector') ? 'apoyo' : 'ofensivo';
-
-  // Masteries need to know the equipment first: they follow what you carry.
-  const equipmentClass = cls ? packageForStyle(cls, style) : 'A';
-  const carried = cls?.equipment?.[equipmentClass]?.grants?.weapons || [];
-
-  return {
-    background, priority, buy, boosts, style, tones, classSkills, expertise, slant,
-    equipmentClass,
-    equipmentBackground: 'A',
-    spells: pickSpells(state, slant),
-    // Class choices the quiz can settle without the player going back.
-    fightingStyle: cls?.features?.some(f => f.choice === 'fightingStyle')
-      ? (style === 'distancia' ? 'arqueria' : style === 'sutil' ? 'dosarmas' : 'defensa') : null,
-    divineOrder: cls?.features?.some(f => f.choice === 'divineOrder')
-      ? (style === 'cuerpo' ? 'protector' : 'taumaturgo') : null,
-    primalOrder: cls?.features?.some(f => f.choice === 'primalOrder')
-      ? (style === 'cuerpo' ? 'guardian' : 'mago') : null,
-    masteries: cls?.mastery ? pickMasteries(state, cls, style, carried) : [],
-  };
-}
-
 /**
  * Non-blocking notices. Order matters: `error` entries mean the step is
  * incomplete, `warn` entries are advice a player is free to ignore.
  */
+/** @param {Character} state */
 export function validate(state) {
+  /** @type {{level: 'error'|'warn', step: string, text: string}[]} */
   const out = [];
-  const push = (level, step, text) => out.push({ level, step, text });
+  const push = (/** @type {'error'|'warn'} */ level, /** @type {string} */ step,
+                /** @type {string} */ text) => out.push({ level, step, text });
 
   if (!state.name?.trim()) push('error', 'concepto', 'El personaje no tiene nombre.');
   if (!state.species) push('error', 'especie', 'Falta elegir especie.');
   if (!state.class) push('error', 'clase', 'Falta elegir clase.');
   if (!state.background) push('error', 'trasfondo', 'Falta elegir trasfondo.');
 
-  const sp = SPECIES[state.species];
+  const sp = SPECIES[state.species ?? ''];
   if (sp?.lineages && !state.lineage) push('error', 'especie', `Falta elegir el linaje de ${sp.es}.`);
   if (sp?.size?.length > 1 && !state.size) push('error', 'especie', 'Falta elegir tamaño.');
 
-  const cls = CLASSES[state.class];
+  const cls = CLASSES[state.class ?? ''];
   if (cls) {
     const need = cls.skills.n, have = (state.classSkills || []).length;
     if (have < need) push('error', 'habilidades', `Te faltan ${need - have} habilidad(es) de ${cls.es}.`);
     if (cls.mastery && (state.masteries || []).length < cls.mastery.n) {
       push('error', 'clase', `Te faltan armas con maestría (${(state.masteries||[]).length} de ${cls.mastery.n}).`);
     }
-    if (cls.features?.some(f => f.choice === 'fightingStyle') && !state.fightingStyle) {
+    if (cls.features?.some((/** @type {any} */ f) => f.choice === 'fightingStyle') && !state.fightingStyle) {
       push('error', 'clase', 'Falta elegir estilo de combate.');
     }
-    if (cls.features?.some(f => f.choice === 'divineOrder') && !state.divineOrder) {
+    if (cls.features?.some((/** @type {any} */ f) => f.choice === 'divineOrder') && !state.divineOrder) {
       push('error', 'clase', 'Falta elegir orden divina.');
     }
-    if (cls.features?.some(f => f.choice === 'primalOrder') && !state.primalOrder) {
+    if (cls.features?.some((/** @type {any} */ f) => f.choice === 'primalOrder') && !state.primalOrder) {
       push('error', 'clase', 'Falta elegir orden primigenia.');
     }
     if (cls.expertise && (state.expertise || []).length < cls.expertise.n) {
@@ -632,9 +522,9 @@ export function validate(state) {
     }
   }
 
-  const bg = BACKGROUNDS[state.background];
+  const bg = BACKGROUNDS[state.background ?? ''];
   if (bg) {
-    const spent = Object.values(state.boosts || {}).reduce((a, b) => a + b, 0);
+    const spent = Object.values(state.boosts || {}).reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
     if (spent !== 3) push('error', 'trasfondo', 'Falta repartir las mejoras de puntuación del trasfondo (+2/+1 o +1/+1/+1).');
   }
 
@@ -662,9 +552,9 @@ export function validate(state) {
   // advice, never blocking
   if (cls && state.class) {
     const scores = finalScores(state);
-    const best = cls.primary.reduce((a, b) => (scores[a] >= scores[b] ? a : b));
+    const best = cls.primary.reduce((/** @type {number} */ a, /** @type {number} */ b) => (scores[a] >= scores[b] ? a : b));
     if (scores[best] < 14) {
-      push('warn', 'puntos', `${cls.es} funciona mejor con ${cls.primary.map(k => byKey(ABILITIES,k).es).join(' o ')} alta; ahora la mejor está en ${scores[best]}.`);
+      push('warn', 'puntos', `${cls.es} funciona mejor con ${cls.primary.map((/** @type {string} */ k) => byKey(ABILITIES, k)?.es ?? k).join(' o ')} alta; ahora la mejor está en ${scores[best]}.`);
     }
   }
   const pen = state.class ? armorPenalty(state, finalScores(state)) : null;

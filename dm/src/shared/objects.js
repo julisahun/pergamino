@@ -6,6 +6,7 @@
    The catalog rides on the session in memory (`session.objects`, injected
    from disk like the bestiary) and is never written into session.json. */
 
+/** @import { ItemDef } from './types.js' */
 import { newId } from '../rules/character.js';
 import { signed } from '../rules/engine.js';
 
@@ -20,7 +21,9 @@ export const MOD_KEYS = [
   ['pp', 'Perc. pasiva'],
 ];
 
+/** @param {any} o @returns {ItemDef} */
 export function normaliseObject(o) {
+  /** @type {Record<string, number>} */
   const mods = {};
   for (const [key] of MOD_KEYS) {
     const v = Number(o?.mods?.[key]);
@@ -32,14 +35,15 @@ export function normaliseObject(o) {
     description: String(o?.description || ''),
     mods,
     effects: Array.isArray(o?.effects)
-      ? o.effects.map(e => String(e).trim()).filter(Boolean)
+      ? o.effects.map((/** @type {any} */ e) => String(e).trim()).filter(Boolean)
       : [],
-    file: typeof o?.file === 'string' ? o.file : null,   // objects/<name>.json, when it came from disk
+    file: typeof o?.file === 'string' ? o.file : undefined,   // objects/<name>.json, when it came from disk
   };
 }
 
 /** Same upsert contract as absorbBeast: re-reading an edited file updates the
     entry, a fresh id lands as a new one. */
+/** @param {ItemDef[]} catalog @param {ItemDef} o */
 export function absorbObject(catalog, o) {
   const at = catalog.findIndex(x => x.id === o.id);
   if (at >= 0) catalog[at] = o;
@@ -50,7 +54,9 @@ export function absorbObject(catalog, o) {
     catalog no longer has — the file was deleted or renamed on disk — simply
     contributes nothing; skipping it here IS the normalisation of a stale
     assignment. */
+/** @param {ItemDef[]} catalog @param {string[]|undefined} ids */
 export function modTotals(catalog, ids) {
+  /** @type {Record<string, number>} */
   const totals = { ac: 0, hpMax: 0, initMod: 0, speed: 0, pp: 0 };
   for (const id of ids || []) {
     const o = catalog.find(x => x.id === id);
@@ -62,11 +68,15 @@ export function modTotals(catalog, ids) {
 
 /** Unknown + bonus is still unknown: an npc has no passive perception and an
     unparseable speed reads as null, and no ring changes that. */
-export const addMod = (base, bonus) => base == null ? base : base + bonus;
+/** @param {number|null} base @param {number} bonus */
+export const addMod = (base, bonus) => (base == null ? base : base + bonus);
 
 /** A holder's list grouped for display: [{obj, count}], catalog order lost in
     favour of first-held order, danglers skipped. */
+/** @param {ItemDef[]} catalog @param {string[]|undefined} ids
+    @returns {{obj: ItemDef, count: number}[]} */
 export function heldObjects(catalog, ids) {
+  /** @type {{obj: ItemDef, count: number}[]} */
   const out = [];
   for (const id of ids || []) {
     const o = catalog.find(x => x.id === id);
@@ -80,6 +90,7 @@ export function heldObjects(catalog, ids) {
 
 /** Every effect line a holder carries, deduped — two rings of the same kind
     glow once. */
+/** @param {ItemDef[]} catalog @param {string[]|undefined} ids */
 export function effectLines(catalog, ids) {
   const seen = new Set();
   for (const { obj } of heldObjects(catalog, ids)) {
@@ -90,6 +101,7 @@ export function effectLines(catalog, ids) {
 
 /** "CA +1 · PG máx +2" — the one-line summary a catalog card and a holder
     row both print. */
+/** @param {Record<string, number>} mods */
 export const modSummary = mods => MOD_KEYS
   .filter(([key]) => mods[key])
   .map(([key, es]) => `${es} ${signed(mods[key])}`)

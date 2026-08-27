@@ -64,8 +64,16 @@
     "equipmentClass": "A",
     "equipmentBackground": "A",
     "spells": {
-      "cantrips": ["Vicious Mockery", "Prestidigitation"],
-      "level1": ["Healing Word", "Charm Person", "Faerie Fire", "Heroism"]
+      "cantrips": [
+        "Vicious Mockery",
+        "Prestidigitation"
+      ],
+      "level1": [
+        "Healing Word",
+        "Charm Person",
+        "Faerie Fire",
+        "Heroism"
+      ]
     },
     "story": {
       "personality": "Announces every observation as if delivering a verdict at a cheese competition. Cannot be told his nose is average.",
@@ -75,9 +83,6 @@
       "backstory": "Failed the entrance exam for three separate sommelier guilds — none of which sample cheese, all of which he applied to anyway. Decided credentials were beneath him and started awarding his own.",
       "ties": "Distantly related to a rock gnome tinkerer who once built a device that could detect lies, sarcasm, and the exact fat content of a wheel of cheese from thirty paces. Pip has not managed to replicate it and refuses to admit that."
     },
-    "version": 1,
-    "armor": "cuero",
-    "shield": false,
-    "weapons": ["daga"]
+    "version": 1
   }
 }

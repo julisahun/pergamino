@@ -1,12 +1,10 @@
-/* ================================================================ DISPLAY
-   Read from a sofa, not from a desk. Every size is a viewport unit, so the
-   same layout is right on a laptop panel and on a 55" television with no
-   media query and nothing to configure. Nothing here is clickable except a
-   token: the DM drags on this screen, the players only look at it.
+/* ============================================================== DISPLAY
+   Read from a sofa, not from a desk: every size is a viewport unit, so one
+   layout is right on a laptop panel and on a 55" screen with no media query
+   and nothing to configure. Nothing here is clickable except a token — the
+   DM drags on this screen, the players only look at it.
 
-   The line above closes the copied token block: check-sync.py reads from the
-   shared-tokens comment to the reset, so the reset has to sit in the same
-   place in all three files.
+   This file grows one stage at a time, alongside the markup it dresses.
 ========================================================================= */
 
 html, body { height: 100%; }
@@ -16,271 +14,38 @@ body {
   background: var(--page); background-attachment: fixed;
   user-select: none; cursor: default;
 }
-/* The layout lives on #tv, not on body: everything is rendered into that one
-   element, so putting the grid on its parent would give the whole page to a
-   single row and leave the field in a band at the top. */
-#tv {
-  height: 100vh;
-  display: grid; grid-template-rows: auto 1fr auto;
+
+/* The layout lives on #tv, not on body: everything renders into that one
+   element, so putting the grid on its parent would hand the whole page to a
+   single row and leave the field in a band at the top.
+
+   `container-type: size` is what makes the shared board component (drawn here
+   and in the admin's mirror) size itself against this box rather than the
+   viewport. Same markup, two very different boxes, one stylesheet. */
+#tv { height: 100vh; width: 100vw; container-type: size; }
+
+.dsp {
+  font-family: var(--display);
+  font-variant: var(--head-variant);
+  letter-spacing: var(--head-ls);
+  font-weight: var(--head-weight);
 }
 
-/* ------------------------------------------------------------- banner */
-.banner {
-  display: flex; align-items: baseline; gap: 1.2vw; padding: .8vh 1.5vw;
-  border-bottom: 3px double var(--sepia); background: var(--panel);
-}
-.banner .round {
-  font-family: var(--display); font-variant: var(--head-variant); font-weight: var(--head-weight);
-  letter-spacing: var(--head-ls); color: var(--seal);
-  font-size: 2.8vh;
-}
-.banner .round b { font-size: 4vh; font-variant-numeric: tabular-nums; }
-/* 4.4vh is ~31px of cap height on a 1080p television, which is the size the
-   name stops being something you lean forward to read. */
-.banner .who {
-  font-family: var(--display); font-variant: var(--head-variant); font-weight: var(--head-weight);
-  letter-spacing: var(--head-ls); font-size: 4.4vh; color: var(--ink);
-}
-.banner .who small { font-size: 2.2vh; color: var(--ink-soft); font-family: var(--serif);
-  font-variant: normal; letter-spacing: 0; margin-right: .5vw; }
-.banner .idle { font-size: 2.8vh; color: var(--ink-soft); }
-
-/* --------------------------------------------------------- middle band
-   Roster on the left, the stage in the middle, turn order on the right — the
-   two panes players actually scan during a fight flank the thing they are
-   watching instead of queuing up underneath it where a glance down at your
-   own hit points costs you the field. */
-.mid { display: grid; grid-template-columns: auto 1fr auto; min-height: 0; }
-.stage { display: grid; place-items: center; padding: 1vh 1vw; min-height: 0; min-width: 0; }
-
-.orderpane, .roster {
-  background: var(--panel);
-  padding: 1vh 1vw; min-width: 12vw; max-width: 18vw;
-  display: flex; flex-direction: column; gap: .4vh;
-  overflow: hidden;
-}
-.orderpane { border-left: 1px solid var(--rule); }
-.roster { border-right: 1px solid var(--rule); }
-.orderpane h2, .roster h2 {
-  margin: 0 0 .6vh; font-size: 1.8vh; letter-spacing: .1em;
-  font-variant: small-caps; color: var(--sepia);
-  font-family: var(--display); border-bottom: 1px solid var(--rule); padding-bottom: .3vh;
-}
-.roster .rgroup { display: flex; flex-direction: column; gap: .4vh; }
-.orow {
-  display: flex; align-items: center; gap: .6vw; font-size: 2.2vh; line-height: 1.35;
-  padding: .2vh .4vw; border-radius: 3px;
-}
-.orow .oport {
-  width: 3.4vh; height: 3.4vh; border-radius: 50%; flex: none; object-fit: cover;
-  background: var(--panel-2); border: 1px solid rgba(0,0,0,.3);
-}
-.orow .oini {
-  width: 3.4vh; height: 3.4vh; border-radius: 50%; flex: none; display: grid; place-items: center;
-  background: var(--panel-2); border: 1px solid rgba(0,0,0,.3);
-  font-family: var(--display); font-weight: 700; font-size: 1.6vh; color: var(--sepia);
-}
-.orow.active {
+/* What the television says when it cannot read something. Deliberately
+   visible: a screen that quietly shows no map is the failure the DM cannot
+   see from the other window. */
+.trouble {
+  position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%);
   background: var(--seal); color: #fdf6e6;
-  font-family: var(--display); font-variant: var(--head-variant); letter-spacing: var(--head-ls);
-}
-.orow.active .oini { color: #fdf6e6; }
-.orow.down { opacity: .45; text-decoration: line-through; }
-
-/* -------------------------------------------------------------- roster
-   One card per party member, portrait over name over bar — read top to
-   bottom the way the order pane opposite it reads, rather than left to right
-   the way the old bottom strip did. */
-.pcell {
-  display: flex; align-items: center; gap: .6vw; min-width: 0;
-  padding: .3vh .2vw;
-}
-.pcell .port {
-  width: 5vh; height: 5vh; border-radius: 50%; flex: none; object-fit: cover;
-  background: var(--panel-2); border: 2px solid var(--tint, var(--rule));
-}
-.pcell .ini {
-  width: 5vh; height: 5vh; border-radius: 50%; flex: none; display: grid; place-items: center;
-  background: var(--panel-2); border: 2px solid var(--tint, var(--rule));
-  font-family: var(--display); font-weight: 700; font-size: 2.2vh; color: var(--sepia);
-}
-.pcell .info { display: flex; flex-direction: column; gap: .3vh; min-width: 0; }
-.pcell .nm { font-size: 2.2vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pcell .bar {
-  width: 9vw; height: 1.4vh; border: 1px solid var(--rule); border-radius: 1vh;
-  overflow: hidden; background: rgba(138,106,67,.15); display: flex; position: relative;
-}
-.pcell .bar > i { flex: none; height: 100%; background: linear-gradient(90deg, var(--gold), var(--seal)); }
-.pcell.low .bar > i { background: linear-gradient(90deg, var(--seal-2), var(--seal)); }
-.pcell.out .bar > i { background: var(--sepia); }
-.pcell .num { font-size: 2vh; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
-.pcell .num b { color: var(--ink); font-size: 2.2vh; }
-.pcell .tmp { color: var(--gold); font-weight: 600; }
-.pcell.out .nm { opacity: .55; }
-.pcell.out .port, .pcell.out .ini { filter: grayscale(1); opacity: .6; }
-
-/* ---------------------------------------------------------------- field
-   Identical geometry to the admin window's grid: one --sq drives everything,
-   and the stage sizes the board to whatever is left over. */
-/* Two units: a percentage resolves against width for `left`/`width` and
-   against height for `top`/`height`. fit() keeps a square square, so the two
-   are the same number of pixels — as long as each stays on its own axis. */
-.field {
-  position: relative;
-  --sq: calc(100% / var(--cols));
-  --sqy: calc(100% / var(--rows));
-  max-width: 100%; max-height: 100%;
-  border: 2px solid var(--sepia); border-radius: 3px;
-  background: var(--panel-2); overflow: hidden;
-  touch-action: none;
-}
-.field .mapimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.field .cells { position: absolute; inset: 0; display: grid; grid-auto-rows: 1fr; }
-.field .cell { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
-.field .cell.lit { background: rgba(176,141,87,.22); box-shadow: inset 0 0 0 1px rgba(176,141,87,.5); }
-.field .cell.target { background: rgba(123,17,19,.28); }
-
-.token {
-  position: absolute; transform: translate(-50%, -50%);
-  width: calc(var(--sq) * .88); height: calc(var(--sqy) * .88);
-  border-radius: 50%; cursor: grab;
-  background: var(--tint, #3a3128);
-  border: 2px solid rgba(0,0,0,.35); box-shadow: 0 1px 6px rgba(0,0,0,.4);
-  display: grid; place-items: center; color: #fdf6e6;
-  container-type: inline-size;
-}
-.token.grabbed { cursor: grabbing; z-index: 9; box-shadow: 0 8px 20px rgba(0,0,0,.5); }
-.token.selected { outline: 2px solid var(--gold); outline-offset: 2px; }
-.token.active { box-shadow: 0 0 0 4px var(--seal), 0 2px 10px rgba(0,0,0,.45); }
-.token.out { opacity: .45; filter: grayscale(1); }
-.token .ini { font-family: var(--display); font-weight: 700; line-height: 1; font-size: 42cqw; }
-.token .pimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.token .ring {
-  position: absolute; inset: -5px; border-radius: 50%; pointer-events: none;
-  background: conic-gradient(#e8c46a 0 var(--pct), rgba(0,0,0,.35) var(--pct) 100%);
-  -webkit-mask: radial-gradient(closest-side, transparent 84%, #000 85%);
-  mask: radial-gradient(closest-side, transparent 84%, #000 85%);
-}
-/* Capped and clipped, so a huddle of six does not become a wall of text; the
-   active and the selected token get their whole name and come to the front. */
-.token .lbl {
-  position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  margin-top: 3px; white-space: nowrap; pointer-events: none;
-  font-size: 30cqw; line-height: 1.15; color: var(--ink);
-  background: color-mix(in srgb, var(--panel-solid) 85%, transparent);
-  padding: 0 .25em; border-radius: 2px;
-  /* In container units, not squares: the label's containing block is the
-     token, so a percentage here would be a percentage of the circle. */
-  max-width: 260cqw; overflow: hidden; text-overflow: ellipsis;
-}
-.token .lbl b { font-variant-numeric: tabular-nums; }
-.token.active, .token.selected, .token.grabbed { z-index: 5; }
-.token.active .lbl, .token.selected .lbl { max-width: none; font-weight: 600; }
-.token .cnd {
-  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 1px; margin-bottom: 3px; pointer-events: none;
-}
-.token .cnd i {
-  font-style: normal; font-size: 26cqw; line-height: 1.3; min-width: 1.3em; text-align: center;
-  background: var(--seal); color: #fdf6e6; border-radius: 2px;
+  padding: .6vh 1.2vw; border-radius: var(--radius); font-size: 2vh;
+  max-width: 80vw; text-align: center;
 }
 
-/* --------------------------------------------------------------- a place
-   Not a board: a picture of somewhere the players are. So it takes the whole
-   window — no banner, no order, no hit points, nothing chrome-like at all —
-   and the payload it is drawn from has none of those things in it either.
-
-   `contain` rather than `cover`: the art is somebody's drawing and cropping
-   the top off a tavern to fill a 16:9 television is worse than a margin. The
-   margin is the page's own parchment, which is what the rest of this window
-   is made of anyway. */
-.scene {
-  grid-row: 1 / -1;
-  background-position: center; background-repeat: no-repeat; background-size: contain;
-}
-/* A scene with no art at all, which is a scene you have not finished. Says so
-   here rather than showing the players a blank television. */
-.scene.none {
-  display: grid; place-content: center; text-align: center; gap: 1vh; color: var(--ink-soft);
-}
-.scene.none b {
-  display: block; font-family: var(--display); font-variant: var(--head-variant);
-  letter-spacing: var(--head-ls); color: var(--seal); font-size: 4vh;
-}
-
-/* The same art, but a fight is running: it sits in the stage cell next to the
-   order pane instead of spanning the window, so it needs its own box rather
-   than `.scene`'s grid-row: 1 / -1. */
-.scene-inline {
-  width: 100%; height: 100%;
-  background-position: center; background-repeat: no-repeat; background-size: contain;
-}
-.scene-inline.none {
-  display: grid; place-content: center; text-align: center; gap: 1vh; color: var(--ink-soft);
-}
-.scene-inline.none b {
-  display: block; font-family: var(--display); font-variant: var(--head-variant);
-  letter-spacing: var(--head-ls); color: var(--seal); font-size: 4vh;
-}
-
-/* ------------------------------------------------------------- waiting */
-.waiting {
-  grid-row: 1 / -1; display: grid; place-content: center; text-align: center; gap: 1vh;
-  color: var(--ink-soft);
-}
-.waiting b {
-  display: block; font-family: var(--display); font-variant: var(--head-variant);
-  letter-spacing: var(--head-ls); color: var(--seal); font-size: 4vh;
-}
-.waiting span { font-size: 2.2vh; }
-
-/* --------------------------------------------------------------- sound
-   Chrome will not let a page make a noise until somebody has touched that
-   page, and this one is meant to be looked at rather than touched. So the
-   ask is small, in a corner, and only there while it is true — a permanent
-   control would be a button on a television. It sits outside #tv because
-   every render replaces that element wholesale. */
+/* The unlock pill: shown only on a genuine NotAllowedError, and any tap or key
+   clears it. */
 #sound {
-  position: fixed; right: 2vh; bottom: 2vh; z-index: 40;
-  display: none; align-items: center; gap: .8vh;
-  padding: 1vh 1.8vh; border-radius: 999px; cursor: pointer;
-  font-size: 1.8vh; color: var(--ink-soft);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  border: 1px solid var(--rule);
-  box-shadow: 0 .4vh 1.6vh rgba(0, 0, 0, .28);
-  animation: soundpulse 2.4s ease-in-out infinite;
+  position: fixed; left: 50%; bottom: 2vh; transform: translateX(-50%);
+  background: var(--panel-solid); border: 1px solid var(--sepia);
+  padding: .6vh 1.2vw; border-radius: var(--radius); font-size: 2vh;
 }
-#sound.on { display: flex; }
-#sound b { font-family: var(--display); color: var(--seal); font-weight: 400; }
-@keyframes soundpulse { 50% { opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { #sound { animation: none; } }
-
-/* ------------------------------------------------------------- the room
-   Which table this screen belongs to. Full-screen when the URL carried no
-   ?room= and none is remembered; the M key brings it back to switch. It
-   sits outside #tv because every render replaces that element wholesale. */
-#room {
-  position: fixed; inset: 0; z-index: 50;
-  display: grid; place-content: center; text-align: center;
-  background: var(--page);
-}
-#room[hidden] { display: none; }
-#room form { display: grid; gap: 1.8vh; justify-items: center; }
-#room b {
-  font-family: var(--display); font-variant: var(--head-variant);
-  font-weight: var(--head-weight); letter-spacing: var(--head-ls);
-  color: var(--seal); font-size: 4vh;
-}
-#room input {
-  width: 9ch; text-align: center; letter-spacing: .35em; text-transform: uppercase;
-  font-family: var(--serif); font-size: 4vh; color: var(--ink);
-  background: var(--panel); border: 1px solid var(--rule);
-  border-radius: .8vh; padding: 1vh 0 1vh .35em;
-}
-#room span { font-size: 2vh; color: var(--ink-soft); max-width: 46ch; }
-#room span b { font-size: inherit; font-family: var(--serif); color: var(--ink); }
-#room button {
-  font-size: 2.2vh; padding: 1vh 3vh; cursor: pointer;
-  font-family: var(--serif); color: var(--ink);
-  background: var(--panel); border: 1px solid var(--rule); border-radius: 999px;
-}
+#sound[hidden] { display: none; }

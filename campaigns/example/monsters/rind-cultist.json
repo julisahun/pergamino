@@ -5,12 +5,20 @@
   "ac": 12,
   "hpMax": 11,
   "initMod": 1,
-  "speed": 30,
+  "speed": 9,
   "note": "A member of the Order of the Sacred Rind, convinced the Grand Wheel is the earthly body of their goat god and that eating it is a holy sacrament, not a theft. Loud, self-righteous, and completely innocent of this particular crime — they wanted to eat the cheese themselves, not hide it in a sewer.",
   "portrait": null,
   "abilities": [
-    { "id": "cmex04rindheadbutt", "name": "Fanatical Headbutt", "desc": "+3 to hit, 1d6+1 bludgeoning damage." },
-    { "id": "cmex05rindchant", "name": "\"The Wheel Provides\"", "desc": "Shouted as a battle cry. Purely for morale, mechanically does nothing, deeply annoying." }
+    {
+      "id": "cmex04rindheadbutt",
+      "name": "Fanatical Headbutt",
+      "desc": "+3 to hit, 1d6+1 bludgeoning damage."
+    },
+    {
+      "id": "cmex05rindchant",
+      "name": "\"The Wheel Provides\"",
+      "desc": "Shouted as a battle cry. Purely for morale, mechanically does nothing, deeply annoying."
+    }
   ],
   "file": "monsters/rind-cultist.json"
 }

@@ -37,6 +37,9 @@ export const SKILLS = Object.freeze([
 ]);
 
 /* Weapon mastery properties (2024). Spanish label, English in parentheses. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const MASTERIES = Object.freeze({
   tajo:      { es: 'Tajo',       en: 'Cleave',  d: 'Al acertar cuerpo a cuerpo, golpeas también a otro enemigo a 1,5 m del primero (sin sumar el modificador al daño). Una vez por turno.' },
   roce:      { es: 'Roce',       en: 'Graze',   d: 'Si fallas, el objetivo recibe daño igual al modificador de la característica de ataque.' },
@@ -99,12 +102,18 @@ export const INSTRUMENTS = Object.freeze([
 
 export const GAMING_SETS = Object.freeze(['Juego de dados', 'Juego de naipes', 'Juego de ajedrez de dragón', 'Set de tres dragones']);
 
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const LANGUAGES = Object.freeze({
   standard: ['Común', 'Common Sign Language', 'Enano', 'Élfico', 'Gigante', 'Gnómico', 'Goblin', 'Mediano', 'Orco'],
   rare: ['Abisal', 'Celestial', 'Dracónico', 'Habla Profunda', 'Infernal', 'Primordial', 'Silvano', 'Bajo Común'],
 });
 
 /* Origin feats (2024). `hooks` is what the engine must apply mechanically. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const ORIGIN_FEATS = Object.freeze({
   alerta: {
     es: 'Alerta', en: 'Alert',
@@ -161,6 +170,9 @@ export const ORIGIN_FEATS = Object.freeze({
 /* -------------------------------------------------------------- SPECIES */
 /* size: array of allowed sizes (choice when length > 1).
    grants.skills / grants.originFeat / grants.cantrips are engine hooks. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const SPECIES = Object.freeze({
   aasimar: {
     es: 'Aasimar', en: 'Aasimar', speed: 9, size: ['Mediano', 'Pequeño'],
@@ -338,6 +350,9 @@ export const SPECIES = Object.freeze({
 
 /* ------------------------------------------------------------ BACKGROUNDS */
 /* abilities: the three scores the background can improve (2024: +2/+1 or +1/+1/+1). */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const BACKGROUNDS = Object.freeze({
   acolito: {
     es: 'Acólito', en: 'Acolyte',
@@ -518,6 +533,9 @@ export const ALL_SKILLS = Object.freeze(SKILLS.map(s => s.key));
      'sutil-o-ligera' martial weapons with Sutil or Ligera  (Pícaro)
      'ligera'         martial weapons with Ligera           (Monje)
      false            simple weapons only                                */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const CLASSES = Object.freeze({
   barbaro: {
     es: 'Bárbaro', en: 'Barbarian', hitDie: 12,
@@ -770,6 +788,9 @@ export const CLASSES = Object.freeze({
 });
 
 /* Fighting styles are a level-1 Fighter choice; kept here to avoid a lookup. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const FIGHTING_STYLES = Object.freeze({
   arqueria:    { es: 'Arquería',                      d: '+2 a las tiradas de ataque con armas a distancia.' },
   defensa:     { es: 'Defensa',                       d: '+1 a la CA mientras lleves armadura.' },
@@ -1081,6 +1102,9 @@ export const SPELLS = Object.freeze([
 ]);
 
 /* Magic Initiate lets you take from one of three spell lists. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const MAGIC_INITIATE_LISTS = Object.freeze({
   clerigo: { es: 'Clérigo', ability: 'SAB' },
   druida:  { es: 'Druida',  ability: 'SAB' },
@@ -1088,6 +1112,9 @@ export const MAGIC_INITIATE_LISTS = Object.freeze({
 });
 
 /* Level-1 choices that widen proficiency, so they belong next to the classes. */
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const DIVINE_ORDERS = Object.freeze({
   protector:  { es: 'Protector',  why: 'Armadura pesada y armas marciales. Para ir al frente.',
                 d: 'Ganas competencia con armadura pesada y con armas marciales.' },
@@ -1095,6 +1122,9 @@ export const DIVINE_ORDERS = Object.freeze({
                 d: 'Conoces un truco de clérigo más y sumas tu modificador de Sabiduría a las pruebas de Arcanos y Religión.' },
 });
 
+/** Looked up by a key that only exists at runtime (a character's own
+    choice), so it is typed as a table rather than as its literal shape.
+    @type {Record<string, any>} */
 export const PRIMAL_ORDERS = Object.freeze({
   mago:     { es: 'Mago',     why: 'Un truco más y mejor en Arcanos y Naturaleza.',
               d: 'Conoces un truco de druida más y sumas tu modificador de Sabiduría a las pruebas de Arcanos y Naturaleza.' },
@@ -1110,324 +1140,5 @@ export const PRIMAL_ORDERS = Object.freeze({
    Nothing here decides anything on its own: the engine adds the weights up
    and the player can override every result afterwards.
 ========================================================================= */
-export const KIT_STYLES = Object.freeze({
-  cuerpo:   'de frente, arma en mano',
-  distancia:'a distancia, sin dejar que se acerquen',
-  sutil:    'por los lados, sin que te vean venir',
-  apoyo:    'sosteniendo a los demás',
-});
-
-export const TONES = Object.freeze({
-  astuto:     { es: 'astuto',      d: 'Prefieres rodear el problema antes que atravesarlo.' },
-  directo:    { es: 'directo',     d: 'Lo dices y lo haces. Sin rodeos y sin disimulo.' },
-  protector:  { es: 'protector',   d: 'Te pones delante. Casi siempre antes de pensarlo.' },
-  curioso:    { es: 'curioso',     d: 'Necesitas saber por qué, aunque no te convenga.' },
-  pragmatico: { es: 'pragmático',  d: 'Lo que funcione. La moral es un lujo caro.' },
-  leal:       { es: 'leal',        d: 'Una palabra dada es una palabra dada.' },
-  temerario:  { es: 'temerario',   d: 'Decides rápido y cargas con lo que salga.' },
-  reservado:  { es: 'reservado',   d: 'Escuchas mucho más de lo que hablas.' },
-});
-
-export const QUIZ = Object.freeze([
-  {
-    id: 'patrulla',
-    text: 'De noche, en el muelle, una patrulla os para. El capitán os cuenta por qué, y mientes tú o miente él: no cuadra nada.',
-    options: [
-      { es: 'Le sigo la mentira y le saco lo que sabe sin que se dé cuenta.',
-        w: { bg: { charlatan: 3, trotamundos: 1 }, ab: { CAR: 3, INT: 1 }, sk: { engano: 3, perspicacia: 2 }, kit: { sutil: 2 }, tone: { astuto: 2 } } },
-      { es: 'Le pregunto a la cara qué se le ha perdido aquí a estas horas.',
-        w: { bg: { soldado: 2, guardia: 2 }, ab: { CAR: 2, FUE: 1 }, sk: { intimidacion: 3 }, kit: { cuerpo: 2 }, tone: { directo: 2 } } },
-      { es: 'Me callo y me fijo en las manos, las botas y quién manda de verdad.',
-        w: { bg: { escriba: 2, criminal: 1, trotamundos: 1 }, ab: { SAB: 3, INT: 1 }, sk: { perspicacia: 3, percepcion: 2 }, kit: { sutil: 1 }, tone: { reservado: 2 } } },
-      { es: 'Aprovecho la conversación para desaparecer sin que me cuenten.',
-        w: { bg: { criminal: 3, trotamundos: 2 }, ab: { DES: 3 }, sk: { sigilo: 3, manos: 1 }, kit: { sutil: 3 }, tone: { pragmatico: 2 } } },
-    ],
-  },
-  {
-    id: 'dinero',
-    text: 'Necesitas dinero, y por eso estás aquí. ¿De dónde viene esa necesidad?',
-    options: [
-      { es: 'Debo dinero a gente que ya ha dejado de pedirlo por las buenas.',
-        w: { bg: { criminal: 3, charlatan: 2 }, ab: { DES: 2, CON: 1 }, sk: { manos: 2, engano: 1 }, kit: { sutil: 2 }, tone: { pragmatico: 2 } } },
-      { es: 'Tengo a alguien a cargo que no puede trabajar.',
-        w: { bg: { granjero: 3, artesano: 2, mercader: 1 }, ab: { CON: 2, SAB: 2 }, sk: { animales: 2, medicina: 1 }, kit: { apoyo: 2 }, tone: { leal: 2, protector: 1 } } },
-      { es: 'Perdí un puesto que me costó media vida conseguir.',
-        w: { bg: { noble: 2, escriba: 2, erudito: 2 }, ab: { INT: 3, CAR: 1 }, sk: { historia: 2, investigacion: 2 }, tone: { reservado: 1, curioso: 1 } } },
-      { es: 'No lo necesito tanto. Necesito irme de donde estaba.',
-        w: { bg: { trotamundos: 3, marinero: 2, ermitano: 1 }, ab: { DES: 2, SAB: 1 }, sk: { supervivencia: 2, sigilo: 1 }, kit: { distancia: 1 }, tone: { reservado: 2 } } },
-    ],
-  },
-  {
-    id: 'pelea',
-    text: 'Se lía una pelea en cubierta y va a durar diez segundos. ¿Dónde estás cuando acaba?',
-    options: [
-      { es: 'En medio, entre el más grande y el que iba a llevarse lo peor.',
-        w: { bg: { soldado: 3, guardia: 2 }, ab: { FUE: 3, CON: 2 }, sk: { atletismo: 3 }, kit: { cuerpo: 3 }, tone: { protector: 3 } } },
-      { es: 'En una esquina, con algo pesado en la mano y buen ángulo.',
-        w: { bg: { guardia: 2, marinero: 2, guia: 1 }, ab: { DES: 3, SAB: 1 }, sk: { percepcion: 2, acrobacias: 1 }, kit: { distancia: 4 }, tone: { pragmatico: 2 } } },
-      { es: 'Detrás del que empezó, con la mano ya en su bolsillo.',
-        w: { bg: { criminal: 3, trotamundos: 2 }, ab: { DES: 3, CAR: 1 }, sk: { manos: 3, sigilo: 2 }, kit: { sutil: 3 }, tone: { astuto: 2 } } },
-      { es: 'Hablando muy alto, intentando que esto no acabe en sangre.',
-        w: { bg: { acolito: 2, artista: 2, mercader: 2 }, ab: { CAR: 3, SAB: 1 }, sk: { persuasion: 3, perspicacia: 1 }, kit: { apoyo: 3 }, tone: { protector: 1, leal: 1 } } },
-    ],
-  },
-  {
-    id: 'manos',
-    text: 'Antes de subir a este barco, ¿qué hacían tus manos todos los días?',
-    options: [
-      { es: 'Trabajo físico: cuerdas, tierra, piedra, animales.',
-        w: { bg: { granjero: 3, marinero: 2, artesano: 2 }, ab: { FUE: 2, CON: 3 }, sk: { atletismo: 2, animales: 2, naturaleza: 1 }, kit: { cuerpo: 2 }, tone: { directo: 1 } } },
-      { es: 'Un oficio fino: herramientas pequeñas y mucha precisión.',
-        w: { bg: { artesano: 3, escriba: 2 }, ab: { DES: 2, INT: 2 }, sk: { investigacion: 2, manos: 1 }, tone: { curioso: 1, reservado: 1 } } },
-      { es: 'Papel, tinta y libros de otros.',
-        w: { bg: { escriba: 3, erudito: 3, acolito: 1 }, ab: { INT: 3, SAB: 1 }, sk: { historia: 2, arcanos: 2, investigacion: 1 }, kit: { apoyo: 2 }, tone: { curioso: 3 } } },
-      { es: 'Un arma, y bastante a menudo.',
-        w: { bg: { soldado: 3, guardia: 2 }, ab: { FUE: 2, DES: 2, CON: 1 }, sk: { atletismo: 2, intimidacion: 1 }, kit: { cuerpo: 2 }, tone: { directo: 2 } } },
-    ],
-  },
-  {
-    id: 'puerta',
-    text: 'Una puerta cerrada, y al otro lado algo que os interesa. No hay prisa todavía.',
-    options: [
-      { es: 'La abro. Tengo con qué y sé hacerlo sin ruido.',
-        w: { bg: { criminal: 3, trotamundos: 2 }, ab: { DES: 3 }, sk: { manos: 3, sigilo: 1 }, kit: { sutil: 2 }, tone: { pragmatico: 1, astuto: 1 } } },
-      { es: 'La reviento. Vamos a hacer ruido igual dentro de dos minutos.',
-        w: { bg: { soldado: 2, granjero: 2, guardia: 1 }, ab: { FUE: 3, CON: 1 }, sk: { atletismo: 3 }, kit: { cuerpo: 3 }, tone: { temerario: 3 } } },
-      { es: 'Busco quién tiene la llave y por qué la tiene.',
-        w: { bg: { mercader: 2, noble: 2, charlatan: 2 }, ab: { CAR: 3, INT: 1 }, sk: { persuasion: 2, investigacion: 2 }, tone: { astuto: 2 } } },
-      { es: 'La estudio: bisagras, marcas, si la han abierto hace poco.',
-        w: { bg: { escriba: 2, erudito: 2, guia: 2 }, ab: { INT: 3, SAB: 2 }, sk: { investigacion: 3, percepcion: 2 }, kit: { distancia: 2 }, tone: { curioso: 3 } } },
-    ],
-  },
-  {
-    id: 'noche',
-    text: 'Guardia de madrugada, tú solo, cuatro horas. ¿Qué haces con ese rato?',
-    options: [
-      { es: 'Vigilar de verdad. Es para lo que estoy aquí.',
-        w: { bg: { guardia: 3, soldado: 2 }, ab: { SAB: 3, CON: 2 }, sk: { percepcion: 3 }, kit: { distancia: 3 }, tone: { leal: 2 } } },
-      { es: 'Rezar, o algo que se le parece bastante.',
-        w: { bg: { acolito: 3, ermitano: 3 }, ab: { SAB: 3, CAR: 1 }, sk: { religion: 3, medicina: 1 }, kit: { apoyo: 2 }, tone: { reservado: 2 } } },
-      { es: 'Escribir, leer o darle vueltas a algo que no entiendo.',
-        w: { bg: { erudito: 3, escriba: 2 }, ab: { INT: 3 }, sk: { arcanos: 2, historia: 2 }, tone: { curioso: 3 } } },
-      { es: 'Cantar bajito, o entretenerme con lo que tenga a mano.',
-        w: { bg: { artista: 3, marinero: 2, charlatan: 1 }, ab: { CAR: 3, DES: 1 }, sk: { interpretacion: 3, acrobacias: 1 }, tone: { directo: 1, astuto: 1 } } },
-    ],
-  },
-  {
-    id: 'herido',
-    text: 'Alguien del grupo sangra y no va a poder seguir andando. Tú eres el que está más cerca.',
-    options: [
-      { es: 'Le tapono la herida. Sé cómo se hace y no es la primera vez.',
-        w: { bg: { ermitano: 3, acolito: 2, granjero: 1 }, ab: { SAB: 3, INT: 1 }, sk: { medicina: 3 }, kit: { apoyo: 3 }, tone: { protector: 2 } } },
-      { es: 'Me lo echo al hombro y salimos de aquí.',
-        w: { bg: { soldado: 2, granjero: 2, marinero: 1 }, ab: { FUE: 3, CON: 2 }, sk: { atletismo: 3 }, kit: { cuerpo: 2 }, tone: { protector: 3 } } },
-      { es: 'Cubro mientras otro lo atiende. Que no venga nadie más.',
-        w: { bg: { guardia: 3, soldado: 1, guia: 1 }, ab: { DES: 3, CON: 1 }, sk: { percepcion: 2 }, kit: { distancia: 4 }, tone: { leal: 2 } } },
-      { es: 'Le hablo para que no se duerma, y le miento sobre lo que veo.',
-        w: { bg: { artista: 2, charlatan: 2, acolito: 1 }, ab: { CAR: 3, SAB: 1 }, sk: { engano: 2, persuasion: 2 }, kit: { apoyo: 2 }, tone: { leal: 1, astuto: 1 } } },
-    ],
-  },
-  {
-    id: 'orden',
-    text: 'Quien paga te da una orden que te parece un error, pero no una atrocidad.',
-    options: [
-      { es: 'La cumplo. Para eso he cobrado.',
-        w: { bg: { soldado: 3, guardia: 2, mercader: 1 }, ab: { CON: 2, FUE: 1 }, sk: { atletismo: 1, intimidacion: 1 }, kit: { cuerpo: 1 }, tone: { leal: 3 } } },
-      { es: 'La discuto delante de todos hasta que me den una razón.',
-        w: { bg: { noble: 3, soldado: 1, erudito: 1 }, ab: { CAR: 3, INT: 1 }, sk: { persuasion: 3, historia: 1 }, tone: { directo: 3 } } },
-      { es: 'Digo que sí y luego hago lo que me parece.',
-        w: { bg: { criminal: 2, charlatan: 3, trotamundos: 1 }, ab: { DES: 2, CAR: 2 }, sk: { engano: 3, sigilo: 1 }, kit: { sutil: 2 }, tone: { astuto: 3, pragmatico: 1 } } },
-      { es: 'Pregunto qué pasa si sale mal, y quién lo paga.',
-        w: { bg: { mercader: 3, escriba: 2 }, ab: { INT: 3, SAB: 1 }, sk: { perspicacia: 3, investigacion: 1 }, tone: { pragmatico: 3 } } },
-    ],
-  },
-  {
-    id: 'perdido',
-    text: 'Estáis lejos de cualquier camino y se ha ido la luz. ¿Qué aportas tú?',
-    options: [
-      { es: 'Sé leer el terreno. Nos saco de aquí antes del amanecer.',
-        w: { bg: { guia: 3, granjero: 1 }, ab: { SAB: 3, CON: 1 }, sk: { supervivencia: 3, naturaleza: 2 }, kit: { distancia: 3 }, tone: { pragmatico: 1, reservado: 1 } } },
-      { es: 'Sé por dónde vinimos: he ido contando y mirando atrás.',
-        w: { bg: { marinero: 2, escriba: 2, guia: 2 }, ab: { INT: 3, SAB: 1 }, sk: { investigacion: 2, percepcion: 2 }, kit: { distancia: 1 }, tone: { curioso: 2 } } },
-      { es: 'Aguanto. Puedo cargar y caminar más que nadie del grupo.',
-        w: { bg: { granjero: 3, soldado: 2 }, ab: { CON: 3, FUE: 2 }, sk: { atletismo: 2, supervivencia: 1 }, kit: { cuerpo: 2 }, tone: { leal: 1, directo: 1 } } },
-      { es: 'Mantengo la moral. Es lo que se rompe primero.',
-        w: { bg: { artista: 3, acolito: 2 }, ab: { CAR: 3 }, sk: { interpretacion: 2, persuasion: 2 }, kit: { apoyo: 2 }, tone: { protector: 2 } } },
-    ],
-  },
-  {
-    id: 'secreto',
-    text: 'Descubres algo que, si lo cuentas, hunde a alguien que te cae bien.',
-    options: [
-      { es: 'Se lo digo a él primero, y que decida.',
-        w: { bg: { acolito: 2, noble: 2, guardia: 1 }, ab: { CAR: 2, SAB: 2 }, sk: { perspicacia: 2, persuasion: 1 }, tone: { leal: 3 } } },
-      { es: 'Lo guardo. No es asunto mío y no gano nada.',
-        w: { bg: { ermitano: 2, trotamundos: 2, criminal: 1 }, ab: { SAB: 2, DES: 1 }, sk: { sigilo: 2, perspicacia: 1 }, kit: { sutil: 1 }, tone: { reservado: 3 } } },
-      { es: 'Lo guardo, pero lo apunto. Algún día valdrá algo.',
-        w: { bg: { charlatan: 2, mercader: 2, escriba: 2 }, ab: { INT: 3, CAR: 1 }, sk: { investigacion: 2, engano: 2 }, kit: { sutil: 2 }, tone: { pragmatico: 3, astuto: 1 } } },
-      { es: 'Lo cuento. La verdad no es negociable.',
-        w: { bg: { acolito: 3, erudito: 2, noble: 1 }, ab: { CAR: 2, INT: 1 }, sk: { religion: 2, persuasion: 2 }, tone: { directo: 3 } } },
-    ],
-  },
-  {
-    id: 'miedo',
-    text: 'Algo en la oscuridad se mueve mal: demasiado despacio y sin hacer ruido. ¿Qué haces?',
-    options: [
-      { es: 'Voy hacia ello. Prefiero saber qué es.',
-        w: { bg: { soldado: 2, guia: 1, erudito: 1 }, ab: { FUE: 2, CON: 2 }, sk: { atletismo: 1, percepcion: 1 }, kit: { cuerpo: 3 }, tone: { temerario: 3 } } },
-      { es: 'Me quedo quieto y dejo que pase de largo.',
-        w: { bg: { trotamundos: 2, guia: 2, ermitano: 1 }, ab: { DES: 3, SAB: 2 }, sk: { sigilo: 3, percepcion: 1 }, kit: { sutil: 2 }, tone: { reservado: 2, pragmatico: 1 } } },
-      { es: 'Me pongo delante de quien tengo detrás.',
-        w: { bg: { guardia: 3, soldado: 1, acolito: 1 }, ab: { CON: 3, FUE: 1 }, sk: { atletismo: 1, intimidacion: 1 }, kit: { cuerpo: 2 }, tone: { protector: 3 } } },
-      { es: 'Busco qué es eso en todo lo que he leído.',
-        w: { bg: { erudito: 3, acolito: 1, escriba: 1 }, ab: { INT: 3, SAB: 1 }, sk: { arcanos: 3, religion: 2 }, kit: { apoyo: 2 }, tone: { curioso: 3 } } },
-    ],
-  },
-  {
-    id: 'trato',
-    text: 'Un desconocido te ofrece un trato claramente mejor de lo que vales.',
-    options: [
-      { es: 'Acepto y ya veré. Necesito el dinero hoy.',
-        w: { bg: { trotamundos: 2, criminal: 2, marinero: 1 }, ab: { DES: 2, CON: 1 }, sk: { manos: 1, supervivencia: 1 }, kit: { sutil: 1 }, tone: { pragmatico: 3, temerario: 1 } } },
-      { es: 'Regateo a la baja. Quien ofrece de más es que esconde algo.',
-        w: { bg: { mercader: 3, charlatan: 2 }, ab: { CAR: 3, INT: 2 }, sk: { persuasion: 3, perspicacia: 2 }, tone: { astuto: 3 } } },
-      { es: 'Pregunto quién es y para quién trabaja, y no suelto el tema.',
-        w: { bg: { guardia: 2, escriba: 2, noble: 1 }, ab: { INT: 2, SAB: 2 }, sk: { investigacion: 3, perspicacia: 2 }, kit: { distancia: 1 }, tone: { curioso: 2, directo: 1 } } },
-      { es: 'Digo que no. Ya sé cómo acaban estas cosas.',
-        w: { bg: { ermitano: 3, granjero: 2 }, ab: { SAB: 3, CON: 1 }, sk: { perspicacia: 2, naturaleza: 1 }, tone: { reservado: 3 } } },
-    ],
-  },
-  {
-    id: 'debilidad',
-    text: 'Cuando la cosa se tuerce de verdad, ¿qué es lo primero que se te rompe?',
-    options: [
-      { es: 'La paciencia. Acabo haciendo algo antes de tiempo.',
-        w: { bg: { soldado: 2, criminal: 1, granjero: 1 }, ab: { FUE: 2, CON: 1 }, sk: { intimidacion: 2 }, kit: { cuerpo: 2 }, tone: { temerario: 3, directo: 1 } } },
-      { es: 'La lengua. Digo lo que no debía delante de quien no debía.',
-        w: { bg: { artista: 2, noble: 2, charlatan: 1 }, ab: { CAR: 3 }, sk: { interpretacion: 2, engano: 1 }, tone: { directo: 3 } } },
-      { es: 'La confianza. Dejo de contar con la gente y me cierro.',
-        w: { bg: { trotamundos: 2, ermitano: 2, criminal: 1 }, ab: { DES: 2, SAB: 1 }, sk: { sigilo: 2, perspicacia: 1 }, kit: { sutil: 2 }, tone: { reservado: 3 } } },
-      { es: 'El criterio. Me obsesiono con entenderlo y dejo de mirar lo demás.',
-        w: { bg: { erudito: 3, escriba: 2 }, ab: { INT: 3 }, sk: { arcanos: 2, investigacion: 2 }, tone: { curioso: 3 } } },
-    ],
-  },
-  {
-    id: 'final',
-    text: 'Última: si esta historia acabase bien para ti, ¿cómo sería ese final?',
-    options: [
-      { es: 'Vuelvo a casa y puedo mirar a la cara a quien dejé allí.',
-        w: { bg: { granjero: 2, soldado: 2, artesano: 1 }, ab: { CON: 2, FUE: 1 }, sk: { animales: 1, atletismo: 1 }, kit: { cuerpo: 1 }, tone: { leal: 3, protector: 1 } } },
-      { es: 'Salgo con suficiente dinero para no volver a aceptar algo así.',
-        w: { bg: { mercader: 2, criminal: 2, trotamundos: 2 }, ab: { DES: 2, CAR: 1 }, sk: { manos: 1, engano: 1 }, kit: { sutil: 1 }, tone: { pragmatico: 3 } } },
-      { es: 'Entiendo qué pasó aquí de verdad, y alguien más lo sabe.',
-        w: { bg: { erudito: 2, escriba: 2, acolito: 1 }, ab: { INT: 2, SAB: 1 }, sk: { investigacion: 2, historia: 1 }, tone: { curioso: 3, directo: 1 } } },
-      { es: 'Los tres seguimos vivos. Con eso me vale.',
-        w: { bg: { guardia: 2, acolito: 2, ermitano: 1 }, ab: { CON: 2, SAB: 2 }, sk: { medicina: 2, percepcion: 1 }, kit: { apoyo: 2 }, tone: { protector: 3, leal: 1 } } },
-    ],
-  },
-]);
-
-/* Suggested story lines per tone, offered in the last step. */
-export const TONE_STORY = Object.freeze({
-  astuto: {
-    personality: 'Nunca pregunta lo que quiere saber de forma directa.',
-    ideals: 'Todo el mundo quiere algo. El truco es averiguar qué antes que él.',
-    bonds: 'Alguien le enseñó a leer a la gente, y le está buscando.',
-    flaws: 'Da por hecho que le mienten, incluso cuando no.',
-  },
-  directo: {
-    personality: 'Dice en voz alta lo que los demás están pensando.',
-    ideals: 'Las cosas se arreglan hablando claro o no se arreglan.',
-    bonds: 'Le debe una disculpa a alguien y no sabe cómo darla.',
-    flaws: 'No sabe callarse delante de quien tiene poder sobre él.',
-  },
-  protector: {
-    personality: 'Cuenta a la gente del grupo cada vez que entran en un sitio.',
-    ideals: 'Nadie de los míos se queda atrás. Nadie.',
-    bonds: 'Ya perdió a alguien por llegar tarde una vez.',
-    flaws: 'Se pone en peligro por gente que no se lo ha pedido.',
-  },
-  curioso: {
-    personality: 'Toca lo que no debería tocar y lee lo que no le han dado.',
-    ideals: 'Saber es lo único que no te pueden quitar.',
-    bonds: 'Persigue una respuesta que empezó a buscar hace años.',
-    flaws: 'Se olvida del peligro cuando algo le interesa de verdad.',
-  },
-  pragmatico: {
-    personality: 'Calcula el coste de todo en voz baja antes de moverse.',
-    ideals: 'Los principios los pagan los que pueden permitírselos.',
-    bonds: 'Manda dinero a alguien que no sabe de dónde sale.',
-    flaws: 'Vende cualquier cosa si el precio sube lo suficiente.',
-  },
-  leal: {
-    personality: 'Cumple lo que promete aunque le salga caro.',
-    ideals: 'Una palabra dada es lo único que de verdad te pertenece.',
-    bonds: 'Sirve todavía a alguien que ya no está para mandarle nada.',
-    flaws: 'Sigue siendo fiel a quien hace tiempo que no lo merece.',
-  },
-  temerario: {
-    personality: 'Se mueve antes de que nadie acabe la frase.',
-    ideals: 'Dudar cuesta más vidas que equivocarse.',
-    bonds: 'Alguien le sacó de una que se había buscado solo.',
-    flaws: 'Confunde no tener miedo con no tener nada que perder.',
-  },
-  reservado: {
-    personality: 'Contesta con la mitad de las palabras que hacen falta.',
-    ideals: 'Lo que no se cuenta no se puede usar en tu contra.',
-    bonds: 'Guarda algo de alguien que no piensa devolver ni explicar.',
-    flaws: 'Se calla lo importante hasta que ya es tarde para decirlo.',
-  },
-});
-
-/* Curated spell picks per casting class, in priority order. Two slants: the
-   quiz chooses between them, and the player can change any of it afterwards.
-   Every list is long enough to fill the class's level-1 allowance. */
-export const SPELL_PICKS = Object.freeze({
-  bardo: {
-    ofensivo: { c: ['Vicious Mockery', 'Mage Hand', 'Minor Illusion', 'Prestidigitation'],
-                l: ['Dissonant Whispers', 'Faerie Fire', 'Thunderwave', 'Healing Word', 'Charm Person', 'Sleep'] },
-    apoyo:    { c: ['Vicious Mockery', 'Prestidigitation', 'Minor Illusion', 'Light'],
-                l: ['Healing Word', 'Bane', 'Charm Person', 'Cure Wounds', 'Faerie Fire', 'Heroism'] },
-  },
-  brujo: {
-    ofensivo: { c: ['Eldritch Blast', 'Chill Touch', 'Minor Illusion', 'True Strike'],
-                l: ['Hex', 'Hellish Rebuke', 'Armor of Agathys', 'Arms of Hadar'] },
-    apoyo:    { c: ['Eldritch Blast', 'Friends', 'Mage Hand', 'Minor Illusion'],
-                l: ['Hex', 'Charm Person', 'Comprehend Languages', 'Unseen Servant'] },
-  },
-  clerigo: {
-    ofensivo: { c: ['Sacred Flame', 'Toll the Dead', 'Guidance', 'Light', 'Thaumaturgy'],
-                l: ['Guiding Bolt', 'Bless', 'Inflict Wounds', 'Healing Word', 'Shield of Faith', 'Command'] },
-    apoyo:    { c: ['Guidance', 'Sacred Flame', 'Spare the Dying', 'Light', 'Resistance'],
-                l: ['Bless', 'Healing Word', 'Cure Wounds', 'Shield of Faith', 'Sanctuary', 'Guiding Bolt'] },
-  },
-  druida: {
-    ofensivo: { c: ['Produce Flame', 'Thorn Whip', 'Starry Wisp', 'Guidance'],
-                l: ['Entangle', 'Thunderwave', 'Ice Knife', 'Faerie Fire', 'Healing Word', 'Cure Wounds'] },
-    apoyo:    { c: ['Guidance', 'Produce Flame', 'Spare the Dying', 'Mending'],
-                l: ['Healing Word', 'Goodberry', 'Entangle', 'Cure Wounds', 'Fog Cloud', 'Purify Food and Drink'] },
-  },
-  explorador: {
-    ofensivo: { c: [], l: ["Hunter's Mark", 'Ensnaring Strike', 'Hail of Thorns'] },
-    apoyo:    { c: [], l: ["Hunter's Mark", 'Cure Wounds', 'Goodberry'] },
-  },
-  hechicero: {
-    ofensivo: { c: ['Fire Bolt', 'Sorcerous Burst', 'Ray of Frost', 'Prestidigitation', 'Minor Illusion'],
-                l: ['Magic Missile', 'Burning Hands', 'Chromatic Orb', 'Shield'] },
-    apoyo:    { c: ['Sorcerous Burst', 'Prestidigitation', 'Mage Hand', 'Minor Illusion', 'Message'],
-                l: ['Shield', 'Mage Armor', 'Sleep', 'Feather Fall'] },
-  },
-  mago: {
-    ofensivo: { c: ['Fire Bolt', 'Ray of Frost', 'Prestidigitation', 'Mage Hand'],
-                l: ['Magic Missile', 'Burning Hands', 'Shield', 'Mage Armor', 'Chromatic Orb', 'Grease'] },
-    apoyo:    { c: ['Fire Bolt', 'Mage Hand', 'Prestidigitation', 'Light'],
-                l: ['Shield', 'Mage Armor', 'Sleep', 'Detect Magic', 'Grease', 'Unseen Servant'] },
-  },
-  paladin: {
-    ofensivo: { c: [], l: ['Searing Smite', 'Thunderous Smite', 'Divine Favor'] },
-    apoyo:    { c: [], l: ['Bless', 'Cure Wounds', 'Shield of Faith'] },
-  },
-});
-
 export const POINT_BUY_COST = Object.freeze({ 8:0, 9:1, 10:2, 11:3, 12:4, 13:5, 14:7, 15:9 });
 export const POINT_BUY_TOTAL = 27;

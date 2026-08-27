@@ -1,121 +1,149 @@
-/* Jugadores — the party out of combat: who is hurt, who is conditioned, and
-   every number a DM looks up without asking the player to read their own
-   sheet aloud. Importing a .json here also writes it to players/ — the
-   folder IS the party now, and so does building one in the editor
-   (crear.js), which writes the same envelope the creator exports. */
+/* Jugadores — the party out of combat.
 
-import { html } from './html.js';
-import { state, commit, flash, saveEntity, playerPath } from './store.js';
-import { screens } from './app.js';
-import { CbCard, PickBar } from './cards.js';
-import { absorbCharacter } from './party.js';
+   `players/*.json` IS the party: there is no import step for a campaign that
+   already has files, and no roster to maintain. Dropping a sheet on the window
+   merges it by character id, which is what makes a player re-sending their
+   file after levelling up a non-event: the wounds stay, and a maximum that
+   dropped clamps them.
+
+   A sheet is built in the creator, never here. This app reads sheets and runs
+   a table with them. */
+
+/** @import { Character } from '../shared/types.js' */
+
+import { html } from '../html.js';
+import { state, commit, update, flash, wrote, saveEntity, saveSession } from './store.js';
+import { Card, BatchBox } from './cards.js';
+import { partyHandles, pcMaxHP, clearStatCache } from '../shared/handles.js';
+import { normalisePlay } from '../shared/session.js';
+import { shortRest, longRest } from '../shared/play.js';
 import { normalise } from '../rules/character.js';
-import { normaliseSession } from '../shared/session.js';
-import { partyHandles, clearStatCache } from '../shared/handles.js';
-import { longRest, seatAll } from '../shared/combat.js';
-import { slugify } from '../shared/util.js';
+import { layerPath } from '../shared/runs.js';
+import { LevelUp } from './subir.js';
 
-/* The editor is a whole screen's worth of rules UI that most sessions never
-   open — it loads on the click, not at boot. */
-const openEditor = id => import('./crear.js').then(m => m.openCharacterEditor(id));
-
-export function importCharacterFiles(files) {
-  for (const f of Array.from(files || [])) {
-    if (!/\.json$/i.test(f.name)) continue;
-    f.text().then(text => {
-      let raw;
-      try { raw = JSON.parse(text); } catch { flash(`${f.name} no es un JSON válido.`); return; }
-      /* The same picker and the same drop target take a character export AND
-         a whole mesa.json from the old file:// app — the envelope says which. */
-      if (raw.kind === 'dnd-dm-session' || (raw.session && raw.session.party)) {
-        importLegacySession(raw.session || raw);
-        return;
-      }
-      const c = normalise(raw.character || raw);
-      const result = absorbCharacter(c, 'importar');
-      flash(`${result === 'updated' ? 'Actualizado' : 'Importado'}: ${c.name || 'sin nombre'}.`);
-    }).catch(() => flash(`No se pudo leer ${f.name}.`));
-  }
-}
-
-/** The rescue for a session the old file:// app exported: mesa.json carries
-    the party and the bestiary inline, so everything in it can land in its
-    own file — the shape this app keeps everything in anyway. The one thing
-    that cannot survive is a map that lived as bytes in the old app's
-    localStorage: its stamp points at storage this origin cannot read. */
-function importLegacySession(rawSession) {
-  const incoming = normaliseSession(rawSession);
-  const droppedMap = incoming.field.map && !incoming.field.map.src;
-  if (droppedMap) incoming.field.map = null;
-  commit('importar mesa.json', s => {
-    /* mesa.json predates objects: the catalog lives in objects/*.json on
-       disk, not in any session, so the one already loaded survives the swap. */
-    incoming.objects = s.session.objects;
-    for (const c of incoming.party) {
-      const rel = incoming.playerFiles[c.id] || playerPath(slugify(c.name || '') || c.id);
-      incoming.playerFiles[c.id] = rel;
-      saveEntity(rel, { kind: 'dnd-creator-character', version: 2, character: c });
-    }
-    for (const b of incoming.bestiary) {
-      if (!b.file) b.file = 'monsters/' + slugify(b.name) + '.json';
-      saveEntity(b.file, b);
-    }
-    s.session = incoming;
-    clearStatCache();
-    seatAll(s.session);
-    s.ui.tab = incoming.encounter.on ? 'juego' : 'jugadores';
-  });
-  flash('Sesión importada: grupo, PNJ y mesa restaurados.'
-    + (droppedMap ? ' El mapa suelto no viaja en mesa.json — vuelve a soltar la imagen.' : ''));
-}
-
-function pickCharacterFiles() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json,application/json';
-  input.multiple = true;
-  input.onchange = () => importCharacterFiles(input.files);
-  input.click();
-}
-
-function Jugadores() {
+export function Jugadores() {
   const party = partyHandles(state.session);
-  return html`<main><section class="panel wide">
-    <div class="quickadd">
-      <button class="primary" title="Construye una ficha de nivel 1 aquí mismo, con las mismas reglas que el creador"
-        onClick=${() => openEditor(null)}>+ Nueva ficha</button>
-      <button class="ghost" onClick=${pickCharacterFiles}>Importar</button>
-      ${party.length ? html`<button class="ghost" onClick=${() => {
-        commit('descanso largo', s => longRest(s.session));
-        flash('Descanso largo: PG al máximo, estados fuera, un nivel de agotamiento menos.');
-      }}>Descanso largo</button>` : null}
+  const benched = new Set(state.session.field.benched);
+  const picked = [...state.ui.picked].filter(r => r.startsWith('pc:'));
+
+  return html`<section class="tab">
+    <div class="bar">
+      <h2 class="dsp">Jugadores <small>${party.length}</small></h2>
+      <button onClick=${pickSheets}>Importar ficha…</button>
+      <button onClick=${() => commit('descanso corto', s => shortRest(s.session))}
+        title="Devuelve las ranuras de pacto y los recursos de descanso corto">
+        Descanso corto
+      </button>
+      <button class="primary" onClick=${() => commit('descanso largo', s => longRest(s.session))}
+        title="PG al máximo, sin temporales ni estados, un nivel de agotamiento menos, todo repuesto">
+        Descanso largo
+      </button>
     </div>
-    ${party.length
-      ? html`<div class="board">${party.map(cb =>
-          html`<${CbCard} cb=${cb} key=${cb.ref}
-            opts=${{ bench: true, onEdit: () => openEditor(cb.id) }} />`)}</div>`
-      : html`<div class="drop" onClick=${pickCharacterFiles}>
-          <b>Arrastra aquí las fichas de tus jugadores</b>
-          Los <code>.json</code> que exporta el creador de personajes. También puedes${' '}
-          <button class="link">elegir los archivos</button>${' '}o${' '}
-          <button class="link" onClick=${e => { e.stopPropagation(); openEditor(null); }}>construir
-            una aquí mismo</button>.
-          <p class="muted" style="font-size:.85rem;margin:.8rem 0 0">
-            Cada ficha trae sus propios números: PG, CA, iniciativa, percepción pasiva.
-            Si un jugador cambia su ficha, vuelve a importarla y se actualiza sin perder
-            los PG que lleve.</p>
-        </div>`}
-  </section></main>
-  <${PickBar} />`;
+
+    ${!party.length && html`<p class="empty">
+      Nadie todavía. La carpeta <code>${layerPath(state.run, 'run', 'players/')}</code>
+      es la mesa: arrastra aquí las fichas que exportó el creador, o cópialas dentro.
+    </p>`}
+
+    <${BatchBox} refs=${picked} />
+
+    <div class="cards">
+      ${party.filter(cb => !benched.has(cb.ref)).map(cb => html`
+        <div class="slot" key=${cb.ref}>
+          <${Card} cb=${cb} open=${state.ui.openRows.has(cb.ref)} />
+          <button class="link bench" onClick=${() => bench(cb.ref, true)}
+            title="Fuera del tablero sin tocar la ficha">al banquillo</button>
+        </div>`)}
+    </div>
+
+    ${state.ui.modal === 'levelup' && html`<${LevelUp} />`}
+
+    ${benched.size > 0 && html`<div class="benched">
+      <h3 class="dsp">En el banquillo</h3>
+      ${party.filter(cb => benched.has(cb.ref)).map(cb => html`
+        <div class="row" key=${cb.ref}>
+          <span>${cb.name}</span>
+          <button class="link" onClick=${() => bench(cb.ref, false)}>volver</button>
+        </div>`)}
+    </div>`}
+  </section>`;
 }
 
-screens.jugadores = Jugadores;
+/** Off the board on purpose, without touching the sheet. The only off-board
+    state a player has — a monster taken off the board is simply deleted.
+    @param {string} ref @param {boolean} on */
+function bench(ref, on) {
+  commit(on ? 'al banquillo' : 'de vuelta al tablero', s => {
+    const f = s.session.field;
+    f.benched = on ? [...new Set([...f.benched, ref])] : f.benched.filter(r => r !== ref);
+    if (on) delete f.tokens[ref];
+  });
+}
 
-/* Dropping .json files anywhere on the page imports characters, whatever tab
-   is open — same as the old app. Images are the map's business (juego.js). */
-addEventListener('dragover', e => e.preventDefault());
-addEventListener('drop', e => {
-  e.preventDefault();
-  const files = [...(e.dataTransfer?.files || [])].filter(f => /\.json$/i.test(f.name));
-  if (files.length) importCharacterFiles(files);
-});
+/* --------------------------------------------------------------- import */
+
+async function pickSheets() {
+  /** @type {any} */
+  const w = window;
+  if (!w.showOpenFilePicker) return;
+  let handles;
+  try {
+    handles = await w.showOpenFilePicker({
+      multiple: true,
+      types: [{ description: 'Fichas', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch { return; /* cancelled */ }
+  for (const h of handles) await absorbFile(await h.getFile());
+}
+
+/** One dropped or picked `.json`. @param {File} file */
+export async function absorbFile(file) {
+  let raw;
+  try { raw = JSON.parse(await file.text()); } catch {
+    flash(`${file.name} no es un JSON que pueda leer.`);
+    return;
+  }
+  const character = raw?.character || raw;
+  if (!character || typeof character !== 'object' || !character.class) {
+    flash(`${file.name} no parece una ficha de personaje.`);
+    return;
+  }
+  absorbCharacter(normalise(character));
+}
+
+/**
+ * A sheet joins the party, or replaces the one with its id. Wounds survive:
+ * the only thing a re-import may do to play state is clamp hit points that no
+ * longer fit under a lowered maximum.
+ * @param {Character} c
+ */
+export function absorbCharacter(c) {
+  /** @type {string} */
+  let rel = '';
+  commit(`ficha de ${c.name || 'alguien'}`, s => {
+    const session = s.session;
+    const at = session.party.findIndex(x => x.id === c.id);
+    if (at >= 0) session.party[at] = c;
+    else session.party.push(c);
+    if (!session.play[c.id]) session.play[c.id] = normalisePlay(null);
+    clearStatCache();
+    const p = session.play[c.id];
+    if (p.hp != null) p.hp = Math.min(p.hp, pcMaxHP(session, c));
+
+    /* A member keeps the path it arrived on: renaming a character does not
+       move their file. The party is always this mesa's, so there is no layer
+       to ask about. */
+    rel = session.playerFiles[c.id]
+      || layerPath(state.run, 'run', `players/${slugify(c.name) || c.id}.json`);
+    session.playerFiles[c.id] = rel;
+  });
+  /* Written back in the creator's own envelope, so the file stays a file the
+     player can open in the creator again. */
+  saveEntity(rel, { kind: 'dnd-creator-character', version: 2, character: c });
+  saveSession();
+  wrote(c.name || 'La ficha', rel);
+}
+
+export const slugify = (/** @type {string} */ s) => String(s || '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

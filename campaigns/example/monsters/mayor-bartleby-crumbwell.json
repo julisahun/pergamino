@@ -5,11 +5,15 @@
   "ac": 10,
   "hpMax": 6,
   "initMod": -1,
-  "speed": 25,
+  "speed": 7.5,
   "note": "The halfling mayor of Curdmoor, up for re-election the week after the festival and not handling this well. Hired the party. Will cry in at least one language per scene he appears in. Not a threat to anyone but himself.",
   "portrait": null,
   "abilities": [
-    { "id": "cmex09bartlebysob", "name": "Strategic Sobbing", "desc": "No mechanical effect. Deeply effective on anyone with a shred of empathy." }
+    {
+      "id": "cmex09bartlebysob",
+      "name": "Strategic Sobbing",
+      "desc": "No mechanical effect. Deeply effective on anyone with a shred of empathy."
+    }
   ],
   "file": "monsters/mayor-bartleby-crumbwell.json"
 }

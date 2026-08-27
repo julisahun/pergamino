@@ -1,0 +1,7 @@
+{
+  "id": "mouldy-lantern",
+  "name": "Farol Enmohecido",
+  "description": "Su luz verdosa huele levemente a queso azul.",
+  "mods": { "pp": 1 },
+  "effects": ["Luz tenue en 6 m; el moho brilla más cerca de los túneles."]
+}

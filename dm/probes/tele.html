@@ -1,0 +1,130 @@
+<!doctype html><meta charset=utf-8><title>probe · tele</title>
+<link rel="stylesheet" href="/src/styles/tokens.css">
+<body><pre id=out></pre>
+<script type="module">
+/* Stage 2's gate: two real windows, the real /tv page, the real modules.
+
+   The admin half runs here — it points the store at an OPFS campaign instead
+   of a picked folder, which is the only difference from a real table — opens
+   the television with the app's own «Tablero ↗», and then inspects it from
+   outside: same origin, so `tv.document` and `tv.performance` are readable.
+
+   The claim being tested is not "it looks right". It is:
+
+     · the television renders all three modes, from the stored mode alone
+     · it reads the map out of the campaign folder ITSELF, through the handle
+     · NOTHING about the campaign crosses the network — asserted against the
+       television's own resource timeline, not assumed
+     · pause freezes it, and lifting the pause hands over what it missed */
+
+import { state, commit, tweak, onAfterMutation, urlFor } from '/src/admin/store.js';
+import { loadCampaign } from '/src/admin/campaign.js';
+import { pushState, openTV, sentProjection } from '/src/admin/broadcast.js';
+import { writeFile } from '/src/shared/files.js';
+import { probe, check, sleep, until, freshRoot } from './kit.js';
+
+await probe('TELE', async () => {
+
+onAfterMutation(pushState);
+
+/* ------------------------------------------------- a campaign on disk */
+
+const root = await freshRoot();
+
+/* A real 1x1 JPEG, so the television is loading an image and not a text file
+   pretending to be one. */
+const JPEG = Uint8Array.from(atob(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
+  'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA' +
+  'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=='),
+  c => c.charCodeAt(0));
+await writeFile(root, 'assets/maps/cala.jpg', new Blob([JPEG], { type: 'image/jpeg' }));
+await writeFile(root, 'scenarios/cala.json', JSON.stringify({ id: 'cala', name: 'La cala' }));
+
+await loadCampaign(root);
+check('the admin opened the campaign', state.rootName != null, true);
+check('a fresh table shows nothing', state.session.field.mode, 'nada');
+
+/* ------------------------------------------------- the television window */
+
+openTV();
+const tv = await until(() => {
+  for (const w of [window.open('', 'dnd-dm-tv')]) if (w && w.location.pathname === '/tv') return w;
+  return null;
+});
+check('the television window is open on /tv', !!tv, true);
+
+const tvBoard = () => tv?.document?.querySelector('.tb');
+check('it rendered', !!(await until(tvBoard)), true);
+check('and it says it is showing nothing',
+  await until(() => tvBoard()?.className.includes('nada')), true);
+
+/* ------------------------------------------------------- the three modes */
+
+commit('poner la tele en escena', s => {
+  s.session.field.mode = 'escena';
+  s.session.field.map = { src: 'assets/maps/cala.jpg' };
+});
+check('escena: the television switches on the stored mode alone',
+  !!(await until(() => tvBoard()?.className.includes('escena'))), true);
+
+const art = await until(() => {
+  const el = tv.document.querySelector('.art');
+  return el && el.style.backgroundImage.includes('blob:') ? el.style.backgroundImage : null;
+});
+check('and it resolved the map through the folder handle, as a local blob',
+  art ? art.startsWith('url("blob:') : art, true);
+
+commit('poner la tele en tablero', s => { s.session.field.mode = 'tablero'; });
+check('tablero: the grid appears',
+  !!(await until(() => tv.document.querySelector('.field'))), true);
+const grid = tv.document.querySelector('.field');
+check('at the size the field says',
+  [grid?.style.getPropertyValue('--cols'), grid?.style.getPropertyValue('--rows')],
+  ['24', '14']);
+
+commit('poner la tele en nada', s => { s.session.field.mode = 'nada'; });
+check('nada: it goes quiet again',
+  !!(await until(() => tvBoard()?.className.includes('nada'))), true);
+check('and a picture is not even in the payload when nothing is showing',
+  sentProjection()?.map, null);
+
+/* ----------------------------------------------------------------- hud */
+
+commit('poner la tele en escena', s => { s.session.field.mode = 'escena'; });
+await until(() => tvBoard()?.className.includes('escena'));
+check('the strips are off by default — not a consequence of anything',
+  !!tv.document.querySelector('.pane'), false);
+commit('poner las fichas en la tele', s => { s.session.field.hud = true; });
+check('and on when the DM says so',
+  !!(await until(() => tv.document.querySelector('.pane'))), true);
+
+/* --------------------------------------------------------------- pause */
+
+tweak(s => { s.session.field.paused = true; });
+const frozen = sentProjection()?.seq;
+commit('poner la tele en tablero', s => { s.session.field.mode = 'tablero'; });
+await sleep(400);
+check('paused, the television keeps the picture it had',
+  [sentProjection()?.seq, tvBoard()?.className.includes('escena')], [frozen, true]);
+check('while the admin knows perfectly well what the table is', state.session.field.mode, 'tablero');
+
+tweak(s => { s.session.field.paused = false; });
+check('lifting the pause hands over what it missed',
+  !!(await until(() => tvBoard()?.className.includes('tablero'))), true);
+
+/* ------------------------------------------------- the network claim */
+
+const requests = tv.performance.getEntriesByType('resource').map(e => e.name);
+const foreign = requests.filter(u => {
+  const p = new URL(u).pathname;
+  return !(p.startsWith('/src/') || p.startsWith('/vendor/') || p === '/tv' || p === '/favicon.ico');
+});
+check('the television requested nothing but the app itself', foreign, []);
+check('and nothing that looks like a campaign file',
+  requests.filter(u => /cala|assets|session\.json|scenarios/.test(u)), []);
+check('the whole projection carries paths, not bytes',
+  JSON.stringify(sentProjection()).length < 2000, true);
+
+});
+</script>

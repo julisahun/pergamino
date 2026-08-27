@@ -14,6 +14,7 @@ const STEP = TICK_MS / FADE_MS;
 
 /** Pure fade arithmetic, split out so node --test can chew on it: one tick's
     worth of movement from `volume` toward `target`. */
+/** @param {number} volume @param {number} target */
 export function nextVolume(volume, target) {
   if (Math.abs(volume - target) <= STEP) return target;
   return Math.min(1, Math.max(0, volume + (target > volume ? STEP : -STEP)));
@@ -31,12 +32,14 @@ export function loadLocalVolume() {
   } catch { return 1; }
 }
 
+/** @param {number} v */
 export function saveLocalVolume(v) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify({ volume: v })); } catch { /* private mode */ }
 }
 
 let localVolume = loadLocalVolume();
 export const getLocalVolume = () => localVolume;
+/** @param {number} v */
 export function setLocalVolume(v) {
   localVolume = Math.min(1, Math.max(0, v));
   saveLocalVolume(localVolume);
@@ -46,10 +49,12 @@ export function setLocalVolume(v) {
 const newLayer = () => {
   const el = [new Audio(), new Audio()];
   for (const a of el) { a.preload = 'auto'; a.loop = true; a.volume = 0; }
-  return { el, cur: 0, src: null, want: [0, 0] };
+  return { el, cur: 0, src: /** @type {string|null} */ (null), want: [0, 0] };
 };
 
+/** @type {Record<string, ReturnType<typeof newLayer>>} */
 const layers = { music: newLayer(), ambience: newLayer() };
+/** @type {any} */
 let lastSpec = null;
 
 /* The browser rejects play() with NotAllowedError until this window has been
@@ -59,20 +64,24 @@ let blocked = false;
 /* Only NotAllowedError asks for a tap. A file that is missing or that this
    browser cannot decode rejects too, and pleading with the room to touch the
    screen would not fix it — the admin window already names a missing asset. */
+/** @param {HTMLAudioElement} a */
 function start(a) {
   const p = a.play();
   if (p && p.catch) p.catch(err => { if (err && err.name === 'NotAllowedError') gate(true); });
 }
 
+/** @param {boolean} on */
 function gate(on) {
   if (on === blocked) return;
   blocked = on;
-  document.getElementById('sound').classList.toggle('on', on);
+  const pill = document.getElementById('sound');
+  if (pill) pill.hidden = !on;
 }
 
 /** The whole audio state, recomputed from one payload. Idempotent: a payload
     that says the same thing must do nothing at all, or the music would
     restart on every push. */
+/** @param {{music: any, ambience: any, master: number}|null} spec */
 export function applyAudio(spec) {
   lastSpec = spec;
   /* Number(undefined) is NaN and `NaN ?? 1` is still NaN — ?? only catches
@@ -80,7 +89,7 @@ export function applyAudio(spec) {
      throws. */
   const m = Number(spec ? spec.master : 0);
   const master = (!spec ? 0 : (Number.isFinite(m) ? Math.min(1, Math.max(0, m)) : 1)) * localVolume;
-  for (const name of ['music', 'ambience']) {
+  for (const name of /** @type {const} */ (['music', 'ambience'])) {
     const l = layers[name];
     const want = spec ? spec[name] : null;
     const src = want && want.src ? String(want.src) : null;
@@ -104,7 +113,7 @@ export function applyAudio(spec) {
 }
 
 setInterval(() => {
-  for (const name of ['music', 'ambience']) {
+  for (const name of /** @type {const} */ (['music', 'ambience'])) {
     const l = layers[name];
     l.el.forEach((a, i) => {
       a.volume = nextVolume(a.volume, l.want[i]);

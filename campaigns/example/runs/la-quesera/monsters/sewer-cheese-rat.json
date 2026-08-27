@@ -1,0 +1,14 @@
+{
+  "id": "sewer-cheese-rat",
+  "name": "Rata Quesera (la de esta mesa)",
+  "tag": "alimaña",
+  "ac": 11,
+  "hpMax": 7,
+  "initMod": 2,
+  "speed": 9,
+  "note": "Esta mesa la dejó escapar en la sesión 1: ahora es más grande y guarda rencor.",
+  "portrait": null,
+  "abilities": [
+    { "id": "rat-nibble", "name": "Mordisco Rencoroso", "desc": "+4 al ataque, 1d4+2 perforante." }
+  ]
+}

@@ -1,20 +1,26 @@
-/* The storage layer: the File System Access API against the campaign folder
-   the DM picked. The browser itself holds a readwrite grant on that folder —
-   no server ever reads or writes campaign files. The one remembered
-   directory handle persists in IndexedDB (structured-cloneable), and the
-   permission is re-checked silently on boot, prompted only from a click.
+/* Storage: the File System Access API against the campaign folder the DM
+   picked. The browser itself holds the readwrite grant; no server ever reads
+   or writes a campaign file, and there is no endpoint that could.
 
-   Everything here speaks campaign-relative paths ("scenarios/posada.json"),
-   the same paths the old HTTP API used, so the rest of the app kept its
-   vocabulary. */
+   Everything here speaks campaign-relative paths ("monsters/vann.json",
+   "runs/guils/session.json") — the same strings runs.js does arithmetic on,
+   the writer writes, the trash records and the poll compares mtimes for. One
+   vocabulary, end to end.
 
-import { RUNS_DIR, classify, runRel, runLabel, mesaName } from '../shared/runs.js';
+   Chromium-only, and it needs a secure context (https, or localhost). */
 
+/** @import { Layer, Run } from '../shared/types.js' */
+import { RUNS_DIR, classify, runLabel, mesaName } from '../shared/runs.js';
+import { writeFile } from '../shared/files.js';
+
+/** The folders a brand-new campaign gets. `runs/` is deliberately NOT among
+    them: a campaign starts flat, with one implicit table, and grows a second
+    layer only when the DM makes a second mesa. */
 const SUBDIRS = ['scenarios', 'assets', 'players', 'monsters', 'objects', 'story'];
 
-/* ------------------------------------------------- the remembered handle
-   idb-keyval would be a vendored file for one key — a bare get/set/del over
-   one object store is all this needs. */
+/* -------------------------------------------------- the remembered handle
+   idb-keyval would be a vendored file for two keys; a bare get/put over one
+   object store is all this needs. */
 
 const DB_NAME = 'dnd-dm';
 const KV_STORE = 'kv';
@@ -22,7 +28,7 @@ const ROOT_KEY = 'campaign-root';
 const RUN_KEY = 'campaign-run';
 
 function openDB() {
-  return new Promise((resolve, reject) => {
+  return new Promise((/** @type {(db: IDBDatabase) => void} */ resolve, reject) => {
     const rq = indexedDB.open(DB_NAME, 1);
     rq.onupgradeneeded = () => rq.result.createObjectStore(KV_STORE);
     rq.onsuccess = () => resolve(rq.result);
@@ -30,51 +36,65 @@ function openDB() {
   });
 }
 
+/** @param {IDBTransactionMode} mode @param {(s: IDBObjectStore) => IDBRequest} op */
 function kv(mode, op) {
-  return openDB().then(db => new Promise((resolve, reject) => {
+  return openDB().then(db => new Promise((/** @type {(v: any) => void} */ resolve, reject) => {
     const rq = op(db.transaction(KV_STORE, mode).objectStore(KV_STORE));
     rq.onsuccess = () => { resolve(rq.result); db.close(); };
     rq.onerror = () => { reject(rq.error); db.close(); };
   }));
 }
 
-export const saveHandle = handle => kv('readwrite', s => s.put(handle, ROOT_KEY));
-export const loadHandle = () => kv('readonly', s => s.get(ROOT_KEY)).then(h => h ?? null);
+export const saveHandle = (/** @type {FileSystemDirectoryHandle} */ h) =>
+  kv('readwrite', s => s.put(h, ROOT_KEY));
+export const loadHandle = () =>
+  kv('readonly', s => s.get(ROOT_KEY)).then(h => /** @type {FileSystemDirectoryHandle|null} */ (h ?? null));
 export const clearHandle = () => kv('readwrite', s => s.delete(ROOT_KEY));
 
-/* Which mesa this device sat at last, so reopening the remembered folder
-   does not ask again. A slug (`'guils'`), `''` for a flat campaign's
-   implicit run, or `'#prep'` for preparation-only mode. */
-export const saveRun = slug => kv('readwrite', s => s.put(String(slug ?? ''), RUN_KEY));
-export const loadRun = () => kv('readonly', s => s.get(RUN_KEY)).then(v => v ?? null);
+/** Which mesa this device sat at last, so reopening the remembered folder does
+    not ask again: a slug, `''` for a flat campaign, `'#prep'` for preparation. */
+export const saveRunSlug = (/** @type {string} */ slug) =>
+  kv('readwrite', s => s.put(String(slug ?? ''), RUN_KEY));
+export const loadRunSlug = () =>
+  kv('readonly', s => s.get(RUN_KEY)).then(v => /** @type {string|null} */ (v ?? null));
 
 /* ------------------------------------------------------------ permission */
 
-export function pickCampaignFolder() {
-  return window.showDirectoryPicker({ mode: 'readwrite', id: 'dnd-dm-campaign' });
-}
+export const pickCampaignFolder = () =>
+  window.showDirectoryPicker({ mode: 'readwrite', id: 'dnd-dm-campaign' });
 
-/** Existing permission WITHOUT prompting — safe on page load, outside any
-    user gesture, to decide whether the remembered folder auto-reopens. */
+/** Existing permission WITHOUT prompting — safe on page load, outside any user
+    gesture, to decide whether the remembered folder reopens by itself.
+    @param {FileSystemDirectoryHandle} handle */
 export async function hasPermission(handle) {
-  if (!handle.queryPermission) return true;      // OPFS handles in tests
+  /* OPFS handles (what the probes run against) have no permission model at
+     all: nothing to ask, nothing to grant. */
+  if (!handle.queryPermission) return true;
   return (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
 }
 
-/** Ensure readwrite permission, prompting if needed — only ever call this
-    from inside a real user gesture (a click handler). */
+/** Ensure readwrite permission, prompting if needed — only ever call this from
+    inside a real user gesture. @param {FileSystemDirectoryHandle} handle */
 export async function verifyPermission(handle) {
   if (await hasPermission(handle)) return true;
+  if (!handle.requestPermission) return true;      // OPFS again: nothing to ask
   return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
 }
 
-/* -------------------------------------------------------------- walking */
+/* --------------------------------------------------------------- walking */
 
-const skip = name => name.startsWith('.') || name.endsWith('.crswap');
+/* Dotfiles are invisible (so a `.obsidian/` or a `.DS_Store` is never an
+   entity), and so are Chromium's in-flight `.crswap` write buffers: every
+   createWritable() stages into a sibling one, and a walker that saw them would
+   read every autosave as an edit made outside the app. */
+const skip = (/** @type {string} */ name) => name.startsWith('.') || name.endsWith('.crswap');
 
-/** Every visible file under `dir` as {path, handle}; dotfiles, Chromium's
-    in-flight .crswap write buffers, and trash/ stay invisible — the same
-    holes the old server-side snapshot() had. */
+/**
+ * Every visible file under `dir`, as campaign-relative paths. `trash/` is
+ * skipped: deleted things are kept, not shown.
+ * @param {FileSystemDirectoryHandle} dir @param {string} prefix
+ * @param {{path: string, handle: FileSystemFileHandle}[]} out
+ */
 async function collectFiles(dir, prefix, out) {
   for await (const handle of dir.values()) {
     if (skip(handle.name)) continue;
@@ -88,10 +108,11 @@ async function collectFiles(dir, prefix, out) {
   return out;
 }
 
-/** {relpath: lastModified} for the whole campaign — what the external-edit
-    poll compares between ticks. */
+/** {relpath: lastModified} for the whole campaign — what the external-edit poll
+    compares between ticks. @param {FileSystemDirectoryHandle} root */
 export async function scanMtimes(root) {
   const files = await collectFiles(root, '', []);
+  /** @type {Map<string, number>} */
   const out = new Map();
   await Promise.all(files.map(async f => {
     try { out.set(f.path, (await f.handle.getFile()).lastModified); } catch { /* raced a delete */ }
@@ -101,57 +122,80 @@ export async function scanMtimes(root) {
 
 /* ------------------------------------------------------------- the tree */
 
-/** The whole boot payload, in exactly the shape the old GET /api/c/:name/tree
-    returned: {session, scenarios, players, monsters, objects, story, assets}
-    with JSON/MD entries as {path, text} and assets as bare relpaths — plus
-    the mtime map, so the caller can seed the external-edit baseline for
-    free.
+/** One file the app reads, and which layer it came from.
+    @typedef {{ path: string, text: string, layer: Layer, shadows?: string|null }} FileEntry */
 
-    `runPath` says which mesa's table to read: `''` is a flat campaign's
-    implicit run (the root itself), `'runs/<mesa>'` a real one, and `null`
-    preparation-only mode, which has no session and no party. Which bucket a
-    path lands in is `classify()` in shared/runs.js — the walker collects
-    everything and asks. */
+/** @typedef {{ path: string, layer: Layer }} AssetEntry */
+
+/**
+ * @typedef {Object} Tree
+ * @property {string|null} session
+ * @property {FileEntry[]} players
+ * @property {FileEntry[]} scenarios
+ * @property {FileEntry[]} monsters
+ * @property {FileEntry[]} objects
+ * @property {FileEntry[]} story
+ * @property {AssetEntry[]} assets
+ */
+
+const blankTree = () => /** @type {Tree} */ ({
+  session: null, players: [], scenarios: [], monsters: [], objects: [], story: [], assets: [],
+});
+
+/**
+ * The whole boot payload, in one walk. Which bucket and which layer a path
+ * lands in is `classify()` in shared/runs.js — the walker collects everything
+ * and asks, so there is exactly one answer to "what can the app see".
+ *
+ * Nothing is resolved here: both layers' entries come back, each stamped with
+ * its layer, and shadowing happens once the files are parsed and have ids.
+ *
+ * @param {FileSystemDirectoryHandle} root
+ * @param {string|null} runPath  '' flat · 'runs/<mesa>' · null preparation-only
+ * @returns {Promise<{tree: Tree, mtimes: Map<string, number>}>}
+ */
 export async function readTree(root, runPath = '') {
   const files = (await collectFiles(root, '', [])).sort((a, b) => a.path < b.path ? -1 : 1);
-  const tree = { session: null, scenarios: [], players: [], monsters: [], objects: [], story: [], assets: [] };
+  const tree = blankTree();
+  /** @type {Map<string, number>} */
   const mtimes = new Map();
   await Promise.all(files.map(async ({ path, handle }) => {
     let file;
     try { file = await handle.getFile(); } catch { return; }
     mtimes.set(path, file.lastModified);
-    const bucket = classify(path, runPath);
-    if (!bucket) return;
-    if (bucket === 'session') tree.session = await file.text();
-    else if (bucket === 'assets') tree.assets.push(path);
-    else tree[bucket].push({ path, text: await file.text() });
+    const hit = classify(path, runPath);
+    if (!hit) return;
+    if (hit.bucket === 'session') tree.session = await file.text();
+    else if (hit.bucket === 'assets') tree.assets.push({ path, layer: hit.layer });
+    else tree[hit.bucket].push({ path, text: await file.text(), layer: hit.layer });
   }));
-  for (const k of ['scenarios', 'players', 'monsters', 'objects', 'story']) {
+  for (const k of /** @type {const} */ (['players', 'scenarios', 'monsters', 'objects', 'story'])) {
     tree[k].sort((a, b) => a.path < b.path ? -1 : 1);
   }
-  tree.assets.sort();
+  tree.assets.sort((a, b) => a.path < b.path ? -1 : 1);
   return { tree, mtimes };
 }
 
-/* ---------------------------------------------------------------- runs
-   A campaign either has a `runs/` folder — one subfolder per mesa, and the
-   DM picks which one to sit at — or it does not, and then the root is the
-   one implicit run. Nothing here creates anything: a run is a folder, and
-   the picker only lists what is on disk. */
+/* ------------------------------------------------------------------ runs */
 
-/** Every mesa on disk, with just enough to tell them apart in the picker:
-    how many sheets it has and whether it has ever been played. */
+/** @typedef {{ slug: string, path: string, label: string, players: number, played: boolean }} RunInfo */
+
+/** Every mesa on disk, with just enough to tell them apart in the picker.
+    Nothing here creates anything: a run is a folder, and the picker lists what
+    is there. @param {FileSystemDirectoryHandle} root @returns {Promise<RunInfo[]>} */
 export async function listRuns(root) {
   let dir;
   try { dir = await root.getDirectoryHandle(RUNS_DIR); } catch { return []; }
+  /** @type {RunInfo[]} */
   const runs = [];
   for await (const entry of dir.values()) {
     if (entry.kind !== 'directory' || skip(entry.name)) continue;
-    runs.push(await describeRun(entry));
+    runs.push(await describeRun(/** @type {FileSystemDirectoryHandle} */ (entry)));
   }
   return runs.sort((a, b) => a.label.localeCompare(b.label, 'es'));
 }
 
+/** @param {FileSystemDirectoryHandle} dir @returns {Promise<RunInfo>} */
 async function describeRun(dir) {
   const slug = dir.name;
   const run = { slug, path: `${RUNS_DIR}/${slug}`, label: runLabel(slug), players: 0, played: false };
@@ -165,8 +209,8 @@ async function describeRun(dir) {
     await dir.getFileHandle('session.json');
     run.played = true;
   } catch { /* never sat down */ }
-  /* `runs/guils/guils.md` carries `mesa: Guils` — the name the DM wrote,
-     which beats a humanised slug when it is there. */
+  /* `runs/guils/guils.md` carries `mesa: Guils` — the name the DM wrote beats a
+     humanised slug whenever it is there. */
   try {
     const note = await (await dir.getFileHandle(`${slug}.md`)).getFile();
     run.label = mesaName(await note.text()) || run.label;
@@ -174,91 +218,52 @@ async function describeRun(dir) {
   return run;
 }
 
-/* ---------------------------------------------------------- reads/writes */
+/* Reading and writing single files lives in shared/files.js: the television
+   needs that half too, and it has no business importing the admin's grants.
+   Re-exported here so call sites keep one import. */
+export { readBlob, readText, writeFile, deleteToTrash } from '../shared/files.js';
 
-async function dirFor(root, rel, { create = false } = {}) {
-  const parts = rel.split('/');
-  let dir = root;
-  for (const part of parts.slice(0, -1)) {
-    dir = await dir.getDirectoryHandle(part, { create });
-  }
-  return { dir, name: parts[parts.length - 1] };
-}
+/* --------------------------------------------------------- new campaigns */
 
-export async function readAssetBlob(root, rel) {
-  const { dir, name } = await dirFor(root, rel);
-  return (await dir.getFileHandle(name)).getFile();     // a File IS a Blob
-}
-
-/** Write string or Blob. createWritable() stages into a .crswap file and
-    replaces atomically on close — a crash mid-write never leaves half a
-    monster on disk, same promise the old server's tempfile+rename made. */
-export async function writeFile(root, rel, body) {
-  const { dir, name } = await dirFor(root, rel, { create: true });
-  const handle = await dir.getFileHandle(name, { create: true });
-  const w = await handle.createWritable();
-  await w.write(body);
-  await w.close();
-  return (await handle.getFile()).lastModified;
-}
-
-/** Copy into trash/<basename>-<epoch-ms>, then remove the original — the
-    same "never unlink" contract server.py kept. */
-export async function deleteToTrash(root, rel) {
-  const { dir, name } = await dirFor(root, rel);
-  const blob = await (await dir.getFileHandle(name)).getFile();
-  const trashed = `trash/${name}-${Date.now()}`;
-  await writeFile(root, trashed, blob);
-  await dir.removeEntry(name);
-  return { ok: true, trashedTo: trashed };
-}
-
-/* -------------------------------------------------------- new campaigns */
-
-/** True when the folder has nothing visible in it (dotfiles like .DS_Store
-    do not count) — the case "Abrir carpeta" treats as "start a campaign
-    here" by seeding the subdirs. */
+/** True when the folder has nothing visible in it — the case "Abrir carpeta"
+    treats as "start a campaign here". @param {FileSystemDirectoryHandle} root */
 export async function isEmptyDir(root) {
-  for await (const handle of root.values()) {
-    if (!skip(handle.name)) return false;
-  }
+  for await (const handle of root.values()) if (!skip(handle.name)) return false;
   return true;
 }
 
+/** @param {FileSystemDirectoryHandle} root */
 export async function createCampaignSubdirs(root) {
   for (const name of SUBDIRS) await root.getDirectoryHandle(name, { create: true });
 }
 
-/* --------------------------------------------------------------- the room
-   Which relay channel this table broadcasts on. A 6-char code from an
-   unambiguous alphabet (no 0/O/1/I/L — nothing to misread off a screen),
-   minted once per campaign and stored INSIDE the folder as `.dm-room`:
-   dotfiles are invisible to the walkers above, so it is never an entity and
-   never reads as an external edit — and it travels with the campaign to any
-   device, so the table TV's remembered room keeps working.
+/* --------------------------------------------------------------- new runs
+   A mesa is a folder, and making one is making a folder — plus the two notes
+   that give a table somewhere to write. The scaffolds are deliberately almost
+   empty: they exist so the DM's text editor has a file to open, not so the app
+   can have opinions about what goes in them. */
 
-   It lives inside the *run*, not the campaign: two mesas playing the same
-   adventure must not land on one channel, which is the whole reason rooms
-   exist. A flat campaign's implicit run keeps it at the root, exactly where
-   it has always been. */
-
-const ROOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const ROOM_RE = /^[A-HJ-NP-Z2-9]{6}$/;
-
-export function mintRoomCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return [...bytes].map(b => ROOM_ALPHABET[b % ROOM_ALPHABET.length]).join('');
-}
-
-export async function readRoomCode(root, runPath = '') {
-  const rel = runRel(runPath, '.dm-room');
-  const { dir, name } = await dirFor(root, rel, { create: true });
-  try {
-    const file = await (await dir.getFileHandle(name)).getFile();
-    const code = (await file.text()).trim().toUpperCase();
-    if (ROOM_RE.test(code)) return code;
-  } catch { /* no file yet */ }
-  const code = mintRoomCode();
-  await writeFile(root, rel, code + '\n');
-  return code;
+/** @param {FileSystemDirectoryHandle} root @param {string} slug @param {string} label
+    @returns {Promise<{slug: string, path: string, label: string}>} */
+export async function createRun(root, slug, label) {
+  const clean = String(slug || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!clean) throw new Error('la mesa necesita un nombre');
+  const runs = await root.getDirectoryHandle(RUNS_DIR, { create: true });
+  for await (const entry of runs.values()) {
+    if (entry.name === clean) throw new Error(`ya hay una mesa llamada ${clean}`);
+  }
+  const path = `${RUNS_DIR}/${clean}`;
+  await (await runs.getDirectoryHandle(clean, { create: true }))
+    .getDirectoryHandle('players', { create: true });
+  const name = String(label || '').trim() || runLabel(clean);
+  /* The frontmatter is the one field the app reads back — it is what the mesa
+     picker shows instead of a humanised folder name. */
+  await writeFile(root, `${path}/${clean}.md`,
+    `---\nmesa: ${name}\n---\n\n# ${name}\n\nQuién juega, cuándo, y lo que haga falta recordar.\n`);
+  await writeFile(root, `${path}/estado.md`,
+    `# Estado\n\nDónde están y qué está pasando ahora mismo.\n`);
+  await writeFile(root, `${path}/bitacora/00-plantilla.md`,
+    `# Sesión 0\n\nQué pasó. Una nota por sesión, con el número delante para que se ordenen solas.\n`);
+  return { slug: clean, path, label: name };
 }

@@ -1,8 +1,10 @@
 # Ships dm/ to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
 # Nothing is built — dm/ is stdlib Python plus native ES modules, so the
-# "artifact" is the source tree minus its dev-only files. creator/** is a
-# trigger too: dm/src/rules/* and the theme tokens are copies of the
-# creator's blocks, and check-sync.py is what guards them.
+# "artifact" is the source tree minus its dev-only files.
+#
+# creator/** is no longer a trigger: dm/src/rules/ is the app's own now, and
+# the creator's export is one of the formats it reads rather than a sibling to
+# stay byte-identical to. check-sync.py retired with that change.
 name: Deploy dm to Pi
 
 on:
@@ -10,7 +12,6 @@ on:
     branches: [master]
     paths:
       - dm/**
-      - creator/**
       - .github/workflows/deploy-dm.yml
   workflow_dispatch:
 
@@ -31,18 +32,29 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24   # `node --test <glob>` and the model's syntax
 
-      - name: Check the creator→dm copies have not drifted
-        run: python3 dm/check-sync.py
-
+      # The model, and the source lint that catches htm's unclosed void
+      # elements — the bug whose symptom is a TypeError on the second render.
       - name: Tests
+        run: node --test "dm/src/**/*.test.js"
+
+      # Types are dev-only and emit nothing; the compiler is a machine tool,
+      # not a repo dependency, which is why it is installed here rather than
+      # committed as a package.json.
+      - name: Types
         run: |
-          node --test \
-            dm/src/lint.test.js \
-            dm/src/shared/shared.test.js \
-            dm/src/shared/qr.test.js \
-            dm/src/tv/audio.test.js
+          npm i -g typescript
+          tsc -p dm/jsconfig.json
+
+      # The example campaign is the fixture the parsers promise to read. The
+      # linter exits 1 for warnings and 2 for errors; only errors mean the app
+      # would read something different from what the file says, so only errors
+      # stop a deploy.
+      - name: The example campaign still reads
+        run: |
+          node dm/check-campaign.js campaigns/example || \
+            { [ $? -eq 1 ] && echo "warnings only — see above"; }
 
       - name: Connect to tailnet
         uses: tailscale/github-action@v3
@@ -52,14 +64,20 @@ jobs:
           tags: tag:ci
 
       # --delete-excluded so the deployed tree is exactly the runtime set:
-      # docs, the sync guard and the tests never reach the Pi.
+      # Docs, tests, types and the verification pages never reach the Pi: the
+      # deployed tree is exactly the runtime set.
       - name: Ship dm/ to the Pi
         run: |
           rsync -a --delete --delete-excluded \
             --exclude 'CLAUDE.md' \
             --exclude 'instructions.md' \
-            --exclude 'check-sync.py' \
+            --exclude 'importing.md' \
+            --exclude 'check-campaign.js' \
+            --exclude 'jsconfig.json' \
+            --exclude 'probes' \
             --exclude '*.test.js' \
+            --exclude '*.d.ts' \
+            --exclude '*.d.mts' \
             -e "ssh -o StrictHostKeyChecking=accept-new" \
             dm/ "$PI_USER@$PI_HOST:$PI_DIR/"
 

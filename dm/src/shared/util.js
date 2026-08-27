@@ -1,23 +1,23 @@
-/* Small helpers shared by every module. Pure — no DOM, no fetch. */
+/* Small helpers shared by every module. Pure — no DOM, no fetch, no storage. */
 
-export const esc = s => String(s ?? '')
-  .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** @type {Record<string, string>} */
+const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 
-/** Files are named after the character or monster, not the id — id is what
-    a merge matches on, a name is what you find in Finder. */
-export const slugify = s => String(s).toLowerCase()
+export const esc = (/** @type {unknown} */ s) =>
+  String(s ?? '').replace(/[&<>"]/g, c => ESCAPES[c] ?? c);
+
+/** Files are named after the character or the monster, not after the id: an id
+    is what a merge matches on, a name is what you find in Finder. */
+export const slugify = (/** @type {unknown} */ s) => String(s ?? '').toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'sin-nombre';
 
-export const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+export const clamp = (/** @type {number} */ n, /** @type {number} */ lo,
+                      /** @type {number} */ hi) => Math.min(hi, Math.max(lo, n));
 
-/** Metres with a Spanish decimal comma; null reads as an em-dash. */
-export const metres = n => n == null ? '—' : String(n).replace('.', ',');
+/** Metres with a Spanish decimal comma; null reads as an em dash. */
+export const metres = (/** @type {number|null} */ n) =>
+  (n == null ? '—' : String(n).replace('.', ','));
 
-export const matchesFilter = (text, filter) =>
+export const matchesFilter = (/** @type {string} */ text, /** @type {string} */ filter) =>
   !filter.trim() || text.toLowerCase().includes(filter.trim().toLowerCase());
-
-/** A campaign-relative path ("assets/taberna del puerto.jpg") as a URL the
-    server can actually serve — each segment percent-encoded, so spaces and
-    accents in filenames survive the trip. */
-export const encodePath = p => String(p).split('/').map(encodeURIComponent).join('/');

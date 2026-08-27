@@ -1,299 +1,250 @@
-/* Escenas — the library and its full-screen editor. The library is prep,
-   but it carries the one play action too: "Al tablero" on every card puts
-   the scene on the television and lands you in Juego — between scenes the
-   DM is *here*, and a detour through Juego's picker asked them to find the
-   scene twice. Juego's own picker still exists and reuses SceneCard.
-   (Preparar — the old staged-scene flow — was cut in the rebuild: one
-   action, "Al tablero", is all there is.)
+/* Escenas — preparation: a picture, two sound layers, a board size, who is
+   standing on it, and a note to yourself.
 
-   Every scene lives in its own scenarios/<slug>.json; Guardar autosaves it
-   there, Quitar moves the file to trash/. */
+   A scene is not play. Putting one on the table copies its picture and its
+   sound into the field and seats its roster; the scene itself never changes,
+   so the same ambush can be run twice, and throwing a session away never costs
+   a night's preparation.
 
-import { html } from './html.js';
-import { state, update, flash, saveEntity, aspectOf, urlFor } from './store.js';
-import { deleteFile } from './api.js';
-import { screens } from './app.js';
-import { ModalFrame, closeModal } from './frame.js';
-import { Field, initialsOf } from './field.js';
-import { goLiveScene } from './juego.js';
-import { ObjectCountRows } from './objetos.js';
-import { blankScene, normaliseScene, deriveRows, sceneGridSize, missingAssets } from '../shared/scenes.js';
-import { heldObjects } from '../shared/objects.js';
-import { matchesFilter, slugify } from '../shared/util.js';
+   What a scene deliberately does NOT decide is what the television is showing.
+   That is one stated control in Juego. A scene supplies the picture; the DM
+   decides whether the players are looking at a picture at all. */
 
-export const sceneById = id => state.scenes.find(s => s.id === id) || null;
+/** @import { Scene } from '../shared/types.js' */
 
-/** The scene file's portable shape: the envelope, without the runtime `file`
-    key — where it lives on disk IS that information. */
-export function sceneFilePayload(scene) {
-  const { file, ...portable } = scene;
-  return { kind: 'dnd-dm-scene', version: 1, scene: portable };
-}
+import { html } from '../html.js';
+import { state, commit, update, urlFor, aspectOf } from './store.js';
+import { normaliseScene, blankScene, putOnTable, missingAssets,
+         sceneGridSize } from '../shared/scenes.js';
+import { saveEntityFile, deleteEntityFile, layerBadge, moveAction } from './entities.js';
+import { moveLayer } from './layers.js';
+import { matchesFilter } from '../shared/util.js';
 
-export function exportScene(scene) {
-  const blob = new Blob([JSON.stringify(sceneFilePayload(scene), null, 2)],
-                        { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = (slugify(scene.name)) + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+export function Escenas() {
+  if (state.ui.sceneDraft) return html`<${Editor} />`;
 
-/* ------------------------------------------------------------ the card */
+  const filter = state.ui.filters.escenas;
+  const shown = state.scenes
+    .filter(s => matchesFilter(`${s.name} ${s.note}`, filter))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  const liveId = state.session.field.sceneId;
 
-/** `configOnly` is Escenas's own view: edit/export/delete. Without it (the
-    Juego picker) the card also carries Al tablero — `onGoLive` supplies it. */
-export function SceneCard({ scene, configOnly, onGoLive }) {
-  const src = scene.art?.src ? urlFor(scene.art.src) : null;
-  const gone = missingAssets(scene, state.assets);
-  const live = state.session.field.live && state.session.field.sceneId === scene.id;
-  return html`<article class=${'scenecard' + (live ? ' on' : '')} key=${scene.id}>
-    ${src && !gone.length
-      ? html`<div class="thumb" style=${`background-image:url("${src}")`}>
-          ${live ? html`<span class="badge">en el tablero</span>` : null}</div>`
-      : html`<div class="thumb none">${gone.length ? 'falta el archivo' : 'sin imagen'}
-          ${live ? html`<span class="badge">en el tablero</span>` : null}</div>`}
-    <div class="meta">
-      <b>${scene.name}</b>
-      ${gone.length ? html`<span class="gone">No encuentro ${gone.join(', ')}</span>` : null}
+  return html`<section class="tab">
+    <div class="bar">
+      <h2 class="dsp">Escenas <small>${state.scenes.length}</small></h2>
+      ${state.scenes.length > 3 && html`<input class="filter" type="search"
+        placeholder="Buscar…" defaultValue=${filter}
+        onInput=${(/** @type {Event} */ e) => update(s => {
+          s.ui.filters.escenas = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+        })} />`}
+      <button class="primary" onClick=${() => update(s => { s.ui.sceneDraft = blankScene(); })}>
+        + Nueva escena
+      </button>
     </div>
-    <div class="acts">
-      ${onGoLive ? html`<button class="small primary" onClick=${() => onGoLive(scene)}>Al tablero</button>` : null}
-      <button class="small ghost" onClick=${() => openEditor(scene.id)}>Editar</button>
-      <button class="small ghost" onClick=${() => exportScene(scene)}>Exportar</button>
-      ${configOnly ? html`<button class="small ghost" onClick=${() => removeScene(scene)}>Quitar</button>` : null}
+
+    ${!state.scenes.length && html`<p class="empty">
+      Ninguna. Una escena es preparación: un fondo, sonido, una cuadrícula y
+      quién está encima.
+    </p>`}
+
+    <div class="scenes">
+      ${shown.map(sc => {
+        const missing = missingAssets(sc, state.assetPaths);
+        return html`<article class=${'scene' + (sc.id === liveId ? ' live' : '')} key=${sc.id}>
+          <div class="thumb" style=${sc.art && urlFor(sc.art.src)
+            ? { backgroundImage: `url("${urlFor(sc.art.src)}")` } : undefined}>
+            ${!(sc.art && urlFor(sc.art.src)) && html`<span class="fine">sin imagen</span>`}
+          </div>
+          <div class="who">
+            <b class="dsp">${sc.name}</b>
+            ${sc.id === liveId && html`<span class="mesa-tag">en la mesa</span>`}
+            ${layerBadge(sc.file) && html`<span class="mesa-tag">${layerBadge(sc.file)}</span>`}
+            <span class="fine">
+              ${sc.roster.length} ${sc.roster.length === 1 ? 'figura' : 'figuras'}
+              ${sc.cols ? ` · ${sc.cols} columnas` : ''}
+              ${sc.audio?.music ? ' · música' : ''}${sc.audio?.ambience ? ' · ambiente' : ''}
+            </span>
+            ${missing.length > 0 && html`<p class="warn">Falta: ${missing.join(', ')}</p>`}
+            ${sc.note && html`<p class="note-line">${sc.note}</p>`}
+          </div>
+          <div class="acts">
+            <button class="primary" onClick=${() => toTable(sc)}>A la mesa</button>
+            <button class="link" onClick=${() => update(s => {
+              s.ui.sceneDraft = structuredClone(sc);
+            })}>editar</button>
+            ${(() => {
+              const move = moveAction(sc);
+              return move && html`<button class="link" title=${move.title}
+                onClick=${() => moveLayer('scenarios', sc, scenePayload(sc), move.to, rel => {
+                  update(s => {
+                    const at = s.scenes.findIndex(x => x.id === sc.id);
+                    if (at >= 0) s.scenes[at] = { ...sc, file: rel };
+                  });
+                })}>${move.label}</button>`;
+            })()}
+          </div>
+        </article>`;
+      })}
     </div>
-  </article>`;
+
+    ${liveId && html`<p><button class="link" onClick=${() => toTable(null)}>
+      Sin escena — quitar imagen y sonido
+    </button></p>`}
+  </section>`;
 }
 
-function removeScene(scene) {
-  update(s => { s.scenes = s.scenes.filter(x => x.id !== scene.id); });
-  if (scene.file) {
-    deleteFile(state.root, scene.file)
-      .then(r => flash(`${scene.name} quitada — el archivo queda en ${r.trashedTo}.`))
-      .catch(e => flash('No se pudo quitar el archivo: ' + e.message));
-  }
-}
-
-/* ----------------------------------------------------------- the editor */
-
-export function openEditor(sceneId) {
-  const existing = sceneId && sceneById(sceneId);
-  update(s => {
-    s.ui.editingSceneId = sceneId || 'new';
-    s.ui.editorDraft = existing ? normaliseScene(structuredClone(existing)) : blankScene();
-    if (existing) s.ui.editorDraft.file = existing.file;
+/** The one scene action there is. It writes the field: the picture, the sound,
+    the board size and the roster. It does not change the mode, does not touch
+    the fight, and does not move you to another tab.
+    @param {Scene|null} sc */
+function toTable(sc) {
+  commit(sc ? `poner ${sc.name} en la mesa` : 'quitar la escena', s => {
+    putOnTable(s.session, sc, { aspectOf, urlFor });
   });
 }
 
-const closeEditor = () => update(s => { s.ui.editingSceneId = null; s.ui.editorDraft = null; });
-
-function saveDraft() {
-  const d = normaliseScene(state.ui.editorDraft);
-  d.file = state.ui.editorDraft.file || ('scenarios/' + slugify(d.name) + '.json');
-  update(s => {
-    const at = s.scenes.findIndex(x => x.id === d.id);
-    if (at >= 0) s.scenes[at] = d; else s.scenes.push(d);
-    s.ui.editingSceneId = null;
-    s.ui.editorDraft = null;
-  });
-  saveEntity(d.file, sceneFilePayload(d));
-  flash(`${d.name} guardada.`);
-}
-
-/* --------------------------------------------- what a roster entry carries
-
-   The same counts-Map picker Juego's cards use, but it confirms into the
-   editor draft — prep, not play: no commit, no clampHP, nothing on the
-   board until the scene actually goes live. */
-
-function openRosterObjects(i) {
-  const r = state.ui.editorDraft?.roster[i];
-  if (!r) return;
-  const counts = new Map();
-  for (const id of r.objects || []) counts.set(id, (counts.get(id) || 0) + 1);
-  update(s => { s.ui.modal = () => RosterObjectPicker(i, counts); });
-}
-
-function RosterObjectPicker(i, counts) {
-  const r = state.ui.editorDraft?.roster[i];
-  if (!r) return null;
-  const b = state.session.bestiary.find(x => x.id === r.beastId);
-  const total = [...counts.values()].reduce((a, n) => a + n, 0);
-  const confirmPick = () => update(s => {
-    const entry = s.ui.editorDraft?.roster[i];
-    if (entry) {
-      const ids = [];
-      for (const o of s.session.objects) {
-        for (let n = counts.get(o.id) || 0; n > 0; n--) ids.push(o.id);
-      }
-      entry.objects = ids;
-    }
-    s.ui.modal = null;
-  });
-  return html`<${ModalFrame} title=${'Objetos de ' + (b?.name || 'ese PNJ')} acts=${html`
-      <span class="count">${total ? `${total} objeto${total === 1 ? '' : 's'}` : 'Nada encima'}</span>
-      <button class="ghost" onClick=${closeModal}>Cancelar</button>
-      <button class="primary" onClick=${confirmPick}>Guardar</button>`}>
-    <${ObjectCountRows} counts=${counts} />
-  </>`;
-}
-
-/** The nearest free square to the top-left among this scene's own roster, so
-    adding "Goblin" three times lands three of them on three squares. */
-function freeRosterSquare(roster, size) {
-  const taken = new Set(roster.map(r => r.x + ',' + r.y));
-  for (let y = 0; y < size.rows; y++) {
-    for (let x = 0; x < size.cols; x++) if (!taken.has(x + ',' + y)) return { x, y };
-  }
-  return { x: 0, y: 0 };
-}
-
-function RosterBoard({ d }) {
-  const size = sceneGridSize(d, state.session.field, aspectOf, urlFor);
-  const src = d.art?.src ? urlFor(d.art.src) : null;
-  const tokens = d.roster
-    .map((r, i) => ({ r, i, beast: state.session.bestiary.find(b => b.id === r.beastId) }))
-    .filter(o => o.beast)
-    .map(o => ({ key: String(o.i), x: o.r.x, y: o.r.y,
-                 name: o.beast.name, initials: initialsOf(o.beast.name), title: o.beast.name }));
-  return html`<${Field} roster cols=${size.cols} rows=${size.rows} mapUrl=${src}
-    tokens=${tokens}
-    onMove=${(key, x, y) => update(() => {
-      const r = state.ui.editorDraft.roster[Number(key)];
-      if (r) { r.x = x; r.y = y; }
-    })} />`;
-}
+/* ---------------------------------------------------------------- editor */
 
 function Editor() {
-  const d = state.ui.editorDraft;
-  const isNew = !sceneById(d.id);
-  const images = state.assets.filter(p => /\.(jpe?g|png|webp)$/i.test(p));
-  const sounds = state.assets.filter(p => /\.(mp3|ogg|wav|m4a)$/i.test(p));
+  const d = state.ui.sceneDraft;
+  const set = (/** @type {(sc: any) => void} */ fn) => update(s => { fn(s.ui.sceneDraft); });
+  const images = state.assetPaths.filter(p => /\.(jpe?g|png|webp|gif|avif)$/i.test(p));
+  const sounds = state.assetPaths.filter(p => /\.(mp3|ogg|m4a|wav|flac)$/i.test(p));
   const size = sceneGridSize(d, state.session.field, aspectOf, urlFor);
 
-  const setAudio = (key, patch) => update(() => {
-    const a = d.audio || (d.audio = { music: null, ambience: null });
-    if (patch === null) {
-      a[key] = null;
-      if (!a.music && !a.ambience) d.audio = null;
-    } else {
-      a[key] = { src: '', volume: .5, loop: true, ...(a[key] || {}), ...patch };
-    }
-  });
-
-  const audioPick = (key, label) => {
-    const layer = d.audio?.[key];
-    return html`<label>${label}
-      <select onChange=${e => e.target.value ? setAudio(key, { src: e.target.value }) : setAudio(key, null)}>
-        <option value="">— ninguno —</option>
-        ${sounds.map(p => html`<option value=${p} selected=${layer?.src === p} key=${p}>${p}</option>`)}
-      </select></label>
-      ${layer ? html`<label>Volumen
-        <input type="range" min="0" max="1" step="0.01" value=${layer.volume}
-          onInput=${e => setAudio(key, { volume: Number(e.target.value) })} />
-        <b>${Math.round(layer.volume * 100)}%</b></label>` : null}`;
-  };
-
-  return html`<main><section class="panel wide">
-    <div class="quickadd">
-      <button class="primary" onClick=${saveDraft}>Guardar</button>
-      <button class="ghost" onClick=${() => exportScene(normaliseScene(d))}>Exportar</button>
-      <button class="ghost" onClick=${closeEditor}>Volver</button>
+  return html`<section class="tab editor">
+    <div class="bar">
+      <h2 class="dsp">${d.file ? 'Editar escena' : 'Nueva escena'}</h2>
+      <button class="link" onClick=${() => update(s => { s.ui.sceneDraft = null; })}>
+        Cancelar
+      </button>
+      <button class="primary" onClick=${save}>Guardar</button>
     </div>
-    <div class="escfields">
-      <label>Nombre <input type="text" value=${d.name}
-        onInput=${e => update(() => { d.name = e.target.value; })} /></label>
-      <label>Nota <textarea defaultValue=${d.note}
-        onChange=${e => update(() => { d.note = e.target.value; })}></textarea></label>
 
-      <h3>Arte</h3>
-      <label>Imagen
-        <select onChange=${e => update(() => {
-          d.art = e.target.value ? { src: e.target.value, stamp: null } : null;
-        })}>
+    <label class="f">
+      <span>Nombre</span>
+      <input defaultValue=${d.name} onChange=${(/** @type {Event} */ e) => {
+        const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+        set(sc => { sc.name = v; });
+      }} />
+    </label>
+
+    <div class="grid2">
+      <label class="f">
+        <span>Imagen</span>
+        <select value=${d.art?.src ?? ''} onChange=${(/** @type {Event} */ e) => {
+          const v = /** @type {HTMLSelectElement} */ (e.currentTarget).value;
+          set(sc => { sc.art = v ? { src: v } : null; });
+        }}>
           <option value="">— ninguna —</option>
-          ${images.map(p => html`<option value=${p} selected=${d.art?.src === p} key=${p}>${p}</option>`)}
-        </select></label>
-
-      <h3>Cuadrícula <span class="n">${d.grid ? `${size.cols} × ${size.rows}` : 'de la mesa'}</span></h3>
-      <p class="tip">El tamaño del tablero para esta escena en concreto — vacío, y usa el que ya
-        tenga la mesa en ese momento. Solo se elige el número de columnas: las filas salen solas
-        de la proporción real de la imagen, para que los cuadros salgan siempre cuadrados.</p>
-      <div class="row">
-        <label>Columnas <input type="number" min="4" max="60" value=${d.grid?.cols ?? ''}
-          onChange=${e => update(() => {
-            const v = e.target.value.trim();
-            d.grid = v && Number.isFinite(Number(v))
-              ? { cols: Math.min(60, Math.max(4, Math.round(Number(v)))) } : null;
-          })} /></label>
-      </div>
-
-      <h3>Sonido</h3>
-      ${audioPick('music', 'Música')}
-      ${audioPick('ambience', 'Ambiente')}
-
-      <h3>Reparto <span class="n">${d.roster.length}</span></h3>
-      <p class="tip">Quién espera en esta escena, y en qué cuadro — se sienta solo,
-        con el mapa de esta escena, la primera vez que sale a la mesa. Arrastra
-        una ficha para cambiarla de sitio, y «Objetos» decide qué lleva cada uno
-        encima al aparecer.</p>
-      ${state.session.bestiary.length ? html`<${RosterBoard} d=${d} />` : null}
-      ${state.session.bestiary.length
-        ? html`<div class="rosterpick">${state.session.bestiary.map(b => html`<div class="rprow" key=${b.id}>
-            <b>${b.name}</b>${b.tag ? html`<span class="muted"> · ${b.tag}</span>` : null}
-            <button class="small ghost" onClick=${() => update(() => {
-              d.roster.push({ beastId: b.id, ...freeRosterSquare(d.roster, size), objects: [] });
-            })}>+ Añadir</button>
-          </div>`)}</div>`
-        : html`<p class="muted">No hay PNJ todavía. Se escriben en${' '}
-            <button class="link" onClick=${() => update(s => { s.ui.tab = 'monstruos'; })}>PNJ</button>.</p>`}
-      ${d.roster.length ? html`<ul class="rosterlist">${d.roster.map((r, i) => {
-          const b = state.session.bestiary.find(x => x.id === r.beastId);
-          const held = heldObjects(state.session.objects, r.objects);
-          return html`<li key=${i}>${b ? b.name : '(ese PNJ ya no existe)'}
-            ${held.length ? html`<span class="muted"> · ${held
-              .map(h => h.count > 1 ? `${h.obj.name} ×${h.count}` : h.obj.name).join(', ')}</span>` : null}
-            <button class="small ghost" onClick=${() => openRosterObjects(i)}>Objetos</button>
-            <button class="small ghost" aria-label="Quitar del reparto"
-              onClick=${() => update(() => { d.roster.splice(i, 1); })}>✕</button></li>`;
-        })}</ul>` : null}
+          ${images.map(p => html`<option value=${p} key=${p}>${p}</option>`)}
+        </select>
+      </label>
+      <label class="f">
+        <span>Columnas <small class="fine">las filas salen de la imagen: ${size.rows}</small></span>
+        <input type="number" min="4" max="60" defaultValue=${d.cols ?? ''}
+          placeholder=${String(state.session.field.cols)}
+          onChange=${(/** @type {Event} */ e) => {
+            const v = /** @type {HTMLInputElement} */ (e.currentTarget).value;
+            set(sc => { sc.cols = v.trim() ? Math.min(60, Math.max(4, Number(v))) : null; });
+          }} />
+      </label>
     </div>
-  </section></main>`;
+
+    ${['music', 'ambience'].map(layer => html`<div class="grid2" key=${layer}>
+      <label class="f">
+        <span>${layer === 'music' ? 'Música' : 'Ambiente'}</span>
+        <select value=${d.audio?.[layer]?.src ?? ''} onChange=${(/** @type {Event} */ e) => {
+          const v = /** @type {HTMLSelectElement} */ (e.currentTarget).value;
+          set(sc => {
+            sc.audio = sc.audio || { music: null, ambience: null };
+            sc.audio[layer] = v ? { src: v, volume: sc.audio[layer]?.volume ?? .5, loop: true } : null;
+            if (!sc.audio.music && !sc.audio.ambience) sc.audio = null;
+          });
+        }}>
+          <option value="">— nada —</option>
+          ${sounds.map(p => html`<option value=${p} key=${p}>${p}</option>`)}
+        </select>
+      </label>
+      <label class="f">
+        <span>Volumen <small class="fine">${Math.round((d.audio?.[layer]?.volume ?? .5) * 100)}%</small></span>
+        <input type="range" min="0" max="1" step="0.05"
+          defaultValue=${String(d.audio?.[layer]?.volume ?? .5)}
+          disabled=${!d.audio?.[layer]}
+          onInput=${(/** @type {Event} */ e) => {
+            const v = Number(/** @type {HTMLInputElement} */ (e.currentTarget).value);
+            set(sc => { if (sc.audio?.[layer]) sc.audio[layer].volume = v; });
+          }} />
+      </label>
+    </div>`)}
+
+    <h4>Reparto <small class="fine">quién está puesto cuando la escena llega a la mesa</small></h4>
+    ${d.roster.map((/** @type {any} */ r, /** @type {number} */ i) => html`
+      <div class="ability" key=${i}>
+        <select value=${r.beastId} onChange=${(/** @type {Event} */ e) => {
+          const v = /** @type {HTMLSelectElement} */ (e.currentTarget).value;
+          set(sc => { sc.roster[i].beastId = v; });
+        }}>
+          ${state.session.bestiary.map(b => html`<option value=${b.id} key=${b.id}>${b.name}</option>`)}
+        </select>
+        <input type="number" defaultValue=${r.x} title="columna"
+          onChange=${(/** @type {Event} */ e) => {
+            const v = Number(/** @type {HTMLInputElement} */ (e.currentTarget).value);
+            set(sc => { sc.roster[i].x = Math.max(0, v); });
+          }} />
+        <input type="number" defaultValue=${r.y} title="fila"
+          onChange=${(/** @type {Event} */ e) => {
+            const v = Number(/** @type {HTMLInputElement} */ (e.currentTarget).value);
+            set(sc => { sc.roster[i].y = Math.max(0, v); });
+          }} />
+        <button class="link" onClick=${() => set(sc => { sc.roster.splice(i, 1); })}>quitar</button>
+      </div>`)}
+    ${state.session.bestiary.length
+      ? html`<button onClick=${() => set(sc => {
+          sc.roster.push({ beastId: state.session.bestiary[0].id, x: 0, y: 0, objects: [] });
+        })}>+ figura</button>`
+      : html`<p class="fine">No hay PNJ en la campaña todavía.</p>`}
+
+    <label class="f">
+      <span>Nota</span>
+      <textarea rows="3" defaultValue=${d.note} onChange=${(/** @type {Event} */ e) => {
+        const v = /** @type {HTMLTextAreaElement} */ (e.currentTarget).value;
+        set(sc => { sc.note = v; });
+      }}></textarea>
+    </label>
+
+    ${d.file && html`<p><button class="link danger" onClick=${async () => {
+      if (await deleteEntityFile(d)) {
+        update(s => {
+          s.scenes = s.scenes.filter(x => x.id !== d.id);
+          s.ui.sceneDraft = null;
+        });
+      }
+    }}>Borrar escena</button></p>`}
+  </section>`;
 }
 
-/* ----------------------------------------------------------- the library */
+/** The envelope is written even though a bare object reads: a file that says
+    what it is stays readable by a person a year from now.
+    @param {Scene} scene */
+const scenePayload = scene => ({
+  kind: 'dnd-dm-scene', version: 1,
+  scene: { id: scene.id, name: scene.name, art: scene.art, audio: scene.audio,
+           roster: scene.roster, grid: scene.cols ? { cols: scene.cols } : null,
+           note: scene.note },
+});
 
-function Library() {
-  const n = state.scenes.length;
-  const filter = state.ui.filters.escenas;
-  const shown = n ? state.scenes.filter(s => matchesFilter(s.name, filter)) : [];
-  return html`<main><section class="panel wide">
-    <div class="quickadd">
-      <button class="primary" onClick=${() => openEditor(null)}>Nueva escena</button>
-    </div>
-    ${n ? html`
-      <div class="filterbar"><input type="text" placeholder="Buscar escena…"
-        value=${filter} onInput=${e => update(s => { s.ui.filters.escenas = e.target.value; })} /></div>
-      ${shown.length
-        ? html`<div class="scenegrid">${shown.map(s => html`<${SceneCard} scene=${s} configOnly
-            onGoLive=${goLiveScene} key=${s.id} />`)}</div>`
-        : html`<p class="muted">Ninguna escena coincide con “${filter}”.</p>`}`
-      : html`<div class="drop" onClick=${() => openEditor(null)}>
-          <b>Ninguna escena todavía</b>
-          Una escena es un fondo y una cuadrícula: un sitio donde estar, o un campo
-          donde pelear. Se guardan de una en una en <code>scenarios/</code>, y las
-          imágenes en <code>assets/</code>.
-          <p class="muted" style="font-size:.85rem;margin:.8rem 0 0">
-            Deja un <code>.json</code> en esa carpeta y aparece solo, o${' '}
-            <button class="link">crea una desde cero</button> en el editor.</p>
-        </div>`}
-  </section></main>`;
+function save() {
+  const draft = state.ui.sceneDraft;
+  if (!draft) return;
+  const scene = normaliseScene(draft);
+  saveEntityFile('scenarios', scene, scenePayload(scene), rel => {
+    scene.file = rel;
+    update(s => {
+      const at = s.scenes.findIndex(x => x.id === scene.id);
+      if (at >= 0) s.scenes[at] = scene;
+      else s.scenes.push(scene);
+    });
+  });
+  update(s => { s.ui.sceneDraft = null; });
 }
-
-function Escenas() {
-  return state.ui.editingSceneId ? html`<${Editor} />` : html`<${Library} />`;
-}
-
-screens.escenas = Escenas;

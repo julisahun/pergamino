@@ -5,12 +5,20 @@
   "ac": 13,
   "hpMax": 14,
   "initMod": 2,
-  "speed": 30,
+  "speed": 9,
   "note": "Sent by the rival town of Brinemarsh with a forged writ and a real grudge, to sabotage the festival — but he arrived to find the cheese already gone and has spent the whole day trying to take credit for it anyway. Carries a clipboard he cannot actually read.",
   "portrait": null,
   "abilities": [
-    { "id": "cmex07mildewforge", "name": "Forged Writ", "desc": "Advantage on Deception checks made while holding the clipboard. The seal is a bottlecap." },
-    { "id": "cmex08mildewcrossbow", "name": "Hand Crossbow", "desc": "+4 to hit, 1d6+2 piercing damage, range 30/120." }
+    {
+      "id": "cmex07mildewforge",
+      "name": "Forged Writ",
+      "desc": "Advantage on Deception checks made while holding the clipboard. The seal is a bottlecap."
+    },
+    {
+      "id": "cmex08mildewcrossbow",
+      "name": "Hand Crossbow",
+      "desc": "+4 to hit, 1d6+2 piercing damage, range 30/120."
+    }
   ],
   "file": "monsters/inspector-mildew-grey.json"
 }

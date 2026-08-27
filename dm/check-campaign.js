@@ -3,7 +3,7 @@
 Checks a campaign folder the way the admin page reads it, and says out loud
 what the app would swallow in silence.
 
-  node dm/check-campaign.js campaigns/example
+  node dm2/check-campaign.js campaigns/example
 
 Every parse in dm/ is deliberately forgiving — normaliseBeast() coerces string
 numbers, normaliseScene() accepts a bare art path, normalise() fills in every
@@ -13,17 +13,16 @@ roster pointing at a beastId nobody has seats nothing; a species slug that is
 not in SPECIES makes derive() quietly compute a different character. All of
 that opens the app and looks fine.
 
-This is the missing half of the import instructions (dm/importing.md): the
+This is the missing half of the import instructions (dm2/importing.md): the
 checker a converted campaign has to survive before it goes anywhere near a
 table.
 
-It runs under plain node with no dependencies, and — the reason it is not a
-Python script next to check-sync.py — it imports src/rules/data.js and calls
-the creator's own engine.validate() rather than restating the vocabulary in a
-second language. There is exactly one list of species in this repo.
+It runs under plain node with no dependencies, and it imports src/rules/data.js
+and calls the app's own engine.validate() rather than restating the vocabulary
+in a second language: there is exactly one list of species in this repo, and it
+is the one the table plays with.
 
-Exit codes follow check-sync.py: 0 clean, 1 warnings only, 2 at least one
-error.
+Exit codes: 0 clean, 1 warnings only, 2 at least one error.
 */
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
@@ -39,7 +38,9 @@ import { normalise } from './src/rules/character.js';
 import { normaliseBeast } from './src/shared/beasts.js';
 import { normaliseObject, MOD_KEYS } from './src/shared/objects.js';
 import { normaliseScene } from './src/shared/scenes.js';
-import { noteFrom, noteTitle, storyIndex, resolveWikilink } from './src/shared/story.js';
+import { RUNS_DIR, isRunPath } from './src/shared/runs.js';
+import { noteFrom, noteTitle, storyIndex, resolveWikilink,
+         withoutFrontmatter } from './src/shared/story.js';
 
 /* ------------------------------------------------------------- findings */
 
@@ -435,10 +436,9 @@ function checkStory(root, files) {
   const index = storyIndex(notes);
 
   for (const note of notes) {
-    /* What the renderer's markdown subset drops. It survives on disk exactly
-       as long as nobody edits the note in the app: an in-app edit
-       re-serialises the whole file out of the rendered DOM, so anything the
-       renderer flattened is flattened in the file too. */
+    /* What the renderer's markdown subset drops. The file itself is never at
+       risk — this app only ever READS notes — so this is about what the DM
+       will and will not see on screen at the table. */
     const flattened = [
       [/^\s*\d+[.)]\s+/m, 'numbered lists'],
       [/^\s*>/m, 'block quotes'],
@@ -453,10 +453,12 @@ function checkStory(root, files) {
       [/^#{4,}\s/m, 'headings deeper than ###'],
       [/^\s*[*+]\s+\S/m, 'bullets written with * or + (only - is a bullet)'],
       [/^[ \t]+-\s+\S/m, 'indented bullets (nesting is flattened)'],
-    ].filter(([re]) => re.test(note.content)).map(([, what]) => what);
+    /* Frontmatter is not markdown the renderer failed to support: the app
+       reads a field out of it and skips the rest on purpose. */
+    ].filter(([re]) => re.test(withoutFrontmatter(note.content))).map(([, what]) => what);
     if (flattened.length) {
       add(WARN, note.path, `contains ${flattened.join(', ')}, which the notes renderer does not support. `
-        + 'It reads as plain text now, and the first in-app edit rewrites the file without it.');
+        + 'It stays in the file untouched, but it reads as plain text in the app.');
     }
 
     for (const m of note.content.matchAll(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g)) {
@@ -465,7 +467,7 @@ function checkStory(root, files) {
           + 'It renders muted and creates no backlink.');
       }
     }
-    if (!/^#\s+/m.test(note.content)) {
+    if (!/^#\s+/m.test(withoutFrontmatter(note.content))) {
       add(INFO, note.path, `no \`# heading\` — the card title falls back to the filename ("${noteTitle(note)}").`);
     }
   }
@@ -492,6 +494,16 @@ function checkLayout(root, all) {
       continue;
     }
     const [top] = parts;
+    /* runs/<mesa>/… is a mesa's own layer, checked by checkRuns() below with
+       the same rules — a run-local monster is a monster. */
+    if (isRunPath(rel)) {
+      /* A README in runs/ is a note to the next human, the same way one in the
+         campaign root is — not a misfiled entity. */
+      if (parts.length < 3 && !rel.endsWith('.md')) {
+        add(WARN, rel, 'sits directly in runs/, where nothing reads it. A mesa is runs/<mesa>/.');
+      }
+      continue;
+    }
     if (!SUBDIRS.includes(top)) {
       add(WARN, rel, `\`${top}/\` is not a folder the app reads (${SUBDIRS.join(', ')}).`);
       continue;
@@ -507,6 +519,80 @@ function checkLayout(root, all) {
     }
     if (top === 'story' && !rel.endsWith('.md')) add(WARN, rel, 'not a .md — story/ only reads .md files.');
   }
+}
+
+/* ------------------------------------------------------------------ runs
+   A mesa is a second layer over the same campaign: its own party and play
+   state, plus its own monsters, objects, scenes and assets, each shadowing the
+   campaign's by id. Shadowing is the point, so it is reported as a note rather
+   than a complaint — but only where an id actually matches, because a mesa's
+   file whose id matches nothing shared is simply a monster only this mesa has,
+   and one whose id has a typo in it is a shadow that silently is not one. */
+
+function checkRuns(root, all, ids) {
+  const slugs = [...new Set(all.filter(isRunPath).map(p => p.split('/')[1]).filter(Boolean))];
+  if (!slugs.length) return [];
+
+  const READ = ['players', 'monsters', 'objects', 'scenarios', 'assets'];
+  for (const slug of slugs) {
+    const prefix = `${RUNS_DIR}/${slug}`;
+    const mine = all.filter(p => p.startsWith(prefix + '/'));
+    const rel = p => p.slice(prefix.length + 1);
+
+    for (const path of mine) {
+      const parts = rel(path).split('/');
+      const top = parts[0];
+      if (parts.length === 1) {
+        /* A mesa's own root: the two things the app reads, and notes. */
+        if (path.endsWith('.md') || rel(path) === 'session.json') continue;
+        add(WARN, path, 'sits in the mesa root, where only session.json and .md notes are read.');
+        continue;
+      }
+      if (!READ.includes(top) && !path.endsWith('.md')) {
+        add(WARN, path, `\`${top}/\` inside a mesa is not read (${READ.join(', ')}, o notas .md).`);
+        continue;
+      }
+      if (['players', 'monsters', 'objects', 'scenarios'].includes(top)) {
+        if (parts.length > 2) {
+          add(ERR, path, `nested: only ${top}/*.json at the top of the mesa is read.`);
+        } else if (!path.endsWith('.json')) {
+          add(WARN, path, `not a .json — ${top}/ only reads .json files.`);
+        }
+      }
+    }
+
+    /* The mesa's own entities, checked exactly like the campaign's, and then
+       compared against them. */
+    const pickIn = top => mine.filter(p => {
+      const parts = rel(p).split('/');
+      return parts.length === 2 && parts[0] === top && p.endsWith('.json');
+    });
+    const runIds = { monsters: new Map(), objects: new Map(), scenes: new Map(),
+                     players: new Map(), assetRefs: [], derived: [] };
+    checkMonsters(root, pickIn('monsters'), runIds);
+    checkObjects(root, pickIn('objects'), runIds);
+    checkScenes(root, pickIn('scenarios'), runIds);
+    checkPlayers(root, pickIn('players'), runIds);
+
+    for (const [kind, shared] of [['monsters', ids.monsters], ['objects', ids.objects],
+                                 ['scenes', ids.scenes]]) {
+      for (const [id, where] of runIds[kind]) {
+        if (shared.has(id)) {
+          add(INFO, where, `tapa a ${shared.get(id)} mientras juegue ${slug} — es lo que hace una mesa.`);
+        }
+      }
+    }
+
+    /* A scene's roster can point at a monster from either layer, because that
+       is what the app resolves; checkScenes only saw one, so it is re-checked
+       here against both. */
+    for (const [id, where] of runIds.scenes) void id, where;
+
+    if (!mine.some(p => rel(p).startsWith('players/') && p.endsWith('.json'))) {
+      add(INFO, prefix + '/players/', 'sin fichas todavía — la mesa existe pero no se ha sentado nadie.');
+    }
+  }
+  return slugs;
 }
 
 /* ----------------------------------------------------------------- main */
@@ -537,9 +623,14 @@ function main(argv) {
   checkObjects(root, pick('objects'), ids);
   checkScenes(root, pick('scenarios'), ids);
   checkPlayers(root, pick('players'), ids);
-  const notes = checkStory(root, all.filter(p => p.startsWith('story/') && p.endsWith('.md')));
+  const runs = checkRuns(root, all, ids);
+  /* Notes are one index across both layers, because that is how the app reads
+     them: a mesa's bitácora can link to the campaign's lore and back. */
+  const notes = checkStory(root, all.filter(p =>
+    (p.startsWith('story/') && p.endsWith('.md')) || (isRunPath(p) && p.endsWith('.md'))));
 
-  const assets = new Set(all.filter(p => p.startsWith('assets/')));
+  const assets = new Set(all.filter(p => p.startsWith('assets/')
+    || (isRunPath(p) && p.split('/')[2] === 'assets')));
   const referenced = new Set();
   for (const { rel, src, field } of ids.assetRefs) {
     referenced.add(src);
