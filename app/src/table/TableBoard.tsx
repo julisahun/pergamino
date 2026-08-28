@@ -1,4 +1,4 @@
-/** The board as the players see it: no tools, opaque fog, no hidden tokens. */
+/** The board as the players see it: no tools, and only what was revealed. */
 import { useMemo } from 'react'
 import type { TableView } from '../../../shared/types.ts'
 import { Board } from '../board/Board.tsx'
@@ -25,8 +25,6 @@ export function TableBoard({ view }: { view: TableView }) {
       rows={view.grid.rows}
       tokens={view.tokens}
       pieces={pieces}
-      fog={view.fog}
-      templates={view.templates}
     />
   )
 }

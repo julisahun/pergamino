@@ -99,7 +99,6 @@ describe('migrating the real v3 file (runs/guils)', () => {
     expect(state.field.cols).toBe(16)
     expect(state.field.rows).toBe(9)
     expect(Object.keys(state.field.tokens)).toHaveLength(6)
-    expect(state.field.fog).toEqual({ on: false, revealed: [] })
     expect(state.field.handout).toBeNull()
     expect(state.log).toEqual([])
   })

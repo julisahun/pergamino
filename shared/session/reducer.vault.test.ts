@@ -317,46 +317,12 @@ describe('tablero', () => {
     expect(state.field.tokens['npc:' + before.npcs[0]!.id]).toEqual(placed)
   })
 
-  it('clears the fog when the grid is resized, since indices are row-major', () => {
-    const before = run(
-      guils(),
-      { type: 'fog/on', on: true },
-      { type: 'fog/paint', cells: [0, 1, 2, 20], reveal: true },
-    )
-    expect(before.field.fog.revealed).toEqual([0, 1, 2, 20])
-    const state = run(before, { type: 'field/grid', cols: 20, rows: 12 })
-    expect(state.field.fog.revealed).toEqual([])
-    expect(state.field.cols).toBe(20)
-  })
-
   it('keeps tokens on the board when the grid shrinks', () => {
     const state = run(guils(), { type: 'field/grid', cols: 8, rows: 5 })
     for (const t of Object.values(state.field.tokens)) {
       expect(t.x).toBeLessThan(8)
       expect(t.y).toBeLessThan(5)
     }
-  })
-
-  it('paints and unpaints fog cells, keeping them sorted', () => {
-    const painted = run(guils(), { type: 'fog/paint', cells: [9, 3, 5], reveal: true })
-    expect(painted.field.fog.revealed).toEqual([3, 5, 9])
-    const erased = run(painted, { type: 'fog/paint', cells: [5], reveal: false })
-    expect(erased.field.fog.revealed).toEqual([3, 9])
-  })
-
-  it('reveals or hides the whole board', () => {
-    const all = run(guils(), { type: 'fog/reset', revealed: true })
-    expect(all.field.fog.revealed).toHaveLength(16 * 9)
-    expect(run(all, { type: 'fog/reset', revealed: false }).field.fog.revealed).toEqual([])
-  })
-
-  it('adds, updates and clears templates', () => {
-    const t = { id: 't1', kind: 'circle' as const, x: 4, y: 4, size: 6, angle: 0 }
-    const added = run(guils(), { type: 'template/add', template: t })
-    expect(added.field.templates).toEqual([t])
-    const moved = run(added, { type: 'template/update', template: { ...t, x: 9 } })
-    expect(moved.field.templates[0]!.x).toBe(9)
-    expect(run(moved, { type: 'template/clear' }).field.templates).toEqual([])
   })
 
   it('drops an npc token when the npc is removed', () => {

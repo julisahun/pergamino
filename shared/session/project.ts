@@ -156,8 +156,6 @@ export function projectTable(state: SessionState, ctx: ProjectContext): TableVie
       ? { ...field.handout, src: assetUrl(field.handout.src) ?? field.handout.src }
       : null,
     grid,
-    fog: field.fog,
-    templates: field.templates,
     tokens,
     combatants,
     round: state.encounter.round,

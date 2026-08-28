@@ -1,5 +1,5 @@
 /** Every mutation a client can ask the server to perform. */
-import type { AudioState, FieldMode, Handout, HpReveal, Ref, Template } from './types.ts'
+import type { AudioState, FieldMode, Handout, HpReveal, Ref } from './types.ts'
 
 export type Action =
   // --- Escena -------------------------------------------------------------
@@ -44,13 +44,6 @@ export type Action =
   | { type: 'token/remove'; ref: Ref }
   | { type: 'token/placeAll' }
   | { type: 'field/grid'; cols: number; rows: number }
-  | { type: 'fog/on'; on: boolean }
-  | { type: 'fog/paint'; cells: number[]; reveal: boolean }
-  | { type: 'fog/reset'; revealed: boolean }
-  | { type: 'template/add'; template: Template }
-  | { type: 'template/update'; template: Template }
-  | { type: 'template/remove'; id: string }
-  | { type: 'template/clear' }
   // --- Objetos y descansos ------------------------------------------------
   | { type: 'object/give'; ref: Ref; objectId: string }
   | { type: 'object/take'; ref: Ref; objectId: string }

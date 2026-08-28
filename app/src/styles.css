@@ -430,16 +430,6 @@ textarea {
   vector-effect: non-scaling-stroke;
 }
 
-.fog { fill: #05070c; }
-.fog-dm { fill: rgba(5, 7, 12, 0.62); }
-
-.template {
-  fill: rgba(201, 151, 63, 0.26);
-  stroke: rgba(201, 151, 63, 0.9);
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-}
-
 .measure-line {
   stroke: var(--accent);
   stroke-width: 2;
@@ -497,9 +487,7 @@ textarea {
   pointer-events: none;
 }
 
-.board.tool-reveal, .board.tool-hide { cursor: cell; }
 .board.tool-measure { cursor: crosshair; }
-.board.tool-circle, .board.tool-cone, .board.tool-line { cursor: copy; }
 
 /* ---------------------------------------------------------- tablero panel */
 
@@ -516,8 +504,6 @@ textarea {
   padding: 12px 16px;
 }
 .toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
-
-.template.pending { fill: rgba(201, 151, 63, 0.34); stroke-dasharray: 6 4; }
 
 /* ----------------------------------------------------------- fichas tab */
 

@@ -2,9 +2,13 @@
  * Load, migrate and persist `runs/<mesa>/session.json`.
  *
  * The file on disk is the vault's own v2/v3 schema; we extend it to v4 with
- * `field.fog`, `field.handout` and `log`, and normalise `field.reveal` keys to
- * `Ref`s (v3 keys them by bare NPC id while `field.tokens` uses `npc:<id>`).
- * v5 repoints each seated NPC's `file` from `monsters/*.json` at its note.
+ * `field.handout` and `log`, and normalise `field.reveal` keys to `Ref`s (v3
+ * keys them by bare NPC id while `field.tokens` uses `npc:<id>`). v5 repoints
+ * each seated NPC's `file` from `monsters/*.json` at its note.
+ *
+ * `field.fog` and `field.templates` were v4 fields too. The tools that wrote
+ * them are gone, so they are simply not read: an older file keeps them until
+ * the next write, and `session.json.bak` keeps the original either way.
  */
 import type {
   Field,
@@ -50,9 +54,7 @@ export function emptyField(): Field {
     tokens: {},
     reveal: {},
     benched: [],
-    fog: { on: false, revealed: [] },
     handout: null,
-    templates: [],
   }
 }
 
@@ -120,7 +122,6 @@ export function normaliseReveal(raw: unknown, npcIds: Set<string>): Record<strin
 function migrateField(raw: unknown, npcIds: Set<string>): Field {
   const d = asRecord(raw)
   const base = emptyField()
-  const fog = asRecord(d.fog)
   const handout = asRecord(d.handout)
   const audio = asRecord(d.audio)
   return {
@@ -144,10 +145,6 @@ function migrateField(raw: unknown, npcIds: Set<string>): Field {
     tokens: asRecord(d.tokens) as Field['tokens'],
     reveal: normaliseReveal(d.reveal, npcIds),
     benched: Array.isArray(d.benched) ? (d.benched as Ref[]) : [],
-    fog: {
-      on: fog.on === true,
-      revealed: Array.isArray(fog.revealed) ? (fog.revealed as number[]) : [],
-    },
     handout:
       typeof handout.src === 'string'
         ? {
@@ -156,7 +153,6 @@ function migrateField(raw: unknown, npcIds: Set<string>): Field {
             ...(typeof handout.page === 'number' ? { page: handout.page } : {}),
           }
         : null,
-    templates: Array.isArray(d.templates) ? (d.templates as Field['templates']) : [],
   }
 }
 

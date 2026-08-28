@@ -1,19 +1,17 @@
 /**
  * The tactical board, shared by both windows.
  *
- * The DM instance is interactive and shows the fog translucently; the table
- * instance is inert and the fog is opaque. Both draw from the same geometry so
- * what the DM measures is what the players see.
+ * The DM instance is interactive; the table instance is inert. Both draw from
+ * the same geometry so what the DM measures is what the players see.
+ *
+ * It used to carry fog of war and area templates as well. Measuring is the
+ * only thing drawn over the map now, and it is drawn nowhere else: it lives
+ * entirely in this component's own state, so nothing about a measurement
+ * reaches the session or the television.
  */
 import { useMemo, useRef, useState } from 'react'
-import type { Template, Token } from '../../../shared/types.ts'
-import {
-  cellDistance,
-  cellFromIndex,
-  cellIndex,
-  formatMetres,
-  templateShape,
-} from '../../../shared/grid.ts'
+import type { Token } from '../../../shared/types.ts'
+import { cellDistance, formatMetres } from '../../../shared/grid.ts'
 import { useAssetUrl } from '../assets/context.tsx'
 import {
   cellMetrics,
@@ -34,7 +32,7 @@ export interface BoardToken {
   hidden: boolean
 }
 
-export type BoardTool = 'select' | 'reveal' | 'hide' | 'measure' | 'circle' | 'cone' | 'line'
+export type BoardTool = 'select' | 'measure'
 
 export interface BoardProps {
   /** Asset key for the map or scene art behind the grid. */
@@ -43,16 +41,10 @@ export interface BoardProps {
   rows: number
   tokens: Record<string, Token>
   pieces: BoardToken[]
-  fog: { on: boolean; revealed: number[] }
-  templates: Template[]
   showGrid?: boolean
   interactive?: boolean
   tool?: BoardTool
-  brush?: number
-  templateSize?: number
   onMoveToken?: (ref: string, x: number, y: number) => void
-  onPaintFog?: (cells: number[], reveal: boolean) => void
-  onAddTemplate?: (t: Omit<Template, 'id'>) => void
   onSelectToken?: (ref: string) => void
 }
 
@@ -82,14 +74,6 @@ interface Measure {
   to: { x: number; y: number }
 }
 
-/** A template being aimed: dropped at the origin, angled by dragging out. */
-interface Pending {
-  kind: 'circle' | 'cone' | 'line'
-  x: number
-  y: number
-  angle: number
-}
-
 export function Board(props: BoardProps) {
   const {
     mapUrl,
@@ -97,13 +81,9 @@ export function Board(props: BoardProps) {
     rows,
     tokens,
     pieces,
-    fog,
-    templates,
     showGrid = true,
     interactive = false,
     tool = 'select',
-    brush = 1,
-    templateSize = 6,
   } = props
 
   const map = useAssetUrl(mapUrl)
@@ -114,44 +94,19 @@ export function Board(props: BoardProps) {
 
   const [drag, setDrag] = useState<Drag | null>(null)
   const [measure, setMeasure] = useState<Measure | null>(null)
-  const [painting, setPainting] = useState<boolean | null>(null)
-  const [pending, setPending] = useState<Pending | null>(null)
 
   const byRef = useMemo(() => new Map(pieces.map((p) => [p.ref, p])), [pieces])
-  const revealed = useMemo(() => new Set(fog.revealed), [fog.revealed])
 
   const toCell = (e: { clientX: number; clientY: number }) =>
     hostRef.current
       ? pointToCell(e.clientX, e.clientY, hostRef.current, box, cols, rows)
       : { x: 0, y: 0 }
 
-  const paintAt = (cx: number, cy: number, reveal: boolean) => {
-    const cells: number[] = []
-    const r = Math.max(0, Math.floor(brush) - 1)
-    for (let y = Math.max(0, cy - r); y <= Math.min(rows - 1, cy + r); y++) {
-      for (let x = Math.max(0, cx - r); x <= Math.min(cols - 1, cx + r); x++) {
-        cells.push(cellIndex(x, y, cols))
-      }
-    }
-    props.onPaintFog?.(cells, reveal)
-  }
-
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!interactive || !cell.w) return
+    if (!interactive || !cell.w || tool !== 'measure') return
     const p = toCell(e)
-    const s = snap(p.x, p.y, cols, rows)
-    if (tool === 'reveal' || tool === 'hide') {
-      const reveal = tool === 'reveal'
-      setPainting(reveal)
-      paintAt(s.x, s.y, reveal)
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } else if (tool === 'measure') {
-      setMeasure({ from: s, to: s })
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } else if (tool === 'circle' || tool === 'cone' || tool === 'line') {
-      setPending({ kind: tool, x: p.x, y: p.y, angle: 0 })
-      e.currentTarget.setPointerCapture(e.pointerId)
-    }
+    setMeasure({ from: snap(p.x, p.y, cols, rows), to: snap(p.x, p.y, cols, rows) })
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -161,18 +116,7 @@ export function Board(props: BoardProps) {
       setDrag({ ...drag, x: p.x, y: p.y })
       return
     }
-    if (pending) {
-      // Drag away from the origin to aim a cone or a line.
-      const dx = p.x - pending.x
-      const dy = p.y - pending.y
-      if (Math.hypot(dx, dy) > 0.25) {
-        setPending({ ...pending, angle: (Math.atan2(dy, dx) * 180) / Math.PI })
-      }
-      return
-    }
-    const s = snap(p.x, p.y, cols, rows)
-    if (painting !== null) paintAt(s.x, s.y, painting)
-    else if (measure) setMeasure({ ...measure, to: s })
+    if (measure) setMeasure({ ...measure, to: snap(p.x, p.y, cols, rows) })
   }
 
   const onPointerUp = () => {
@@ -181,11 +125,6 @@ export function Board(props: BoardProps) {
       props.onMoveToken?.(drag.ref, s.x, s.y)
       setDrag(null)
     }
-    if (pending) {
-      props.onAddTemplate?.({ ...pending, size: templateSize })
-      setPending(null)
-    }
-    setPainting(null)
     setMeasure(null)
   }
 
@@ -233,16 +172,6 @@ export function Board(props: BoardProps) {
         viewBox={`0 0 ${cols} ${rows}`}
         preserveAspectRatio="none"
       >
-        <defs>
-          <mask id="fog-mask">
-            <rect x="0" y="0" width={cols} height={rows} fill="white" />
-            {[...revealed].map((i) => {
-              const c = cellFromIndex(i, cols)
-              return <rect key={i} x={c.x} y={c.y} width="1" height="1" fill="black" />
-            })}
-          </mask>
-        </defs>
-
         {showGrid && (
           <g className="grid-lines">
             {Array.from({ length: cols - 1 }, (_, i) => (
@@ -252,34 +181,6 @@ export function Board(props: BoardProps) {
               <line key={`h${i}`} x1={0} y1={i + 1} x2={cols} y2={i + 1} />
             ))}
           </g>
-        )}
-
-        {[
-          ...templates,
-          ...(pending ? [{ ...pending, id: '__pending', size: templateSize }] : []),
-        ].map((t) => {
-          const shape = templateShape(t)
-          const cls = t.id === '__pending' ? 'template pending' : 'template'
-          return shape.kind === 'circle' ? (
-            <circle key={t.id} className={cls} cx={shape.cx} cy={shape.cy} r={shape.r} />
-          ) : (
-            <polygon
-              key={t.id}
-              className={cls}
-              points={shape.points.map(([x, y]) => `${x},${y}`).join(' ')}
-            />
-          )
-        })}
-
-        {fog.on && (
-          <rect
-            className={`fog${interactive ? ' fog-dm' : ''}`}
-            x="0"
-            y="0"
-            width={cols}
-            height={rows}
-            mask="url(#fog-mask)"
-          />
         )}
 
         {measure && (
@@ -296,11 +197,6 @@ export function Board(props: BoardProps) {
       {Object.entries(tokens).map(([ref, pos]) => {
         const piece = byRef.get(ref)
         if (!piece) return null
-        // The players' board hides anyone standing in unexplored fog; the DM's
-        // board always shows everyone.
-        if (!interactive && fog.on && !revealed.has(cellIndex(pos.x, pos.y, cols))) {
-          return null
-        }
         const dragging = drag?.ref === ref
         const x = dragging ? drag.x - 0.5 : pos.x
         const y = dragging ? drag.y - 0.5 : pos.y

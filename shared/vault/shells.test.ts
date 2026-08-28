@@ -29,7 +29,7 @@ describe('loadRun', () => {
     // v3 keyed reveal by bare id; v4 keys it the way tokens are keyed.
     expect(Object.keys(run.state.field.reveal)).toEqual(['npc:n1'])
     // And the v4 fields arrive with safe defaults.
-    expect(run.state.field.fog).toEqual({ on: false, revealed: [] })
+    expect(run.state.field.handout).toBeNull()
     expect(run.state.log).toEqual([])
   })
 

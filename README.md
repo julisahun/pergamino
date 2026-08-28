@@ -107,17 +107,20 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
   la tele sí la recorta a pantalla completa, que para eso es una tele.
 - Escena: arte a pantalla completa con fundido, ambiente sonoro y documentos
   (imágenes y PDF).
-- Tablero: rejilla sobre el mapa, fichas arrastrables, niebla de guerra que se
-  pinta con pincel, medición en metros (1 casilla = 1,5 m, la diagonal cuenta
-  como recta) y plantillas de círculo, cono y línea que se apuntan
-  arrastrando.
+- Tablero: rejilla sobre el mapa, fichas arrastrables y medición en metros
+  (1 casilla = 1,5 m, la diagonal cuenta como recta). Dos herramientas y nada
+  más. La medida vive en la ventana del DM mientras arrastras y no llega a la
+  tele: no es estado de la partida, es una pregunta.
+- La rejilla la fija la escena. `scenarios/*.json` puede traer su `grid`, y al
+  poner la escena en pantalla pasa a ser **la** rejilla — no un número que la
+  proyección le cambiaba a la tele por su cuenta.
 - La iniciativa va al lado, no en otra pestaña: ronda, turno, PG, daño y
   revelado por PNJ (oculto / barra / PG exactos) sin apartar el tablero. Pulsa
   un nombre y su ficha entra sobre la barra lateral.
 - La nota de lectura de la escena queda fijada abajo.
 - **Congelar la mesa**: la pantalla de los jugadores se queda con el último
   fotograma mientras preparas lo siguiente — colocar fichas, cargar un reparto,
-  pintar niebla — así que no ven un telón anunciando que pasa algo, sino una
+  cambiar de escena — así que no ven un telón anunciando que pasa algo, sino una
   escena normal. La consola avisa con una banda roja de qué siguen viendo, para
   que no se te olvide descongelar.
 
@@ -206,15 +209,17 @@ congela la sincronización y la pantalla de mesa mantiene su último fotograma.
 
 Lo que añade v4:
 
-- `field.fog` — niebla de guerra (`{ on, revealed: number[] }`)
 - `field.handout` — documento en pantalla
-- `field.templates` — plantillas de área
 - `objects` — cargas por objeto, no por portador
 - `log` — el registro que alimenta la bitácora
 - `field.reveal` pasa a indexarse por `Ref` (`npc:<id>`), como `field.tokens`
 
 Y v5: cada PNJ sentado apuntaba a `monsters/<id>.json`; ahora apunta a su nota,
 `pnj/<id>.md`, que es la misma ruta con la que esa nota está en el índice.
+
+`field.fog` y `field.templates` eran de v4 y ya no se leen: las herramientas
+que los escribían no están. Un fichero viejo los conserva hasta la siguiente
+escritura, y el `.bak` conserva el original de todas formas.
 
 ## Dos cosas que el esquema del vault mezclaba
 

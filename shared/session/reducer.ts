@@ -552,8 +552,6 @@ export function reduce(
       if (cols === field.cols && rows === field.rows) return { state, log }
       field.cols = cols
       field.rows = rows
-      // Cell indices are row-major over `cols`, so a resize invalidates the fog.
-      field.fog = { ...field.fog, revealed: [] }
       // Keep every token on the board.
       field.tokens = Object.fromEntries(
         Object.entries(field.tokens).map(([ref, t]) => [
@@ -564,54 +562,6 @@ export function reduce(
       next = { ...state, field }
       break
     }
-    case 'fog/on':
-      if (field.fog.on === action.on) return { state, log }
-      field.fog = { ...field.fog, on: action.on }
-      next = { ...state, field }
-      break
-    case 'fog/paint': {
-      const revealed = new Set(field.fog.revealed)
-      for (const cell of action.cells) {
-        if (action.reveal) revealed.add(cell)
-        else revealed.delete(cell)
-      }
-      if (revealed.size === field.fog.revealed.length) {
-        const unchanged = field.fog.revealed.every((c) => revealed.has(c))
-        if (unchanged) return { state, log }
-      }
-      field.fog = { ...field.fog, revealed: [...revealed].sort((a, b) => a - b) }
-      next = { ...state, field }
-      break
-    }
-    case 'fog/reset': {
-      const all = action.revealed
-        ? Array.from({ length: field.cols * field.rows }, (_, i) => i)
-        : []
-      field.fog = { ...field.fog, revealed: all }
-      next = { ...state, field }
-      break
-    }
-    case 'template/add':
-      field.templates = [...field.templates, action.template]
-      next = { ...state, field }
-      break
-    case 'template/update':
-      field.templates = field.templates.map((t) =>
-        t.id === action.template.id ? action.template : t,
-      )
-      next = { ...state, field }
-      break
-    case 'template/remove':
-      if (!field.templates.some((t) => t.id === action.id)) return { state, log }
-      field.templates = field.templates.filter((t) => t.id !== action.id)
-      next = { ...state, field }
-      break
-    case 'template/clear':
-      if (field.templates.length === 0) return { state, log }
-      field.templates = []
-      next = { ...state, field }
-      break
-
     // --- objetos -----------------------------------------------------------
     case 'object/give': {
       const live = liveOf(state, action.ref)

@@ -10,7 +10,7 @@
  * picker.
  */
 import { useMemo, useState } from 'react'
-import type { Ref, Scene, Template } from '../../../shared/types.ts'
+import type { Ref, Scene } from '../../../shared/types.ts'
 import { assetUrl } from '../../../shared/session/project.ts'
 import { titleCase } from '../../../shared/session/store.ts'
 import { Art } from '../assets/context.tsx'
@@ -27,18 +27,11 @@ const basename = (p: string) => p.split('/').pop() ?? p
 const TOOLS: { id: BoardTool; label: string; title: string }[] = [
   { id: 'select', label: '✥', title: es.mover },
   { id: 'measure', label: '↔', title: es.medir },
-  { id: 'reveal', label: '☀', title: es.revelarNiebla },
-  { id: 'hide', label: '☁', title: es.ocultarNiebla },
-  { id: 'circle', label: '◯', title: es.circulo },
-  { id: 'cone', label: '◺', title: es.cono },
-  { id: 'line', label: '▬', title: es.linea },
 ]
 
 export function MesaPanel() {
   const { scenes, pnjs, characters, sheets, state, frozen, assets, campaign, dispatch } = useDm()
   const [tool, setTool] = useState<BoardTool>('select')
-  const [brush, setBrush] = useState(2)
-  const [size, setSize] = useState(6)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
@@ -89,9 +82,6 @@ export function MesaPanel() {
       })
     }
   }
-
-  const addTemplate = (t: Omit<Template, 'id'>) =>
-    dispatch({ type: 'template/add', template: { ...t, id: `tpl-${Date.now().toString(36)}` } })
 
   return (
     <div className="mesa">
@@ -254,59 +244,11 @@ export function MesaPanel() {
               </button>
             ))}
 
-            {(tool === 'reveal' || tool === 'hide') && (
-              <label className="row" style={{ gap: 6 }}>
-                <span className="muted">{es.pincel}</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={6}
-                  value={brush}
-                  style={{ width: 70 }}
-                  onChange={(e) => setBrush(Number(e.target.value))}
-                />
-              </label>
-            )}
-            {(tool === 'circle' || tool === 'cone' || tool === 'line') && (
-              <label className="row" style={{ gap: 6 }}>
-                <span className="muted">{es.tamano}</span>
-                <input
-                  type="range"
-                  min={1.5}
-                  max={30}
-                  step={1.5}
-                  value={size}
-                  style={{ width: 80 }}
-                  onChange={(e) => setSize(Number(e.target.value))}
-                />
-                <span className="muted">{String(size).replace('.', ',')} m</span>
-              </label>
-            )}
-
             <span className="sep" />
             <Popover label={es.tablero}>
               {() => (
                 <>
-                  <button
-                    aria-pressed={field.fog.on}
-                    onClick={() => dispatch({ type: 'fog/on', on: !field.fog.on })}
-                  >
-                    {field.fog.on ? es.nieblaOn : es.nieblaOff}
-                  </button>
-                  <button onClick={() => dispatch({ type: 'fog/reset', revealed: true })}>
-                    {es.revelarTodo}
-                  </button>
-                  <button onClick={() => dispatch({ type: 'fog/reset', revealed: false })}>
-                    {es.cubrirTodo}
-                  </button>
-                  <div className="divider" />
                   <button onClick={() => dispatch({ type: 'token/placeAll' })}>{es.colocarFichas}</button>
-                  <button
-                    onClick={() => dispatch({ type: 'template/clear' })}
-                    disabled={field.templates.length === 0}
-                  >
-                    {es.limpiarPlantillas}
-                  </button>
                   <div className="divider" />
                   <div className="row" style={{ padding: '4px 8px', gap: 6 }}>
                     <span className="muted">{es.rejilla}</span>
@@ -365,15 +307,9 @@ export function MesaPanel() {
               rows={field.rows}
               tokens={field.tokens}
               pieces={pieces}
-              fog={field.fog}
-              templates={field.templates}
               interactive
               tool={tool}
-              brush={brush}
-              templateSize={size}
               onMoveToken={(ref, x, y) => dispatch({ type: 'token/move', ref: ref as Ref, x, y })}
-              onPaintFog={(cells, reveal) => dispatch({ type: 'fog/paint', cells, reveal })}
-              onAddTemplate={addTemplate}
             />
           ) : (
             <SceneLayer

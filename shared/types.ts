@@ -1,7 +1,5 @@
 /** Domain types shared by the server and both browser windows. */
-import type { Template } from './grid.ts'
 
-export type { Template } from './grid.ts'
 
 /** A participant reference: `pc:<characterId>` or `npc:<runtimeId>`. */
 export type Ref = `pc:${string}` | `npc:${string}`
@@ -181,7 +179,7 @@ export interface Field {
   hud: boolean
   /**
    * Sync paused. The table screen holds the last frame it was sent while the
-   * DM works ahead — placing tokens, loading a roster, painting fog — so the
+   * DM works ahead — placing tokens, loading a roster — so the
    * players go on seeing an ordinary scene instead of a curtain that announces
    * something is being prepared.
    */
@@ -195,10 +193,7 @@ export interface Field {
   /** Keyed by `Ref` — normalised from bare npc ids on migration. */
   reveal: Record<string, RevealState>
   benched: Ref[]
-  fog: { on: boolean; revealed: number[] }
   handout: Handout | null
-  /** Area-of-effect markers, visible on both screens. */
-  templates: Template[]
 }
 
 export type LogKind =
@@ -270,8 +265,6 @@ export interface TableView {
   audio: AudioState | null
   handout: Handout | null
   grid: { cols: number; rows: number } | null
-  fog: { on: boolean; revealed: number[] }
-  templates: Template[]
   tokens: Record<string, Token>
   combatants: TableCombatant[]
   round: number
