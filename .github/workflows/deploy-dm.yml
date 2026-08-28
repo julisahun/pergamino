@@ -58,28 +58,49 @@ jobs:
       # vendor/ are still sitting in $PI_DIR from the last deploy — inert under
       # the new server.py, which serves nothing but dist/, but no reason to
       # leave them there.
+      # `--delay-updates` holds every transferred file aside and renames the
+      # whole set into place at the end, and `--delete-after` waits until that
+      # has happened before removing what the last build left. Without the
+      # pair, the live server spends the transfer serving a half-swapped tree:
+      # a fresh index.html naming hashed assets that have not landed, or whose
+      # predecessors are already gone. That is a 404 on every asset, and it is
+      # what a reload during a deploy actually hit.
       - name: Ship the build to the Pi
         run: |
           rm -rf /tmp/stage && mkdir -p /tmp/stage
           cp -R dist /tmp/stage/dist
           cp server.py /tmp/stage/server.py
-          rsync -a --delete \
+          rsync -a --delete --delete-after --delay-updates \
             -e "ssh -o StrictHostKeyChecking=accept-new" \
             /tmp/stage/ "$PI_USER@$PI_HOST:$PI_DIR/"
 
-      # Both pages, not just the ping: a build that shipped half its assets
-      # would still answer /api/ping.
+      # Both pages *and everything they name*. Curling / and /tv only proves
+      # the html is there — it is a literal file on disk and answers 200 with
+      # or without a single asset beside it, which is exactly how a build with
+      # no reachable css shipped green.
       - name: Restart & smoke test
         run: |
           ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
-            'sudo systemctl restart dm-app
+            'set -e
+             sudo systemctl restart dm-app
              for i in $(seq 1 10); do
                curl -sf http://localhost:8085/api/ping >/dev/null && break
                sleep 1
              done
-             for path in /api/ping / /tv; do
-               curl -sf -o /dev/null "http://localhost:8085$path" || {
+             curl -sf -o /dev/null http://localhost:8085/api/ping || {
+               echo "dm-app: never came back up" >&2; exit 1; }
+             for path in / /tv; do
+               html=$(curl -sf "http://localhost:8085$path") || {
                  echo "dm-app: $path did not answer" >&2; exit 1; }
+               assets=$(printf %s "$html" | grep -oE "/assets/[A-Za-z0-9._-]+" | sort -u)
+               [ -n "$assets" ] || {
+                 echo "dm-app: $path names no assets at all" >&2; exit 1; }
+               for asset in $assets; do
+                 curl -sf -o /dev/null "http://localhost:8085$asset" || {
+                   echo "dm-app: $path names $asset, which is not being served" >&2
+                   exit 1; }
+               done
+               echo "$path -> $(printf %s "$assets" | wc -w | tr -d " ") assets ok"
              done
              # The property that makes public hosting safe, re-asserted on the
              # box: no route serves a campaign file, and POST does not exist.
