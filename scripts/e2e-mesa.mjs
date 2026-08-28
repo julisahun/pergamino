@@ -56,10 +56,12 @@ await shot('mesa-4-congelada')
 await bar('⏸ Mesa congelada').click()
 
 console.log('tablero:')
-// A rat on the board, so there is something to move.
-await dm.locator('.rail-foot').getByRole('button', { name: /PNJ/ }).click()
-await dm.locator('.rail-foot select').selectOption('sewer-cheese-rat')
-await dm.locator('.rail-foot').getByRole('button', { name: 'Añadir' }).click()
+// A rat on the board, so there is something to move. Adding is a modal now;
+// `e2e-combate.mjs` is what actually exercises it.
+await dm.locator('.rail-foot').getByRole('button', { name: /Añadir/ }).click()
+await dm.waitForSelector('.add-list')
+await dm.locator('.add-row', { hasText: 'Sewer Cheese-Rat' }).getByRole('button', { name: 'Añadir' }).click()
+await dm.getByRole('button', { name: 'Listo' }).click()
 await bar('Tablero').click()
 await dm.locator('.mesa-bar').getByRole('button', { name: 'Tablero' }).last().click()
 await dm.getByRole('button', { name: 'Colocar fichas' }).click()

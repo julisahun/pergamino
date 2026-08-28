@@ -15,6 +15,7 @@ import type {
   ObjectState,
   Ref,
   SessionState,
+  Token,
 } from '../types.ts'
 import { makeRef, refId, refKind } from '../types.ts'
 import type { Pnj } from '../types.ts'
@@ -33,8 +34,6 @@ export interface ReduceOpts {
   /** A scene's prepared roster, from `scenarios/*.json`. */
   scene?: (sceneId: string) => { roster: { pnjId: string; count: number }[] } | undefined
   newId?: () => string
-  /** Returns 1..sides. */
-  roll?: (sides: number) => number
 }
 
 export interface ReduceResult {
@@ -44,7 +43,6 @@ export interface ReduceResult {
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 const defaultId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
-const defaultRoll = (sides: number) => 1 + Math.floor(Math.random() * sides)
 
 // --- reading and writing one combatant's live state ------------------------
 
@@ -182,6 +180,27 @@ export function orderMembers(
 }
 
 /** Initiative modifier of any combatant: NPC stat block or PC sheet. */
+/**
+ * The first empty square, scanning in from one edge — PCs from the left and
+ * PNJ from the right, so a roster dropped onto the board does not stack up in
+ * one corner. Null when the board is full.
+ */
+function freeSquare(
+  tokens: Record<string, Token>,
+  cols: number,
+  rows: number,
+  fromRight: boolean,
+): Token | null {
+  const taken = new Set(Object.values(tokens).map((t) => `${t.x},${t.y}`))
+  for (let i = 0; i < cols; i++) {
+    const x = fromRight ? cols - 1 - i : i
+    for (let y = 0; y < rows; y++) {
+      if (!taken.has(`${x},${y}`)) return { x, y }
+    }
+  }
+  return null
+}
+
 function initModOf(state: SessionState, ref: Ref, opts: ReduceOpts): number {
   return refKind(ref) === 'npc'
     ? (state.npcs.find((n) => n.id === refId(ref))?.initMod ?? 0)
@@ -218,7 +237,6 @@ export function reduce(
 ): ReduceResult {
   const log: Omit<LogEntry, 't'>[] = []
   const newId = opts.newId ?? defaultId
-  const roll = opts.roll ?? defaultRoll
   let next: SessionState = state
   const field = { ...state.field }
 
@@ -453,7 +471,9 @@ export function reduce(
           round: 1,
           activeRef: null,
           members: action.members,
-          init: state.encounter.init,
+          // What the DM read off the table, over whatever a previous fight
+          // left behind. Nothing is rolled here.
+          init: { ...state.encounter.init, ...(action.init ?? {}) },
         },
       }
       log.push({ kind: 'encounter', text: `Combate iniciado (${action.members.length})` })
@@ -484,15 +504,6 @@ export function reduce(
         },
       }
       break
-    case 'encounter/roll': {
-      const targets = action.refs ?? state.encounter.members.filter((m) => m.startsWith('npc:'))
-      const init = { ...state.encounter.init }
-      for (const ref of targets) {
-        init[ref] = roll(20) + initModOf(state, ref, opts)
-      }
-      next = { ...state, encounter: { ...state.encounter, init } }
-      break
-    }
     case 'encounter/advance': {
       const { encounter, wrapped } = advance(state, action.delta, opts)
       if (encounter === state.encounter) return { state, log }
@@ -520,28 +531,29 @@ export function reduce(
       next = { ...state, field }
       break
     }
+    case 'token/place': {
+      if (field.tokens[action.ref]) return { state, log }
+      const spot =
+        action.x !== undefined && action.y !== undefined
+          ? { x: action.x, y: action.y }
+          : freeSquare(field.tokens, field.cols, field.rows, action.ref.startsWith('npc:'))
+      if (!spot) return { state, log }
+      field.tokens = { ...field.tokens, [action.ref]: spot }
+      next = { ...state, field }
+      break
+    }
     case 'token/placeAll': {
-      // Drop anyone without a token into the first free squares, PCs on the
-      // left edge and NPCs on the right, so nothing lands on top of anything.
-      const taken = new Set(
-        Object.values(field.tokens).map((t) => `${t.x},${t.y}`),
-      )
       const tokens = { ...field.tokens }
       const place = (ref: Ref, fromRight: boolean) => {
         if (tokens[ref]) return
-        for (let x = 0; x < field.cols; x++) {
-          const col = fromRight ? field.cols - 1 - x : x
-          for (let y = 0; y < field.rows; y++) {
-            const key = `${col},${y}`
-            if (taken.has(key)) continue
-            taken.add(key)
-            tokens[ref] = { x: col, y }
-            return
-          }
-        }
+        const spot = freeSquare(tokens, field.cols, field.rows, fromRight)
+        if (spot) tokens[ref] = spot
       }
       for (const pcId of Object.keys(state.play)) place(makeRef('pc', pcId), false)
       for (const npc of state.npcs) place(makeRef('npc', npc.id), true)
+      if (Object.keys(tokens).length === Object.keys(field.tokens).length) {
+        return { state, log }
+      }
       field.tokens = tokens
       next = { ...state, field }
       break

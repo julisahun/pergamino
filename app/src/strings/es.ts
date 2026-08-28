@@ -94,7 +94,6 @@ export const es = {
   // combate
   iniciarCombate: 'Iniciar combate',
   terminarCombate: 'Terminar combate',
-  tirarIniciativa: 'Tirar iniciativa',
   siguienteTurno: 'Siguiente',
   turnoAnterior: 'Anterior',
   iniciativa: 'Ini',
@@ -113,8 +112,35 @@ export const es = {
   notaDm: 'Nota del DM',
   notaPreparacion: 'Nota de preparación',
   rasgos: 'Rasgos',
-  anadirPnj: 'Añadir PNJ',
   anadir: 'Añadir',
+
+  // el tablero: quién está y quién entra
+  anadirAlTablero: 'Añadir al tablero',
+  anadirAlTableroAyuda:
+    'La party, los PNJ que ya están en la mesa, y los de la campaña — estos ' +
+    'entran en la mesa al añadirlos.',
+  buscarCombatiente: 'Buscar…',
+  yaEnLaMesa: 'Ya en la mesa',
+  pnjDeLaCampana: 'PNJ de la campaña',
+  cuantos: 'Cuántos',
+  listo: 'Listo',
+  quitarDelTablero: 'Quitar del tablero',
+  quitarTodas: 'Quitar todas',
+  todosEnElTablero: 'Todos están ya en el tablero.',
+
+  // preparar el combate
+  quienCombate: '¿Quién entra en el combate?',
+  quienCombateAyuda:
+    'Vienen marcados los que están en el tablero. Escribe la iniciativa de ' +
+    'cada uno — nadie tira por ti.',
+  enElTablero: 'En el tablero',
+  fueraDelTablero: 'Fuera del tablero',
+  empezar: 'Empezar',
+  cancelar: 'Cancelar',
+  todos: 'Todos',
+  ninguno: 'Ninguno',
+  tirarPorLosPnj: 'Tirar por los PNJ',
+  faltaIniciativa: 'Sin iniciativa van los últimos.',
   quitar: 'Quitar',
   fueraDeCombate: 'Fuera',
   muerto: 'Muerto',

@@ -18,7 +18,6 @@ const opts = (extra: Partial<ReduceOpts> = {}): ReduceOpts => ({
     ({ 'pj-amparo': 'El amparo', 'pj-muro': 'El muro', 'pj-sombra': 'La sombra' })[pcId],
   pcInitMod: (pcId) => ({ 'pj-amparo': 1, 'pj-muro': 0, 'pj-sombra': 3 })[pcId] ?? null,
   newId: () => `test-${++counter}`,
-  roll: () => 10,
   ...extra,
 })
 
@@ -210,11 +209,19 @@ describe('initiative order', () => {
     expect(orderMembers(state, ['pc:pj-muro', bandit], opts())[0]).toBe(bandit)
   })
 
-  it('rolls d20 + initMod for the NPCs', () => {
+  it('takes the initiatives stated when the fight starts', () => {
+    // Nothing is rolled into the session any more: the DM reads the numbers
+    // off the table and `encounter/start` carries them.
     const before = guils()
     const bandit: Ref = `npc:${before.npcs[0]!.id}`
-    const { state } = reduce(before, { type: 'encounter/roll' }, 1_000, opts())
-    expect(state.encounter.init[bandit]).toBe(11) // 10 + 1
+    const state = run(before, {
+      type: 'encounter/start',
+      members: ['pc:pj-muro', bandit],
+      init: { 'pc:pj-muro': 14, [bandit]: 7 },
+    })
+    expect(state.encounter.init['pc:pj-muro']).toBe(14)
+    expect(state.encounter.init[bandit]).toBe(7)
+    expect(orderMembers(state, state.encounter.members, opts())[0]).toBe('pc:pj-muro')
   })
 })
 
@@ -315,6 +322,37 @@ describe('tablero', () => {
     const placed = before.field.tokens['npc:' + before.npcs[0]!.id]
     const state = run(before, { type: 'token/placeAll' })
     expect(state.field.tokens['npc:' + before.npcs[0]!.id]).toEqual(placed)
+  })
+
+  it('puts one combatant on the board and takes them off again', () => {
+    const before = run(guils(), { type: 'field/grid', cols: 10, rows: 8 })
+    const ref: Ref = 'pc:pj-muro'
+    const cleared = run(before, { type: 'token/remove', ref })
+    expect(cleared.field.tokens[ref]).toBeUndefined()
+
+    const placed = run(cleared, { type: 'token/place', ref })
+    expect(placed.field.tokens[ref]).toBeDefined()
+    // Nobody lands on top of anybody.
+    const squares = Object.values(placed.field.tokens).map((t) => `${t.x},${t.y}`)
+    expect(new Set(squares).size).toBe(squares.length)
+
+    // Placing someone already there changes nothing.
+    expect(run(placed, { type: 'token/place', ref })).toBe(placed)
+    // Nor does removing someone who is not.
+    const gone = run(placed, { type: 'token/remove', ref })
+    expect(run(gone, { type: 'token/remove', ref })).toBe(gone)
+  })
+
+  it('honours an explicit square, and leaves a placed token where it is', () => {
+    const ref: Ref = 'pc:pj-muro'
+    const before = guils()
+    // Already on the board: placing is a no-op, because moving is `token/move`.
+    const was = before.field.tokens[ref]
+    expect(was).toBeDefined()
+    expect(run(before, { type: 'token/place', ref, x: 3, y: 4 })).toBe(before)
+
+    const state = run(before, { type: 'token/remove', ref }, { type: 'token/place', ref, x: 3, y: 4 })
+    expect(state.field.tokens[ref]).toEqual({ x: 3, y: 4 })
   })
 
   it('keeps tokens on the board when the grid shrinks', () => {

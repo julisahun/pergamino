@@ -53,6 +53,19 @@ DIST = Path(os.environ.get('DM_DIST') or (HERE / 'dist')).resolve()
 # surface: one folder of build output, and the two pages named explicitly.
 SERVABLE = ('assets',)
 
+# Caching, of which there are exactly three kinds here.
+#
+# Everything used to be `no-cache`, which was safe and wrong in one place: it
+# applied to 404s too. Cloudflare fronts this with a 4-hour Browser Cache TTL
+# that overrides the origin on static-extension URLs, so a 404 fetched while a
+# deploy was swapping the tree came back to the browser as `max-age=14400` —
+# and the page stayed blank for four hours after the deploy had finished,
+# because the browser never asked again. `no-store` is the header that cannot
+# be turned into that.
+CACHE_FOREVER = 'public, max-age=31536000, immutable'
+CACHE_REVALIDATE = 'no-cache'
+CACHE_NEVER = 'no-store'
+
 # A wrong MIME kills ES modules outright, and the platform's table cannot be
 # trusted to know .mjs — so the ones that matter are spelled out.
 MIME = {
@@ -77,23 +90,25 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- send
 
-    def send_bytes(self, data, ctype, status=200):
+    def send_bytes(self, data, ctype, status=200, cache=CACHE_REVALIDATE):
         self.send_response(status)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Cache-Control', cache)
         self.end_headers()
         try:
             self.wfile.write(data)
         except (BrokenPipeError, ConnectionResetError):
             pass                      # a window closed mid-response
 
-    def send_json(self, obj, status=200):
+    def send_json(self, obj, status=200, cache=CACHE_REVALIDATE):
         body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
-        self.send_bytes(body, 'application/json; charset=utf-8', status)
+        self.send_bytes(body, 'application/json; charset=utf-8', status, cache)
 
     def fail(self, status, msg):
-        self.send_json({'error': msg}, status)
+        # Never cacheable. A 404 on a hashed asset is always a deploy caught
+        # mid-swap, and storing one buries the page until it expires.
+        self.send_json({'error': msg}, status, CACHE_NEVER)
 
     # -------------------------------------------------------------- lookup
 
@@ -138,7 +153,10 @@ class Handler(BaseHTTPRequestHandler):
         ctype = (MIME.get(f.suffix.lower())
                  or mimetypes.guess_type(f.name)[0]
                  or 'application/octet-stream')
-        self.send_bytes(data, ctype)
+        # `/assets/…` is content-hashed by Vite, so a name never changes
+        # meaning; the two pages must be re-read to learn the new names.
+        cache = CACHE_FOREVER if path.startswith('/assets/') else CACHE_REVALIDATE
+        self.send_bytes(data, ctype, cache=cache)
 
     def do_HEAD(self):
         self.do_GET()

@@ -742,7 +742,32 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   max-height: 90vh; overflow: auto;
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.7);
 }
+.sheet.wide { max-width: 560px; }
 .sheet h2 { margin: 0 0 2px; font: 500 21px/1.2 var(--font-read); color: var(--accent); }
+
+/* Adding to the board, and composing a fight: two lists of people with one
+   control each, so they share a row shape. */
+.add-list, .setup-list { max-height: 52vh; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+.add-row, .setup-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+}
+.add-row:hover, .setup-row:hover { background: var(--bg-raised); border-color: var(--line); }
+.add-name, .setup-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 13.5px/1.25 var(--font-read);
+}
+.setup-row { cursor: pointer; }
+/* Unticked rows stay legible but plainly out of the fight. */
+.setup-row:not(.in) .setup-name { color: var(--ink-faint); }
+.setup-row input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+.setup-row .hp-input { width: 46px; text-align: center; }
+
+.off-board { color: var(--ink-faint); }
+.off-board:hover { color: var(--danger); border-color: var(--danger); }
 .sheet .sub { color: var(--ink-faint); font-size: 12px; margin-bottom: 14px; }
 .sheet-actions { margin: 0 0 4px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .sheet ul { margin: 0; padding-left: 20px; color: var(--ink-dim); line-height: 1.55; }

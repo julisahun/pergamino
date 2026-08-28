@@ -33,15 +33,21 @@ export type Action =
   | { type: 'death/reset'; ref: Ref }
   | { type: 'live/note'; ref: Ref; note: string }
   // --- Combate ------------------------------------------------------------
-  | { type: 'encounter/start'; members: Ref[] }
+  /**
+   * Who is in the fight and what they rolled. The initiatives come with the
+   * action because the DM states them in one pass before anything starts —
+   * nothing is rolled on their behalf.
+   */
+  | { type: 'encounter/start'; members: Ref[]; init?: Record<string, number> }
   | { type: 'encounter/end' }
   | { type: 'encounter/members'; members: Ref[] }
   | { type: 'encounter/init'; ref: Ref; value: number }
-  | { type: 'encounter/roll'; refs?: Ref[] }
   | { type: 'encounter/advance'; delta: 1 | -1 }
   // --- Tablero ------------------------------------------------------------
   | { type: 'token/move'; ref: Ref; x: number; y: number }
   | { type: 'token/remove'; ref: Ref }
+  /** One combatant onto the board; without a square, the first free one. */
+  | { type: 'token/place'; ref: Ref; x?: number; y?: number }
   | { type: 'token/placeAll' }
   | { type: 'field/grid'; cols: number; rows: number }
   // --- Objetos y descansos ------------------------------------------------

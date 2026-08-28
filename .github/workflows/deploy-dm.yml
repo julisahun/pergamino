@@ -102,6 +102,11 @@ jobs:
                done
                echo "$path -> $(printf %s "$assets" | wc -w | tr -d " ") assets ok"
              done
+             # A cacheable 404 is what turned one bad deploy into four hours of
+             # blank page: the browser was told to keep the miss and stopped
+             # asking. Errors must stay unstorable.
+             curl -sI http://localhost:8085/assets/nope.css | grep -qi "cache-control: no-store" || {
+               echo "dm-app: a 404 is cacheable again" >&2; exit 1; }
              # The property that makes public hosting safe, re-asserted on the
              # box: no route serves a campaign file, and POST does not exist.
              curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/vault/x | grep -qx 404 || {

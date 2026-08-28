@@ -6,11 +6,12 @@
 import { useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Ref, RevealState } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
-import { isCombatant } from '../../../shared/vault/campaign.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
+import { AddToBoard } from './AddToBoard.tsx'
 import { CombatantDetail } from './CombatantDetail.tsx'
+import { CombatSetup } from './CombatSetup.tsx'
 import { artIndex, combatants, isDead, isDown, orderByInit, type Combatant } from './combat.ts'
 
 const PC_DEFAULT: RevealState = { on: true, hp: 'exact' }
@@ -31,6 +32,7 @@ function RailRow({
   active,
   inEncounter,
   showInit,
+  onBoard,
   onSelect,
 }: {
   c: Combatant
@@ -39,6 +41,8 @@ function RailRow({
   active: boolean
   inEncounter: boolean
   showInit: boolean
+  /** Null when they are not on the board — there is nothing to take off. */
+  onBoard: (() => void) | null
   onSelect: () => void
 }) {
   const dispatch = useDm((s) => s.dispatch)
@@ -136,6 +140,15 @@ function RailRow({
           >
             {HP_LABEL[reveal.hp]}
           </button>
+          {onBoard && (
+            <button
+              className="mini eye off-board"
+              title={es.quitarDelTablero}
+              onClick={stop(onBoard)}
+            >
+              ⊗
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -146,8 +159,7 @@ export function InitiativeRail() {
   const { state, characters, pnjs, sheets, dispatch } = useDm()
   const [selected, setSelected] = useState<Ref | null>(null)
   const [adding, setAdding] = useState(false)
-  const [pnjId, setMonsterId] = useState('')
-  const [count, setCount] = useState(1)
+  const [starting, setStarting] = useState(false)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
@@ -197,6 +209,8 @@ export function InitiativeRail() {
   const inCombat = encounter.on ? roster.filter((c) => members.has(c.ref)) : []
   const outOfCombat = encounter.on ? roster.filter((c) => !members.has(c.ref)) : roster
 
+  const onBoard = (ref: Ref) => Boolean(state.field.tokens[ref])
+
   const row = (c: Combatant, inEncounter: boolean) => (
     <RailRow
       key={c.ref}
@@ -206,6 +220,9 @@ export function InitiativeRail() {
       active={encounter.activeRef === c.ref}
       inEncounter={inEncounter}
       showInit={encounter.on}
+      onBoard={
+        onBoard(c.ref) ? () => dispatch({ type: 'token/remove', ref: c.ref }) : null
+      }
       onSelect={() => setSelected(c.ref)}
     />
   )
@@ -230,12 +247,7 @@ export function InitiativeRail() {
             </button>
           </>
         ) : (
-          <button
-            onClick={() =>
-              dispatch({ type: 'encounter/start', members: ordered.map((c) => c.ref) })
-            }
-            disabled={ordered.length === 0}
-          >
+          <button onClick={() => setStarting(true)} disabled={all.length === 0}>
             {es.iniciarCombate}
           </button>
         )}
@@ -257,60 +269,50 @@ export function InitiativeRail() {
       </div>
 
       <div className="rail-foot">
-        {adding ? (
-          <>
-            <select value={pnjId} onChange={(e) => setMonsterId(e.target.value)} style={{ flex: 1 }}>
-              <option value="">—</option>
-              {/* Only those with hit points: `instantiate` drops the rest on
-                  the floor, so offering them here promises nothing. */}
-              {pnjs.filter(isCombatant).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.tag ? ` · ${m.tag}` : ''}
-                </option>
-              ))}
-            </select>
-            <input
-              className="hp-input"
-              value={count}
-              inputMode="numeric"
-              onChange={(e) => setCount(Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1))}
-            />
-            <button
-              className="mini"
-              disabled={!pnjId}
-              onClick={() => {
-                dispatch({ type: 'npc/add', pnjId, count })
-                setAdding(false)
-              }}
-            >
-              {es.anadir}
-            </button>
-            <button className="mini" onClick={() => setAdding(false)}>✕</button>
-          </>
-        ) : (
-          <>
-            <button className="mini" title={es.anadirPnj} onClick={() => setAdding(true)}>
-              + {es.pnjs}
-            </button>
-            <button className="mini" onClick={() => dispatch({ type: 'encounter/roll' })}>
-              {es.tirarIniciativa}
-            </button>
-            <div style={{ flex: 1 }} />
-            <button className="mini" title={es.revelarTodos} onClick={() => dispatch({ type: 'reveal/all', on: true })}>
-              ◉
-            </button>
-            <button className="mini" title={es.ocultarTodos} onClick={() => dispatch({ type: 'reveal/all', on: false })}>
-              ○
-            </button>
-            {state.encounter.on && (
-              <button className="mini" onClick={() => dispatch({ type: 'encounter/end' })}>
-                {es.terminarCombate}
-              </button>
-            )}
-          </>
+        <button className="mini" title={es.anadirAlTablero} onClick={() => setAdding(true)}>
+          + {es.anadir}
+        </button>
+        <button
+          className="mini"
+          title={es.quitarTodas}
+          disabled={Object.keys(state.field.tokens).length === 0}
+          onClick={() => {
+            for (const ref of Object.keys(state.field.tokens)) {
+              dispatch({ type: 'token/remove', ref: ref as Ref })
+            }
+          }}
+        >
+          {es.quitarTodas}
+        </button>
+        <div style={{ flex: 1 }} />
+        <button className="mini" title={es.revelarTodos} onClick={() => dispatch({ type: 'reveal/all', on: true })}>
+          ◉
+        </button>
+        <button className="mini" title={es.ocultarTodos} onClick={() => dispatch({ type: 'reveal/all', on: false })}>
+          ○
+        </button>
+        {encounter.on && (
+          <button className="mini" onClick={() => dispatch({ type: 'encounter/end' })}>
+            {es.terminarCombate}
+          </button>
         )}
       </div>
+
+      {adding && (
+        <AddToBoard all={all} onBoard={onBoard} onClose={() => setAdding(false)} />
+      )}
+
+      {starting && (
+        <CombatSetup
+          all={all}
+          onBoard={onBoard}
+          onClose={() => setStarting(false)}
+          onStart={(members, init) => {
+            dispatch({ type: 'encounter/start', members, init })
+            setStarting(false)
+          }}
+        />
+      )}
     </div>
   )
 }

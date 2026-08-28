@@ -117,6 +117,16 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 - La iniciativa va al lado, no en otra pestaña: ronda, turno, PG, daño y
   revelado por PNJ (oculto / barra / PG exactos) sin apartar el tablero. Pulsa
   un nombre y su ficha entra sobre la barra lateral.
+- **Quién está en el tablero** es cosa tuya, ficha a ficha. `+ Añadir` abre una
+  lista con la party, los PNJ que ya están en la mesa y los de la campaña
+  (estos entran en la mesa al añadirlos), y cada fila de la barra lleva un `⊗`
+  que quita esa ficha del tablero sin sacar a nadie del combate ni de la mesa.
+- **Iniciar combate pregunta.** Antes metía a todo el mundo y tiraba d20 por
+  los PNJ; ahora abre una hoja con todos, marcados los que están en el tablero
+  — el PNJ que aún no ha saltado sale listado y sin marcar, a un clic de
+  entrar. Las casillas de iniciativa **empiezan vacías**: las escribes tú,
+  ⏎ baja a la siguiente, y el dado de cada fila sólo tira si lo pulsas. La app
+  ya no tira nada por su cuenta.
 - La nota de lectura de la escena queda fijada abajo.
 - **Congelar la mesa**: la pantalla de los jugadores se queda con el último
   fotograma mientras preparas lo siguiente — colocar fichas, cargar un reparto,
