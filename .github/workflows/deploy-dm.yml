@@ -1,18 +1,14 @@
-# Ships dm/ to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
-# Nothing is built — dm/ is stdlib Python plus native ES modules, so the
-# "artifact" is the source tree minus its dev-only files.
+# Ships the app to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
 #
-# creator/** is no longer a trigger: dm/src/rules/ is the app's own now, and
-# the creator's export is one of the formats it reads rather than a sibling to
-# stay byte-identical to. check-sync.py retired with that change.
-name: Deploy dm to Pi
+# Vite emits two pages into dist/, and that plus server.py is the entire
+# runtime set. No source, no node_modules and no Node reach the Pi — it runs
+# `python3 server.py` and nothing else, which is why dm-app.service needs no
+# change.
+name: Deploy to Pi
 
 on:
   push:
     branches: [master]
-    paths:
-      - dm/**
-      - .github/workflows/deploy-dm.yml
   workflow_dispatch:
 
 concurrency:
@@ -32,29 +28,22 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 24   # `node --test <glob>` and the model's syntax
+          node-version: 22
+          cache: npm
 
-      # The model, and the source lint that catches htm's unclosed void
-      # elements — the bug whose symptom is a TypeError on the second render.
+      - name: Install
+        run: npm ci
+
+      # The DM's own vault is private and is not here, so `*.vault.test.ts` is
+      # skipped and vitest says so. What remains is the half that needs no
+      # filesystem: the write-scope guard and the async shells, both against an
+      # in-memory vault.
       - name: Tests
-        run: node --test "dm/src/**/*.test.js"
+        run: npm test
 
-      # Types are dev-only and emit nothing; the compiler is a machine tool,
-      # not a repo dependency, which is why it is installed here rather than
-      # committed as a package.json.
-      - name: Types
-        run: |
-          npm i -g typescript
-          tsc -p dm/jsconfig.json
-
-      # The example campaign is the fixture the parsers promise to read. The
-      # linter exits 1 for warnings and 2 for errors; only errors mean the app
-      # would read something different from what the file says, so only errors
-      # stop a deploy.
-      - name: The example campaign still reads
-        run: |
-          node dm/check-campaign.js campaigns/example || \
-            { [ $? -eq 1 ] && echo "warnings only — see above"; }
+      # `npm run build` runs tsc --noEmit first, so this is types + bundle.
+      - name: Build
+        run: npm run build
 
       - name: Connect to tailnet
         uses: tailscale/github-action@v3
@@ -63,25 +52,39 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      # --delete-excluded so the deployed tree is exactly the runtime set:
-      # Docs, tests, types and the verification pages never reach the Pi: the
-      # deployed tree is exactly the runtime set.
-      - name: Ship dm/ to the Pi
+      # Staged first, then mirrored with --delete, so the deployed tree is
+      # *exactly* the runtime set: the two pages, their hashed assets, and the
+      # host. That also clears out the previous app, whose index.html, src/ and
+      # vendor/ are still sitting in $PI_DIR from the last deploy — inert under
+      # the new server.py, which serves nothing but dist/, but no reason to
+      # leave them there.
+      - name: Ship the build to the Pi
         run: |
-          rsync -a --delete --delete-excluded \
-            --exclude 'CLAUDE.md' \
-            --exclude 'instructions.md' \
-            --exclude 'importing.md' \
-            --exclude 'check-campaign.js' \
-            --exclude 'jsconfig.json' \
-            --exclude 'probes' \
-            --exclude '*.test.js' \
-            --exclude '*.d.ts' \
-            --exclude '*.d.mts' \
+          rm -rf /tmp/stage && mkdir -p /tmp/stage
+          cp -R dist /tmp/stage/dist
+          cp server.py /tmp/stage/server.py
+          rsync -a --delete \
             -e "ssh -o StrictHostKeyChecking=accept-new" \
-            dm/ "$PI_USER@$PI_HOST:$PI_DIR/"
+            /tmp/stage/ "$PI_USER@$PI_HOST:$PI_DIR/"
 
+      # Both pages, not just the ping: a build that shipped half its assets
+      # would still answer /api/ping.
       - name: Restart & smoke test
         run: |
           ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
-            'sudo systemctl restart dm-app; for i in $(seq 1 10); do curl -sf http://localhost:8085/api/ping >/dev/null && { echo ok; exit 0; }; sleep 1; done; echo "dm-app failed to come up" >&2; exit 1'
+            'sudo systemctl restart dm-app
+             for i in $(seq 1 10); do
+               curl -sf http://localhost:8085/api/ping >/dev/null && break
+               sleep 1
+             done
+             for path in /api/ping / /tv; do
+               curl -sf -o /dev/null "http://localhost:8085$path" || {
+                 echo "dm-app: $path did not answer" >&2; exit 1; }
+             done
+             # The property that makes public hosting safe, re-asserted on the
+             # box: no route serves a campaign file, and POST does not exist.
+             curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/vault/x | grep -qx 404 || {
+               echo "dm-app: /vault/ answered something" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/ | grep -qx 501 || {
+               echo "dm-app: POST is implemented" >&2; exit 1; }
+             echo ok'

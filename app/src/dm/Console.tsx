@@ -1,0 +1,218 @@
+import { useEffect, useRef, useState } from 'react'
+import { useDm, type Tab } from '../state/dmStore.ts'
+import { es } from '../strings/es.ts'
+import { MesaPanel } from './MesaPanel.tsx'
+import { PartyPanel } from './PartyPanel.tsx'
+import { NotasPanel } from './NotasPanel.tsx'
+import { SesionPanel } from './SesionPanel.tsx'
+import { PreparacionPanel } from './PreparacionPanel.tsx'
+
+/** The three screens used during play. The bookends live behind the ⋯ menu. */
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'mesa', label: es.mesa },
+  { id: 'party', label: es.party },
+  { id: 'notas', label: es.notas },
+]
+
+const MENU: { id: Tab; label: string }[] = [
+  { id: 'sesion', label: es.cerrarSesion },
+  { id: 'preparacion', label: es.preparacion },
+]
+
+function MoreMenu() {
+  const { tab, setTab, close } = useDm()
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const inMenu = MENU.some((m) => m.id === tab)
+
+  return (
+    <div className="menu-wrap" ref={wrap}>
+      <button aria-pressed={inMenu} title={es.masOpciones} onClick={() => setOpen((v) => !v)}>
+        ⋯
+      </button>
+      {open && (
+        <div className="menu">
+          {MENU.map((m) => (
+            <button
+              key={m.id}
+              aria-pressed={tab === m.id}
+              onClick={() => {
+                setTab(m.id)
+                setOpen(false)
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+          <div className="divider" />
+          <button
+            onClick={() => {
+              setOpen(false)
+              void close()
+            }}
+          >
+            {es.cerrarCarpeta}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Everything before a folder is open.
+ *
+ * The picker has to be a click: `showDirectoryPicker` and re-granting a
+ * remembered handle both require a user gesture, so there is no version of
+ * this that happens on load.
+ */
+function Welcome() {
+  const { phase, vaultName, pick, reopen, error } = useDm()
+
+  if (phase === 'sin-soporte') {
+    return (
+      <div className="welcome">
+        <h2>{es.navegadorNoSoportado}</h2>
+        <p className="muted">{es.navegadorAyuda}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="welcome">
+      <h2>{es.app}</h2>
+      <p>{es.bienvenida}</p>
+      {phase === 'reabrir' ? (
+        <>
+          <p className="muted">{es.reabrirAyuda}</p>
+          <div className="row">
+            <button className="primary" onClick={() => void reopen()}>
+              {es.reabrir} · {vaultName}
+            </button>
+            <button onClick={() => void pick()}>{es.cambiarCarpeta}</button>
+          </div>
+        </>
+      ) : (
+        <div className="row">
+          <button
+            className="primary"
+            disabled={phase === 'abriendo'}
+            onClick={() => void pick()}
+          >
+            {phase === 'abriendo' ? es.abriendo : es.abrirCarpeta}
+          </button>
+        </div>
+      )}
+      <p className="muted small">{es.bienvenidaAyuda}</p>
+      <p className="muted small">{es.bienvenidaForma}</p>
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+    </div>
+  )
+}
+
+export function Console() {
+  const {
+    start,
+    phase,
+    ready,
+    tab,
+    setTab,
+    mesa,
+    runs,
+    openRun,
+    campaign,
+    campaigns,
+    openCampaign,
+    persistError,
+    error,
+  } = useDm()
+
+  useEffect(() => {
+    start()
+    document.title = `${es.app} · ${es.consola}`
+  }, [start])
+
+  if (!ready) return <Welcome />
+
+  return (
+    <div className="console">
+      <header className="topbar">
+        <h1>{es.app}</h1>
+
+        {campaigns.length > 1 && (
+          <select
+            value={campaign}
+            onChange={(e) => void openCampaign(e.target.value)}
+            title={es.campana}
+          >
+            {campaigns.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <select value={mesa} onChange={(e) => void openRun(e.target.value)} title={es.mesaQueJuega}>
+          {runs.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+        </select>
+
+        <nav className="tabs">
+          {TABS.map((t) => (
+            <button key={t.id} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="spacer" />
+
+        {persistError && (
+          <span className="badge warn" title={es.errorEscrituraAyuda}>
+            {es.errorEscritura}
+          </span>
+        )}
+        {error && <span className="badge warn">{error}</span>}
+
+        <button onClick={() => window.open('/tv', 'mesa', 'width=1280,height=760')}>
+          {es.abrirMesa}
+        </button>
+
+        <MoreMenu />
+      </header>
+
+      {phase !== 'lista' ? (
+        <div className="panel muted">{es.abriendo}</div>
+      ) : tab === 'mesa' ? (
+        <MesaPanel />
+      ) : tab === 'party' ? (
+        <PartyPanel />
+      ) : tab === 'notas' ? (
+        <NotasPanel />
+      ) : tab === 'sesion' ? (
+        <SesionPanel />
+      ) : (
+        <PreparacionPanel />
+      )}
+    </div>
+  )
+}

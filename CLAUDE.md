@@ -1,102 +1,166 @@
-# dnd
+# pergamino — Pantalla de DM
 
-A personal toolkit for running a D&D 5e (2024 rules) campaign. Two apps plus
-the campaign content they read.
+The DM's table: a console window and a television window, both fed from a
+campaign folder the **browser** holds. The repo is the app — there is no
+second thing in here.
+
+`README.md` is the user-facing document — what the app does and how to run it.
+This file is the part that matters when editing it.
+
+## The shape of the thing
 
 ```
-dnd/
-  creator/            character creator — see creator/CLAUDE.md
-    index.html        a file:// page, double-clicked, no server
-  dm/                 DM table: a static server + admin page + TV page — see dm/CLAUDE.md
-    server.py         stdlib-only Python static host (no state, no endpoint that
-                      could carry a campaign file) — runs on the Pi
-                      (https://dm.sigint-pm.uk); a local run is for dev
-    importing.md      how an outside DM maps their campaign onto this format
-                      (an LLM-facing conversion spec)
-    check-campaign.js lints a campaign folder against that spec
-    index.html        admin window (served at /; reads/writes the campaign
-                      folder itself via the File System Access API)
-    tv.html           television window (served at /tv — a second window on the
-                      same machine; the two talk over a BroadcastChannel)
-    jsconfig.json     dev-only typechecking, no emit
-    src/              native ES modules (rules, shared model, admin, tv, styles)
-    probes/           headless-Chrome verification pages
-    vendor/           preact.mjs + htm.mjs, committed verbatim
-  campaigns/           campaign content, gitignored except example/ — not app code
-    marea-baja/
-      scenarios/       one .json per prepared scene
-      assets/          images, assets/audio/ for music, assets/maps/ for dropped maps
-      story/           DM notes, .md, grouped by subfolder (read in Historia,
-                       written in a text editor)
-      monsters/        bestiary entries, one .json each
-      objects/         item catalog, one .json each — stat modifiers + effects,
-                       assignable to players and npc instances
-      runs/<mesa>/     one table's own layer: its players/, session.json, notes,
-                       and its own monsters/objects/scenarios/assets, which
-                       shadow the campaign's by id. No runs/ = a flat campaign,
-                       whose root is its one implicit table
-      session.json     the live table of a flat campaign, autosaved
-      trash/           where in-app deletes land, never unlinked
-  introduction.md      campaign pitch/premise (narrative, not app docs)
+shared/     the whole core. No DOM, no node — the browser and the tests
+            import the same files.
+app/        two pages: index.html (console) and tv.html (television).
+server.py   a static host. Stdlib only.
+test/       fixture wiring, node-only.
+scripts/    Playwright drivers, node-only.
+dist/       the build. Gitignored; the only thing deployed.
+
+importing.md      how an outside DM maps their campaign onto this format
+check-campaign.js lints a campaign folder against that spec — point it at a
+                  folder; the repo ships none
+lint/             the sixteen modules that linter needs — the only part of
+                  the previous app that outlived it. See lint/README.md;
+                  it is not app code and nothing here imports it.
 ```
 
-Each app has its own `CLAUDE.md` with the detail that matters when editing it.
-Read that file before touching code under `creator/` or `dm/`.
+No campaign content lives here. The repo is the app: campaigns are folders the
+DM picks at runtime, and the only one baked in is
+`app/src/fixtures/example.json` — a snapshot of a demo campaign that the
+Playwright drivers mount in memory, dev-only and dropped from the production
+build.
 
-## Rules that hold everywhere in this repo
+The split that matters is **not** client/server — there is no server. It is
+*pure core* (`shared/`) versus *the shells that touch storage*
+(`app/src/vault/fsa.ts`, `shared/vault/node.ts`, `shared/vault/memory.ts`).
+Anything you can write without a directory handle belongs in `shared/`.
 
-**No build, no npm, no pip.** The creator is opened by double-clicking
-(`file://`, so no `fetch()`/XHR there). The dm/ apps are served by
-`dm/server.py` — Python stdlib only, deployed on the home Pi at
-`https://dm.sigint-pm.uk` (a local `python3 dm/server.py` is for dev and
-headless verification) — and are written as native ES modules with two vendored
-library files (`dm/vendor/`). Never add a bundler, `package.json`, or a pip
-dependency.
+## The rule this app exists to keep
 
-`dm/` is typed with JSDoc, checked by a globally installed `typescript`
-(`tsc -p dm/jsconfig.json`). That is a machine tool like `python3`, not a repo
-dependency: nothing is emitted and nothing is installed into the tree.
+`runs/README.md` in a campaign says:
 
-**Language split.** UI text and all rules content are **Spanish**. Code,
-identifiers, comments and every doc file (including this one) are **English**.
+> La preparación no se toca durante el juego; una partida sólo acumula.
+> Nada de `runs/` edita `story/`, `monsters/`, `objects/` ni `scenarios/`.
 
-**One look.** Aged-parchment "pergamino" theme — IM Fell English SC headings,
-parchment tokens. There is no theme picker and no stored theme preference; the
-tokens live in the creator and in `dm/src/styles/tokens.css`.
+It is enforced by **types**, not by a check. Loaders take `VaultDir`, which has
+no `write`. A handle cannot address its parent. Exactly two descents in
+`shared/vault/binding.ts` resolve a `WritableVaultDir`:
 
-**The campaign folder is the database for dm/.** The admin page holds a
-File System Access grant on the folder the DM picked (`campaigns/<name>/` by
-convention, gitignored) and autosaves straight into it — one file per
-entity, `session.json` for play state; deletes go to `trash/`. No server
-reads or writes campaign files. The dm apps keep only device preferences
-locally (the remembered folder handle in IndexedDB, volumes in
-`localStorage`). The creator still stores its drafts in `localStorage`
-(`dnd-creator-*`) and exports `.json` files.
+- `CampaignVault.run(mesa)` — `runs/<mesa>/`, while playing
+- `CampaignVault.scenarios()` — `scenarios/`, from Preparación, which the UI
+  refuses while a run is live
 
-**The creator builds sheets; dm/ reads them.** `dm/src/rules/` began as a copy
-of the creator's blocks and is now the dm app's own — it knows about levels 1
-to 20, which the creator does not. The creator's export envelope is a
-**supported input format** for `players/*.json`, and that is the whole
-relationship: there is no sync guard any more (`check-sync.py` retired with the
-rebuild). A player builds a character in `creator/`, sends the `.json`, and the
-DM levels it up at the table.
+If you find yourself wanting a writable handle anywhere else, that is the
+design telling you no. `shared/vault/scope.test.ts` will also tell you.
 
-Treat a change to `dm/` as unfinished until all three pass:
+## The other boundary
 
-```bash
-node --test "dm/src/**/*.test.js"
-tsc -p dm/jsconfig.json
-node dm/check-campaign.js campaigns/example
-```
+`projectTable` (`shared/session/project.ts`) decides what the television is
+allowed to see. An unrevealed NPC is **absent** from `TableView`, not hidden
+inside it — no stat blocks, no DM notes, no positions for tokens that are not
+on screen. `project.vault.test.ts` asserts this against the real vault, down to
+`JSON.stringify(view)` not containing the hidden id.
 
-**`campaigns/` is gitignored and personal.** It's session content (an actual
-campaign's scenes, party, notes), not application code — treat a missing file
-under it as normal, not as a bug in the apps.
+The television window has no directory handle, so it cannot read a campaign
+even in principle. Keep it that way: it receives a `TableView` and blobs it
+asked for by key, over `app/src/transport/`. Nothing else.
+
+## Traps worth knowing first
+
+- **Asset keys are not URLs.** `/vault/assets/x.jpg` and
+  `/api/portrait/npc/<id>` are *names* — nothing serves them. The DM window
+  resolves one against its handle; the television asks for it over the
+  transport. Render them with `<Art>`/`useAssetUrl`, never as `<img src>`.
+- **`readOnly()` is a real handle, not a cast.** `WritableVaultDir.readOnly()`
+  returns a handle that cannot write and whose children cannot either. Casting
+  past `VaultDir` buys nothing, which is what makes the scope test true.
+- **`createDir` reuses.** It only needs write permission to actually *create*;
+  that is what lets the read-only fixture descend into a run and then refuse
+  the write itself.
+- **No `node:path` in `shared/`.** Use `shared/pathish.ts` — POSIX only, and
+  what a directory walk and an Obsidian wikilink both produce.
+- **The store is async now.** `store.open(mesa)` and `store.flush()` return
+  promises; `dispatch` does not.
+- **Chromium only.** The File System Access API is not in Firefox or Safari.
+  The app says so plainly rather than failing oddly; keep that path working.
+
+## Rules that hold across the repo
+
+**The campaign folder is the database.** The console page holds a File System
+Access grant on the folder the DM picked — a world (`talasia/`, with
+`campaigns/` inside) or a flat campaign (`campaigns/<name>/`) — and reads and
+writes it directly. No server reads or writes campaign files, and the
+television window holds no grant at all. The app keeps only device preferences
+locally: the remembered folder handle in IndexedDB, the campaign and mesa in
+`localStorage`.
+
+**`server.py` is Python stdlib only.** Never add a pip dependency. It is a
+static host and nothing else: no endpoint reads, writes or receives a campaign
+file, and there is no `do_POST`. That property is what makes it safe to host at
+`https://dm.sigint-pm.uk` without auth — do not add a route that breaks it.
+
+**The build is deliberate.** This repo held "no build, no npm" for years, and
+the rebuilt app broke it: Vite, React and TypeScript, so there is a
+`package.json` and a `node_modules/`. What bought the exception: the browser
+owns every campaign file through the File System Access API, `shared/` is typed
+end to end so the write scope is a compile error rather than a runtime check,
+and the Pi runs *less* than before — `dist/` and `server.py`, no Node at all.
+`engines.node` is for development only.
+
+**The app does not implement 5e rules.** It reads the derived numbers out of
+the `-fc5.xml` beside each player file, precisely so it never re-derives hit
+points from class, CON and species traits and gets them subtly wrong at the
+table. The rules code under `lint/` belongs to `check-campaign.js`, not to the
+app.
 
 **Rules content is paraphrased from the SRD 5.2** (CC-BY-4.0, © Wizards of the
 Coast). No text is copied from the Player's Handbook.
 
-**Tests.** `dm/src/**/*.test.js` run under `node --test` (the pure model, the
-progression tables, a 12-class 1→20 sweep, and a source lint). Anything on
-screen is verified by a probe page under `dm/probes/`, run headless;
-`dm/CLAUDE.md` documents the pattern and the traps worth knowing first.
+## Language
+
+UI text is **Spanish**, in `app/src/strings/es.ts` and nowhere else. Code,
+identifiers, file names, comments and every doc file (including this one) are
+**English**.
+
+## Treat a change here as unfinished until these pass
+
+```bash
+npm test                 # 172 with the DM's vault present, 41 without
+npm run typecheck
+npm run build
+```
+
+`check-campaign.js` is not in that list any more: there is no campaign in the
+repo for it to lint. Run it by hand against a real folder when `importing.md`
+or `lint/` changes.
+
+And, for anything on screen, one of the drivers:
+
+```bash
+npm run dev &
+node scripts/e2e.mjs
+```
+
+They open the app on `?fixture=example`, which mounts
+`app/src/fixtures/example.json` in memory — the native folder picker cannot be
+driven from a script. That fixture is dev-only; `import.meta.env.DEV` keeps it
+out of the production bundle. It is now the *only* copy of the demo campaign,
+so treat it as content rather than as build output; regenerate it with
+`node scripts/build-fixture.mjs <folder>` if you want a different one.
+
+## Tests, and the vault that is not on CI
+
+The suite splits by what the machine has:
+
+- Everything built on `MemoryVault` (`test/memory.ts`) runs anywhere — the
+  write-scope guard and the async shells. That is what CI runs.
+- The DM's own Obsidian vault is private. Tests that read it are named
+  `*.vault.test.ts`, and `vitest.config.ts` leaves them out when it is not
+  there — saying so out loud, because they are the check that moving the pure
+  modules to `shared/` changed no behaviour.
+
+Never write to the real vault from a test. `test/fixture.ts` opens it
+read-only, so the handle throws before a byte moves; `readonly.vault.test.ts`
+drives the store at it on purpose and checks `session.json` is untouched.
