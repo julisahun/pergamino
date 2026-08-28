@@ -373,6 +373,14 @@ describe('objetos', () => {
   const muro: Ref = 'pc:pj-muro'
   const sombra: Ref = 'pc:pj-sombra'
 
+  /** One charge off the bottle — what a click on the rightmost lit pip says. */
+  const spendOne = (state: SessionState): SessionState =>
+    run(state, {
+      type: 'object/charges',
+      objectId: LAGRIMA,
+      uses: (state.objects[LAGRIMA]?.uses ?? 0) - 1,
+    })
+
   it('gives an item and starts its charges at the prep value', () => {
     const state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
     expect(liveOf(state, muro)!.objects).toContain(LAGRIMA)
@@ -404,8 +412,7 @@ describe('objetos', () => {
   it('spends charges across holders, not per holder', () => {
     // "Cinco usos en total, acumulados a lo largo de toda la aventura."
     let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    state = run(state, { type: 'object/use', ref: muro, objectId: LAGRIMA })
-    state = run(state, { type: 'object/use', ref: muro, objectId: LAGRIMA })
+    state = spendOne(spendOne(state))
     expect(state.objects[LAGRIMA]!.uses).toBe(3)
     // Handing it on does not refill it.
     state = run(state, { type: 'object/give', ref: sombra, objectId: LAGRIMA })
@@ -415,9 +422,7 @@ describe('objetos', () => {
   it('destroys the bottle on the fifth use and takes it out of their hands', () => {
     // "Al gastar el quinto uso el vidrio se raja y el agua se derrama."
     let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    for (let i = 0; i < 5; i++) {
-      state = run(state, { type: 'object/use', ref: muro, objectId: LAGRIMA })
-    }
+    for (let i = 0; i < 5; i++) state = spendOne(state)
     expect(state.objects[LAGRIMA]).toEqual({ uses: 0, spent: true })
     expect(liveOf(state, muro)!.objects).not.toContain(LAGRIMA)
     expect(state.log.at(-1)!.text).toBe('Lágrima de Milia se destruye')
@@ -425,16 +430,26 @@ describe('objetos', () => {
 
   it('will not spend a sixth charge', () => {
     let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    for (let i = 0; i < 6; i++) {
-      state = run(state, { type: 'object/use', ref: muro, objectId: LAGRIMA })
-    }
+    for (let i = 0; i < 6; i++) state = spendOne(state)
     expect(state.objects[LAGRIMA]!.uses).toBe(0)
+    // And the sixth click did not log a second destruction.
+    expect(state.log.filter((e) => e.text.endsWith('se destruye'))).toHaveLength(1)
+  })
+
+  it('puts a charge back, the way a spent spell slot goes back', () => {
+    let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
+    state = spendOne(spendOne(state))
+    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: 4 })
+    expect(state.objects[LAGRIMA]).toEqual({ uses: 4, spent: false })
+    // Clicking past the last pip cannot conjure a sixth charge.
+    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: 9 })
+    expect(state.objects[LAGRIMA]!.uses).toBe(5)
   })
 
   it('ignores charges on an item that has none', () => {
     const before = run(guils(), { type: 'object/give', ref: muro, objectId: ANILLO })
     expect(before.objects[ANILLO]).toBeUndefined()
-    expect(run(before, { type: 'object/use', ref: muro, objectId: ANILLO })).toBe(before)
+    expect(run(before, { type: 'object/charges', objectId: ANILLO, uses: 0 })).toBe(before)
   })
 })
 

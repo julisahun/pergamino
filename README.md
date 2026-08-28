@@ -125,8 +125,9 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 - PG, oro, espacios de conjuro, equipo y descansos.
 - Los objetos viven en quien los lleva: dar, quitar y gastar cargas desde su
-  propia tarjeta. La descripción de `objects/*.md` se abre con `ⓘ` en vez de
-  estar siempre desplegada.
+  propia tarjeta. Una carga se gasta pulsándola, igual que un espacio de
+  conjuro — y volver a pulsar una apagada la devuelve. La descripción de
+  `objects/*.md` se abre con `ⓘ` en vez de estar siempre desplegada.
 - Repartir es lo secundario aquí: el catálogo entero está en **Objetos**.
 
 **PNJ** — el reparto de la campaña, con su ficha.

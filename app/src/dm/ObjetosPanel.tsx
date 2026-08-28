@@ -105,8 +105,8 @@ export function ObjetosPanel() {
             holderRef: openHolder?.ref ?? null,
             onGive: (ref) => dispatch({ type: 'object/give', ref, objectId: open.id }),
             onTake: (ref) => dispatch({ type: 'object/take', ref, objectId: open.id }),
-            onUse: (ref) => dispatch({ type: 'object/use', ref, objectId: open.id }),
           }}
+          onCharges={(uses) => dispatch({ type: 'object/charges', objectId: open.id, uses })}
           onRefill={() => dispatch({ type: 'object/refill', objectId: open.id })}
           onClose={() => setDetail(null)}
         />

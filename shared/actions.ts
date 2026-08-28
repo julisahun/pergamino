@@ -54,7 +54,13 @@ export type Action =
   // --- Objetos y descansos ------------------------------------------------
   | { type: 'object/give'; ref: Ref; objectId: string }
   | { type: 'object/take'; ref: Ref; objectId: string }
-  | { type: 'object/use'; ref: Ref; objectId: string; amount?: number }
+  /**
+   * How many charges the object has left, stated the way `slots/set` states a
+   * spell level: a count, not a decrement. Charges belong to the object, not
+   * to whoever is holding it, so there is no `ref` here — the old
+   * `object/use` carried one and the reducer never read it.
+   */
+  | { type: 'object/charges'; objectId: string; uses: number }
   | { type: 'object/refill'; objectId: string }
   | { type: 'loot/transfer'; from: Ref; to: Ref }
   | { type: 'gold/set'; ref: Ref; gold: number }

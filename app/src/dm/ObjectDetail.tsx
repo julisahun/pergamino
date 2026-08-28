@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import type { GameObject, Ref } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
+import { Charges } from './Charges.tsx'
 import type { Combatant } from './combat.ts'
 
 /**
@@ -15,7 +16,6 @@ export interface ObjectActions {
   holderRef: Ref | null
   onGive: (ref: Ref) => void
   onTake: (ref: Ref) => void
-  onUse: (ref: Ref) => void
 }
 
 export function ObjectDetail({
@@ -23,6 +23,7 @@ export function ObjectDetail({
   holder,
   uses,
   actions,
+  onCharges,
   onRefill,
   onClose,
 }: {
@@ -30,6 +31,7 @@ export function ObjectDetail({
   holder: string | null
   uses: { uses: number; spent: boolean } | undefined
   actions?: ObjectActions
+  onCharges?: (uses: number) => void
   onRefill?: () => void
   onClose: () => void
 }) {
@@ -45,6 +47,9 @@ export function ObjectDetail({
   const spent = uses?.spent ?? false
   // Pulled out of `actions` so the callbacks below narrow with it.
   const heldBy = actions?.holderRef ?? null
+  const charges = object.usos !== undefined && onCharges && (
+    <Charges total={object.usos} left={remaining ?? 0} onSet={onCharges} />
+  )
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -66,31 +71,31 @@ export function ObjectDetail({
           <button onClick={onClose}>{es.cerrar}</button>
         </div>
 
-        {actions && (
+        {(charges || actions) && (
           <div className="row sheet-actions">
-            <select
-              value=""
-              disabled={actions.everyone.length === 0}
-              onChange={(e) => e.target.value && actions.onGive(e.target.value as Ref)}
-            >
-              <option value="">{es.dar}</option>
-              {actions.everyone
-                .filter((c) => c.ref !== heldBy)
-                .map((c) => (
-                  <option key={c.ref} value={c.ref}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-            {heldBy && (
-              <button className="mini" onClick={() => actions.onTake(heldBy)}>
-                {es.quitar}
-              </button>
-            )}
-            {heldBy && object.usos !== undefined && !spent && (
-              <button className="mini" onClick={() => actions.onUse(heldBy)}>
-                {es.usar}
-              </button>
+            {charges}
+            {actions && (
+              <>
+                <select
+                  value=""
+                  disabled={actions.everyone.length === 0}
+                  onChange={(e) => e.target.value && actions.onGive(e.target.value as Ref)}
+                >
+                  <option value="">{es.dar}</option>
+                  {actions.everyone
+                    .filter((c) => c.ref !== heldBy)
+                    .map((c) => (
+                      <option key={c.ref} value={c.ref}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+                {heldBy && (
+                  <button className="mini" onClick={() => actions.onTake(heldBy)}>
+                    {es.quitar}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

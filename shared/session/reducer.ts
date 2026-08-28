@@ -650,15 +650,16 @@ export function reduce(
       }))
       break
     }
-    case 'object/use': {
+    case 'object/charges': {
       const def = opts.object?.(action.objectId)
       if (def?.usos === undefined) return { state, log }
       const current: ObjectState = state.objects[action.objectId] ?? {
         uses: def.usos,
         spent: false,
       }
-      if (current.uses <= 0) return { state, log }
-      const uses = Math.max(0, current.uses - (action.amount ?? 1))
+      const uses = Math.max(0, Math.min(def.usos, Math.trunc(action.uses)))
+      // Clicking past either end of the row states what is already true.
+      if (uses === current.uses) return { state, log }
       next = {
         ...state,
         objects: { ...state.objects, [action.objectId]: { uses, spent: uses === 0 } },

@@ -148,7 +148,6 @@ export const es = {
   espacios: 'Espacios de conjuro',
   nivel: 'Nivel',
   dar: 'Dar a…',
-  usar: 'Usar',
   usos: 'usos',
   destruido: 'Destruido',
   recargar: 'Recargar',

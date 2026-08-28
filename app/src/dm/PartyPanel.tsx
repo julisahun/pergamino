@@ -15,6 +15,7 @@ import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
+import { Charges } from './Charges.tsx'
 import { ObjectDetail } from './ObjectDetail.tsx'
 import { Popover } from './Popover.tsx'
 import { artIndex, combatants, isDown, type Combatant } from './combat.ts'
@@ -89,6 +90,7 @@ export function PartyPanel() {
           object={detailObject}
           holder={holderOf(detailObject.id)?.name ?? null}
           uses={state.objects[detailObject.id]}
+          onCharges={(uses) => dispatch({ type: 'object/charges', objectId: detailObject.id, uses })}
           onRefill={() => dispatch({ type: 'object/refill', objectId: detailObject.id })}
           onClose={() => setDetail(null)}
         />
@@ -200,19 +202,11 @@ function PcCard({
               <span className="carry-name">{o.name}</span>
               {o.mods.ac ? <span className="carry-mod">{es.ca} +{o.mods.ac}</span> : null}
               {o.usos !== undefined && (
-                <>
-                  <span className="uses" title={`${remaining}/${o.usos} ${es.usos}`}>
-                    {Array.from({ length: o.usos }, (_, i) => (
-                      <span key={i} className={`use-pip${i < (remaining ?? 0) ? ' on' : ''}`} />
-                    ))}
-                  </span>
-                  <button
-                    className="mini"
-                    onClick={() => dispatch({ type: 'object/use', ref: c.ref, objectId: o.id })}
-                  >
-                    {es.usar}
-                  </button>
-                </>
+                <Charges
+                  total={o.usos}
+                  left={remaining ?? 0}
+                  onSet={(uses) => dispatch({ type: 'object/charges', objectId: o.id, uses })}
+                />
               )}
               <button className="mini" title={es.verDetalle} onClick={() => onDetail(o.id)}>
                 ⓘ
