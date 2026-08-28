@@ -132,38 +132,34 @@ button.primary:hover:not(:disabled) { background: #8d6a2c; }
   margin: 0 0 10px;
 }
 
-.scene-grid {
+/* A row of the Escenas popover: thumbnail, name, and whether it is live. */
+.scene-pick {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 12px;
+  /* The floor widens the popover: scene names should not ellipsise at 190px. */
+  grid-template-columns: 44px minmax(11rem, 1fr) auto;
+  align-items: center;
+  gap: 9px;
 }
-.scene-card {
+.scene-pick-art {
   position: relative;
-  padding: 0;
-  overflow: hidden;
-  border-radius: 8px;
-  aspect-ratio: 16 / 10;
-  background: var(--bg-raised);
+  width: 44px; height: 28px;
+  border-radius: 4px; overflow: hidden;
+  background: var(--bg);
   border: 1px solid var(--line);
 }
-.scene-card img {
+.scene-pick-art img {
   position: absolute; inset: 0;
-  width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.75;
+  width: 100%; height: 100%; object-fit: cover; display: block;
 }
-.scene-card:hover img { opacity: 0.95; }
-.scene-card .label {
-  position: absolute; inset: auto 0 0 0;
-  padding: 22px 10px 8px;
-  text-align: left;
+.scene-pick-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 500 13px/1.2 var(--font-read);
-  background: linear-gradient(transparent, rgba(0,0,0,0.85));
 }
-.scene-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.scene-card[aria-pressed="true"] img { opacity: 1; }
-.scene-card .live {
-  position: absolute; top: 8px; left: 8px;
-  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
-  background: var(--accent); color: #17130c; padding: 2px 6px; border-radius: 3px;
+.scene-pick-live {
+  font: 600 9px/1 var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+  background: var(--accent); color: #17130c;
+  padding: 3px 5px; border-radius: 3px;
 }
 
 .side { display: flex; flex-direction: column; gap: 18px; }
@@ -735,19 +731,40 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 .mesa-bar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
 .mesa-main {
   grid-area: main;
-  /* banner (collapses to nothing when absent) · stage · read-aloud */
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  /* Named areas rather than row order: the frozen banner is *absent* from the
+     DOM while the table is live, and positional placement then slid the stage
+     into the `auto` row, where it had no height at all — the board was only
+     usable while the mesa was paused. */
+  display: grid;
+  grid-template-areas: 'banner' 'stage' 'read';
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0; overflow: hidden;
   padding: 14px 16px 0;
 }
-.mesa-stage { min-height: 0; overflow: auto; }
-.mesa-stage.is-board {
+/* One frame, whichever mode: it holds the board or the scene art the table
+   window is rendering, so `.scene-layer`/`.table-title` can pin to it. */
+.mesa-stage {
+  grid-area: stage;
+  position: relative;
+  min-height: 0;
   background: #0a0906;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
 }
+.stage-note {
+  position: absolute; top: 10px; left: 10px;
+  z-index: 5;
+  font: 600 10px/1 var(--font-ui);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  padding: 5px 8px; border-radius: 4px;
+}
+.mesa-stage .table-title h1 { font-size: 30px; }
 .mesa-read {
+  grid-area: read;
   border-top: 1px solid var(--line);
   margin-top: 12px;
   padding: 11px 2px 14px;
@@ -825,6 +842,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   border-radius: 8px;
   padding: 5px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  max-height: min(60vh, 420px); overflow: auto;
   display: flex; flex-direction: column; gap: 2px;
 }
 .menu button {
@@ -863,6 +881,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 }
 
 .frozen-banner {
+  grid-area: banner;
   display: flex; align-items: center; gap: 10px;
   background: rgba(180, 70, 47, 0.16);
   border: 1px solid var(--danger);
@@ -877,9 +896,12 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   outline-offset: -2px;
   border-radius: 8px;
 }
+/* Above the mirrored frame — the art and the board are positioned too, so
+   without a stacking order the stripes end up underneath them. */
 .mesa-main.frozen .mesa-stage::before {
   content: '';
   position: absolute; inset: 0;
+  z-index: 4;
   pointer-events: none;
   background: repeating-linear-gradient(
     45deg,
@@ -887,7 +909,6 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
     transparent 12px 24px
   );
 }
-.mesa-main.frozen .mesa-stage { position: relative; }
 
 .table-title {
   position: absolute; inset: 0;

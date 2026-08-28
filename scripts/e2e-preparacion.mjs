@@ -47,7 +47,8 @@ if (saved !== '3') {
 
 // Now put a scene on the table and come back: the screen must lock.
 await dm.getByRole('button', { name: 'Mesa', exact: true }).click()
-await dm.locator('.mesa-bar').getByRole('button', { name: 'Escena' }).click()
+await dm.locator('.mesa-bar').getByRole('button', { name: 'Escena', exact: true }).click()
+await dm.locator('.mesa-bar').getByRole('button', { name: /^Escenas/ }).click()
 await dm.getByRole('button', { name: 'The Curdy Sewers' }).click()
 await dm.waitForTimeout(400)
 await openPrep()

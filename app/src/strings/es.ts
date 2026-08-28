@@ -50,8 +50,11 @@ export const es = {
 
   // escena
   sinEscena: 'Sin escena',
+  escenas: 'Escenas',
+  sinEscenas: 'Esta campaña no tiene escenas.',
   ocultarEscena: 'Quitar de la pantalla',
   enPantalla: 'En pantalla',
+  documentoEnPantalla: 'Documento sobre la escena',
   paraLeer: 'Para leer',
   sinNota: 'Esta escena no tiene nota.',
   modoEscena: 'Escena',

@@ -99,6 +99,10 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 - Escena o tablero: el mismo sitio, un interruptor. `field.mode` ya modelaba
   las dos como una sola cosa.
+- El escenario de la consola **es** la tele, en los dos modos: el mismo arte
+  con el mismo fundido, o el tablero con las fichas bajo la mano. La escena se
+  elige en `Escenas ▾`, en la barra, en vez de gastar la pantalla en una
+  rejilla de miniaturas.
 - Escena: arte a pantalla completa con fundido, ambiente sonoro y documentos
   (imágenes y PDF).
 - Tablero: rejilla sobre el mapa, fichas arrastrables, niebla de guerra que se

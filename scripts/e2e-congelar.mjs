@@ -5,13 +5,16 @@ const { dm, table, shot, finish } = await open({ table: true })
 await dm.waitForSelector('.mesa-bar')
 
 const bar = (name) => dm.locator('.mesa-bar').getByRole('button', { name })
+/** The scene picker lives in the bar now — the stage is the television. */
+const escenas = () => dm.locator('.mesa-bar').getByRole('button', { name: /^Escenas/ })
 const tableArt = () =>
   table.evaluate(
     () =>
       document.querySelector('.scene-layer img[style*="opacity: 1"]')?.getAttribute('src') ?? null,
   )
 
-await bar('Escena').click()
+await dm.locator('.mesa-bar').getByRole('button', { name: 'Escena', exact: true }).click()
+await escenas().click()
 await dm.getByRole('button', { name: 'The Curdy Sewers' }).click()
 await dm.waitForTimeout(600)
 await shot('congelar-1-sewers')
@@ -19,6 +22,7 @@ const before = await tableArt()
 
 // Freeze, then change everything.
 await bar(/Mesa en directo/).click()
+await escenas().click()
 await dm.getByRole('button', { name: 'Cheese Square' }).click()
 await dm.waitForTimeout(600)
 await shot('congelar-2-trabajando')

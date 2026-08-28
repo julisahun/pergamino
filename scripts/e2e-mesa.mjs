@@ -13,6 +13,8 @@ const { dm, table, shot, finish } = await open({ table: true })
 await dm.waitForSelector('.mesa-bar')
 
 const bar = (name) => dm.locator('.mesa-bar').getByRole('button', { name, exact: true })
+/** The scene picker lives in the bar now — the stage is the television. */
+const escenas = () => dm.locator('.mesa-bar').getByRole('button', { name: /^Escenas/ })
 
 // Everything the table window fetches over the wire, for the check at the end.
 const requests = []
@@ -20,6 +22,7 @@ table.on('request', (r) => requests.push(r.url()))
 
 console.log('escena:')
 await bar('Escena').click()
+await escenas().click()
 await dm.getByRole('button', { name: 'The Curdy Sewers' }).click()
 await dm.waitForTimeout(600)
 await shot('mesa-1-sewers')
@@ -34,6 +37,7 @@ if (!artSrc?.startsWith('blob:')) {
   process.exitCode = 1
 }
 
+await escenas().click()
 await dm.getByRole('button', { name: "Gerald's Burrow" }).click()
 await dm.waitForTimeout(600)
 await shot('mesa-2-burrow')

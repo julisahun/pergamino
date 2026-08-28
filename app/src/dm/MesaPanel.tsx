@@ -2,14 +2,22 @@
  * What is on the table screen right now — scene art or the tactical board —
  * with the turn order beside it. `field.mode` already modelled these as one
  * thing; this is the screen that matches.
+ *
+ * The stage *is* the television, in both modes: the same `SceneLayer` the
+ * table window renders, or the board with its tokens under the DM's hand. The
+ * DM should never have to guess what the players are looking at, so choosing a
+ * scene happens in a bar popover rather than by turning the stage into a
+ * picker.
  */
 import { useMemo, useState } from 'react'
 import type { Ref, Scene, Template } from '../../../shared/types.ts'
 import { assetUrl } from '../../../shared/session/project.ts'
+import { titleCase } from '../../../shared/session/store.ts'
 import { Art } from '../assets/context.tsx'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Board, type BoardTool } from '../board/Board.tsx'
+import { SceneLayer } from '../table/SceneLayer.tsx'
 import { InitiativeRail } from './InitiativeRail.tsx'
 import { Popover } from './Popover.tsx'
 import { artIndex, combatants, isDead } from './combat.ts'
@@ -27,7 +35,7 @@ const TOOLS: { id: BoardTool; label: string; title: string }[] = [
 ]
 
 export function MesaPanel() {
-  const { scenes, pnjs, characters, sheets, state, frozen, assets, dispatch } = useDm()
+  const { scenes, pnjs, characters, sheets, state, frozen, assets, campaign, dispatch } = useDm()
   const [tool, setTool] = useState<BoardTool>('select')
   const [brush, setBrush] = useState(2)
   const [size, setSize] = useState(6)
@@ -97,6 +105,38 @@ export function MesaPanel() {
         </button>
 
         <span className="sep" />
+
+        <Popover label={es.escenas} active={Boolean(current)}>
+          {(close) =>
+            scenes.length > 0 ? (
+              scenes.map((scene) => {
+                const live = field.sceneId === scene.id
+                return (
+                  <button
+                    key={scene.id}
+                    className="scene-pick"
+                    aria-pressed={live}
+                    title={live ? es.ocultarEscena : scene.name}
+                    onClick={() => {
+                      showScene(scene)
+                      close()
+                    }}
+                  >
+                    <span className="scene-pick-art">
+                      <Art src={assetUrl(scene.art?.src)} alt="" loading="lazy" />
+                    </span>
+                    <span className="scene-pick-name">{scene.name}</span>
+                    {live && <span className="scene-pick-live">{es.enPantalla}</span>}
+                  </button>
+                )
+              })
+            ) : (
+              <div className="muted" style={{ padding: '6px 10px', fontSize: 12 }}>
+                {es.sinEscenas}
+              </div>
+            )
+          }
+        </Popover>
 
         <Popover label={es.audio} active={Boolean(field.audio)}>
           {(close) =>
@@ -304,7 +344,7 @@ export function MesaPanel() {
             </button>
           </div>
         )}
-        <div className={`mesa-stage${board ? ' is-board' : ''}`}>
+        <div className="mesa-stage">
           {board ? (
             <Board
               mapUrl={mapUrl}
@@ -323,28 +363,26 @@ export function MesaPanel() {
               onAddTemplate={addTemplate}
             />
           ) : (
-            <div className="scene-grid">
-              {scenes.map((scene) => {
-                const live = field.sceneId === scene.id
-                return (
-                  <button
-                    key={scene.id}
-                    className="scene-card"
-                    aria-pressed={live}
-                    onClick={() => showScene(scene)}
-                    title={live ? es.ocultarEscena : scene.name}
-                  >
-                    {/* The empty div keeps the card its size while the art is
-                        being read off disk, and for scenes that have none. */}
-                    <div style={{ height: '100%' }} />
-                    <Art src={assetUrl(scene.art?.src)} alt="" loading="lazy" />
-                    {live && <span className="live">{es.enPantalla}</span>}
-                    <span className="label">{scene.name}</span>
-                  </button>
-                )
-              })}
+            <SceneLayer
+              scene={
+                current
+                  ? { id: current.id, name: current.name, artUrl: assetUrl(current.art?.src) }
+                  : null
+              }
+            />
+          )}
+
+          {/* Same rule the table screen uses: with nothing chosen it shows the
+              campaign's name rather than a black void. */}
+          {!board && !current && !field.handout && (
+            <div className="table-title">
+              <h1>{titleCase(campaign)}</h1>
             </div>
           )}
+
+          {/* A handout covers everything on the television. Say so rather than
+              mirror it — a second PDF render buys the DM nothing. */}
+          {field.handout && <span className="stage-note">{es.documentoEnPantalla}</span>}
         </div>
 
         <div className="mesa-read">
