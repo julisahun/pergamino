@@ -766,8 +766,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 .setup-row input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
 .setup-row .hp-input { width: 46px; text-align: center; }
 
-.off-board { color: var(--ink-faint); }
-.off-board:hover { color: var(--danger); border-color: var(--danger); }
+
 .sheet .sub { color: var(--ink-faint); font-size: 12px; margin-bottom: 14px; }
 .sheet-actions { margin: 0 0 4px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .sheet ul { margin: 0; padding-left: 20px; color: var(--ink-dim); line-height: 1.55; }
@@ -864,7 +863,7 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 
 .irow {
   display: grid;
-  grid-template-columns: 34px 30px minmax(0, 1fr);
+  grid-template-columns: 34px 54px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   background: var(--bg-raised);
@@ -878,7 +877,16 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 .irow.active { border-left-color: var(--accent); background: #2f2820; }
 .irow.down { opacity: 0.6; }
 .irow.out { opacity: 0.6; border-style: dashed; }
-.irow.no-init { grid-template-columns: 30px minmax(0, 1fr); }
+.irow.no-init { grid-template-columns: 54px minmax(0, 1fr); }
+/* Fixed at face + button whether or not the button is there, so the names
+   line up down the list either way. */
+.irow-who { display: flex; align-items: center; gap: 4px; }
+.irow-off {
+  width: 20px; padding: 2px 0;
+  color: var(--ink-faint);
+  border-color: transparent; background: transparent;
+}
+.irow-off:hover { color: var(--danger); border-color: var(--danger); }
 .irow-init {
   font: 600 14px/1 var(--font-ui);
   text-align: center; color: var(--accent);

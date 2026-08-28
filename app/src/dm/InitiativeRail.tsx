@@ -85,7 +85,16 @@ function RailRow({
         />
       )}
 
-      <Face src={c.portrait} name={c.name} className="irow-face" />
+      {/* Beside the face rather than at the end of the controls: taking a
+          ficha off the board is about *who*, not about their hit points. */}
+      <div className="irow-who">
+        <Face src={c.portrait} name={c.name} className="irow-face" />
+        {onBoard && (
+          <button className="mini irow-off" title={es.quitarDelTablero} onClick={stop(onBoard)}>
+            ⊗
+          </button>
+        )}
+      </div>
 
       <div className="irow-main">
         <div className="irow-top">
@@ -140,15 +149,6 @@ function RailRow({
           >
             {HP_LABEL[reveal.hp]}
           </button>
-          {onBoard && (
-            <button
-              className="mini eye off-board"
-              title={es.quitarDelTablero}
-              onClick={stop(onBoard)}
-            >
-              ⊗
-            </button>
-          )}
         </div>
       </div>
     </div>

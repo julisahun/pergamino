@@ -79,9 +79,11 @@ describe('npc/add', () => {
 
 describe('npc/remove', () => {
   it('clears the npc from tokens, reveal, members and init', () => {
-    const before = guils()
-    const id = before.npcs[0]!.id
+    const id = guils().npcs[0]!.id
     const ref: Ref = `npc:${id}`
+    // Seeded, not assumed: the fixture is the DM's live run and its board is
+    // whatever they last left on it.
+    const before = run(guils(), { type: 'token/place', ref, x: 1, y: 1 })
     expect(before.field.tokens[ref]).toBeDefined()
 
     const state = run(before, { type: 'npc/remove', id })
@@ -318,10 +320,10 @@ describe('tablero', () => {
   })
 
   it('leaves already-placed tokens where they are', () => {
-    const before = guils()
-    const placed = before.field.tokens['npc:' + before.npcs[0]!.id]
+    const ref: Ref = `npc:${guils().npcs[0]!.id}`
+    const before = run(guils(), { type: 'token/place', ref, x: 2, y: 3 })
     const state = run(before, { type: 'token/placeAll' })
-    expect(state.field.tokens['npc:' + before.npcs[0]!.id]).toEqual(placed)
+    expect(state.field.tokens[ref]).toEqual({ x: 2, y: 3 })
   })
 
   it('puts one combatant on the board and takes them off again', () => {
@@ -345,14 +347,10 @@ describe('tablero', () => {
 
   it('honours an explicit square, and leaves a placed token where it is', () => {
     const ref: Ref = 'pc:pj-muro'
-    const before = guils()
+    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 3, y: 4 })
+    expect(before.field.tokens[ref]).toEqual({ x: 3, y: 4 })
     // Already on the board: placing is a no-op, because moving is `token/move`.
-    const was = before.field.tokens[ref]
-    expect(was).toBeDefined()
-    expect(run(before, { type: 'token/place', ref, x: 3, y: 4 })).toBe(before)
-
-    const state = run(before, { type: 'token/remove', ref }, { type: 'token/place', ref, x: 3, y: 4 })
-    expect(state.field.tokens[ref]).toEqual({ x: 3, y: 4 })
+    expect(run(before, { type: 'token/place', ref, x: 9, y: 9 })).toBe(before)
   })
 
   it('keeps tokens on the board when the grid shrinks', () => {
