@@ -6,8 +6,10 @@
  * keys them by bare NPC id while `field.tokens` uses `npc:<id>`). v5 repoints
  * each seated NPC's `file` from `monsters/*.json` at its note.
  *
- * `field.fog` and `field.templates` were v4 fields too. The tools that wrote
- * them are gone, so they are simply not read: an older file keeps them until
+ * `field.fog`, `field.templates` and `field.benched` were v4 fields too. The
+ * tools that wrote them are gone — and `benched` never had one, being the
+ * durable «off the table» list that «at the table means having a ficha» made
+ * unnecessary — so they are simply not read: an older file keeps them until
  * the next write, and `session.json.bak` keeps the original either way.
  */
 import type {
@@ -53,7 +55,6 @@ export function emptyField(): Field {
     audio: null,
     tokens: {},
     reveal: {},
-    benched: [],
     handout: null,
   }
 }
@@ -144,7 +145,6 @@ function migrateField(raw: unknown, npcIds: Set<string>): Field {
       : null,
     tokens: asRecord(d.tokens) as Field['tokens'],
     reveal: normaliseReveal(d.reveal, npcIds),
-    benched: Array.isArray(d.benched) ? (d.benched as Ref[]) : [],
     handout:
       typeof handout.src === 'string'
         ? {

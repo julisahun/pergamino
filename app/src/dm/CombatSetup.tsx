@@ -3,10 +3,8 @@
  *
  * «Iniciar combate» used to sweep everyone at the table into the encounter
  * and roll d20 for the PNJ. Both were the app deciding something the table
- * had already decided out loud, so it asks instead: the board seeds the
- * checkboxes, because the board is the DM's existing statement about who is
- * in the scene, and anyone off it — the ambush that has not sprung yet — is
- * listed underneath, unchecked, one click from joining.
+ * had already decided out loud, so it asks instead — everyone at the table,
+ * ticked, and you untick whoever is watching rather than fighting.
  *
  * Every initiative box starts empty. The die beside each one is there for the
  * PNJ nobody is going to roll by hand, and it fires only when clicked.
@@ -21,18 +19,14 @@ const d20 = () => 1 + Math.floor(Math.random() * 20)
 
 export function CombatSetup({
   all,
-  onBoard,
   onStart,
   onClose,
 }: {
   all: Combatant[]
-  onBoard: (ref: Ref) => boolean
   onStart: (members: Ref[], init: Record<string, number>) => void
   onClose: () => void
 }) {
-  const [chosen, setChosen] = useState<Set<string>>(
-    () => new Set(all.filter((c) => onBoard(c.ref)).map((c) => c.ref)),
-  )
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set(all.map((c) => c.ref)))
   const [init, setInit] = useState<Record<string, string>>({})
   const boxes = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -42,15 +36,16 @@ export function CombatSetup({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Party first, then PNJ, and the board's people above the rest of each —
-  // the order the DM reads them off the table in.
-  const rows = useMemo(() => {
-    const rank = (c: Combatant) =>
-      (onBoard(c.ref) ? 0 : 2) + (c.ref.startsWith('pc:') ? 0 : 1)
-    return [...all].sort(
-      (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'es'),
-    )
-  }, [all, onBoard])
+  // Party first, then PNJ — the order the DM reads them off the table in.
+  const rows = useMemo(
+    () =>
+      [...all].sort(
+        (a, b) =>
+          Number(a.ref.startsWith('npc:')) - Number(b.ref.startsWith('npc:')) ||
+          a.name.localeCompare(b.name, 'es'),
+      ),
+    [all],
+  )
 
   const toggle = (ref: Ref) =>
     setChosen((prev) => {
@@ -115,16 +110,9 @@ export function CombatSetup({
         </div>
 
         <div className="setup-list">
-          {rows.map((c, i) => {
-            const board = onBoard(c.ref)
-            const first = i === 0 || onBoard(rows[i - 1]!.ref) !== board
+          {rows.map((c) => {
             return (
               <div key={c.ref}>
-                {first && (
-                  <div className="group-label">
-                    {board ? es.enElTablero : es.fueraDelTablero}
-                  </div>
-                )}
                 <label className={`setup-row${chosen.has(c.ref) ? ' in' : ''}`}>
                   <input
                     type="checkbox"

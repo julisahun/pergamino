@@ -1,12 +1,11 @@
 /**
- * Who is on the board, and who is in the fight.
+ * Who is at the table, and who is in the fight.
  *
- * Two statements the app used to make on the DM's behalf: «Colocar fichas»
- * placed everyone at once with no way to take one off, and «Iniciar combate»
- * swept the whole table in and rolled d20 for the PNJ. This drives the two
- * that replaced them — an add modal with a remove beside every row, and a
- * setup sheet where the initiative boxes start empty and stay empty until
- * somebody types in them.
+ * Being in the rail, having a ficha and being in the session are one fact:
+ * `+ Añadir` brings somebody in, the `⊗` beside their face takes them out of
+ * all three, and hiding one from the players is the reveal toggle instead.
+ * On top of that, «Iniciar combate» used to sweep the table in and roll d20
+ * for the PNJ; it asks now, and the boxes stay empty until somebody types.
  */
 import { open } from './_browser.mjs'
 
@@ -21,7 +20,7 @@ const fail = (msg) => {
   process.exitCode = 1
 }
 
-console.log('añadir al tablero:')
+console.log('añadir a la mesa:')
 await dm.locator('.rail-foot').getByRole('button', { name: /Añadir/ }).click()
 await dm.waitForSelector('.add-list')
 await dm.locator('.add-row', { hasText: 'Pip Nosewick' }).getByRole('button', { name: 'Añadir' }).click()
@@ -33,25 +32,29 @@ await shot('combate-1-anadir')
 await dm.getByRole('button', { name: 'Listo' }).click()
 await dm.waitForTimeout(400)
 
-// A PNJ summoned from the campaign lands in the session *and* on the board.
-console.log(`  on the rail: ${await rows()} · on the board: ${await tokens()}`)
-if ((await tokens()) !== 3) fail('the party member and both rats should be on the board')
+// A PNJ summoned from the campaign lands in the session *and* on the table.
+console.log(`  on the rail: ${await rows()} · fichas: ${await tokens()}`)
+if ((await rows()) !== 3 || (await tokens()) !== 3) {
+  fail('the party member and both rats should be in the rail and on the board')
+}
 
-console.log('quitar del tablero:')
-await dm.locator('.irow', { hasText: 'Sewer Cheese-Rat' }).last().getByTitle('Quitar del tablero').click()
+console.log('quitar de la mesa:')
+await dm.locator('.irow', { hasText: 'Sewer Cheese-Rat' }).last().getByTitle('Quitar de la mesa').click()
 await dm.waitForTimeout(400)
-if ((await tokens()) !== 2) fail('the token did not come off')
-if ((await rows()) !== 3) fail('taking a token off must not remove the combatant')
+console.log(`  on the rail: ${await rows()} · fichas: ${await tokens()}`)
+if ((await rows()) !== 2 || (await tokens()) !== 2) {
+  fail('removing must take them out of the rail and off the board at once')
+}
 
 console.log('iniciar combate:')
 await dm.locator('.rail-head').getByRole('button', { name: 'Iniciar combate' }).click()
 await dm.waitForSelector('.setup-list')
 
-// The board seeds the checkboxes; the one taken off is listed, unticked.
+// Everyone at the table, all ticked — you untick whoever is only watching.
 const checked = await dm.locator('.setup-row input[type=checkbox]:checked').count()
 const total = await dm.locator('.setup-row').count()
 console.log(`  checked by default: ${checked} of ${total}`)
-if (checked !== 2 || total !== 3) fail('the board should seed the fight, and nobody else')
+if (checked !== 2 || total !== 2) fail('the table should seed the fight, all of it')
 
 // And nothing has been rolled.
 const prefilled = await dm.locator('.setup-row .hp-input').evaluateAll((n) =>
@@ -61,14 +64,11 @@ console.log(`  initiatives prefilled: ${prefilled.length}`)
 if (prefilled.length > 0) fail(`something rolled on the DM's behalf: ${prefilled.join(', ')}`)
 await shot('combate-2-preparar')
 
-// Type them, Enter walking down the ticked rows, then bring the hidden rat in.
+// Type them, Enter walking down the ticked rows.
 await dm.locator('.setup-row.in .hp-input').first().click()
-await dm.keyboard.type('18')
-await dm.keyboard.press('Enter')
 await dm.keyboard.type('7')
-const off = dm.locator('.setup-row').last()
-await off.locator('input[type=checkbox]').check()
-await off.locator('.hp-input').fill('12')
+await dm.keyboard.press('Enter')
+await dm.keyboard.type('18')
 await dm.waitForTimeout(200)
 await dm.getByRole('button', { name: 'Empezar' }).click()
 await dm.waitForTimeout(500)
@@ -77,7 +77,7 @@ const order = await dm.locator('.rail-body .irow').evaluateAll((list) =>
   list.map((r) => Number(r.querySelector('.irow-init')?.value)),
 )
 console.log(`  turn order: ${order.join(' → ')}`)
-if (order.join() !== '18,12,7') fail('the order is not what was typed')
+if (order.join() !== '18,7') fail('the order is not what was typed')
 await shot('combate-3-en-marcha')
 
 await finish()

@@ -192,7 +192,6 @@ export interface Field {
   tokens: Record<string, Token>
   /** Keyed by `Ref` — normalised from bare npc ids on migration. */
   reveal: Record<string, RevealState>
-  benched: Ref[]
   handout: Handout | null
 }
 

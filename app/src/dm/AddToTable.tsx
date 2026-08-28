@@ -1,25 +1,25 @@
 /**
- * What to put on the board, from one button.
+ * Who else is in this scene, from one button.
  *
- * Three sources in one list, because from the DM's side they are one question
- * — *who else is in this scene?* — even though the app answers them
- * differently: a PC is already at the table and only needs a square, a PNJ
- * already instantiated needs the same, and a PNJ still in `pnj/*.md` has to
- * be brought into the session first. The rows say which is which; the button
- * says «Añadir» either way.
+ * Three sources in one list, because from the DM's side they are one
+ * question, even though the app answers them differently: a PC is already in
+ * `state.play` and only needs a ficha, a PNJ already instantiated needs the
+ * same, and a PNJ still in `pnj/*.md` has to be minted first — which now
+ * places it too, so that being in the session and being on the table are the
+ * same fact. The rows say which is which; the button says «Añadir» either
+ * way.
  *
  * It stays open after adding, because a scene is usually more than one thing.
  */
 import { useMemo, useState } from 'react'
 import type { Pnj, Ref } from '../../../shared/types.ts'
-import { makeRef } from '../../../shared/types.ts'
 import { isCombatant } from '../../../shared/vault/campaign.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import type { Combatant } from './combat.ts'
 
-export function AddToBoard({
+export function AddToTable({
   all,
   onBoard,
   onClose,
@@ -48,16 +48,9 @@ export function AddToBoard({
   const place = (ref: Ref) => dispatch({ type: 'token/place', ref })
 
   const summon = (pnj: Pnj) => {
-    const count = Math.max(1, counts[pnj.id] ?? 1)
-    // Two statements, in order: `npc/add` mints the copies into the session,
-    // and each one is then put on the board on its own. The store notifies its
-    // listeners synchronously, so the ids the first dispatch minted are
-    // readable by the time it returns — which is the only way to name them.
-    const before = new Set(useDm.getState().state?.npcs.map((n) => n.id) ?? [])
-    dispatch({ type: 'npc/add', pnjId: pnj.id, count })
-    for (const npc of useDm.getState().state?.npcs ?? []) {
-      if (!before.has(npc.id)) dispatch({ type: 'token/place', ref: makeRef('npc', npc.id) })
-    }
+    // One action: `npc/add` mints the copies and gives each a ficha, because
+    // a PNJ in the session with no ficha would be in no list at all.
+    dispatch({ type: 'npc/add', pnjId: pnj.id, count: Math.max(1, counts[pnj.id] ?? 1) })
     setCounts((c) => ({ ...c, [pnj.id]: 1 }))
   }
 
@@ -68,8 +61,8 @@ export function AddToBoard({
       <div className="sheet wide" onClick={(e) => e.stopPropagation()}>
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
-            <h2>{es.anadirAlTablero}</h2>
-            <div className="sub">{es.anadirAlTableroAyuda}</div>
+            <h2>{es.anadirALaMesa}</h2>
+            <div className="sub">{es.anadirALaMesaAyuda}</div>
           </div>
           <button onClick={onClose}>{es.listo}</button>
         </div>

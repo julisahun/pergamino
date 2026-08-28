@@ -9,7 +9,7 @@ import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
-import { AddToBoard } from './AddToBoard.tsx'
+import { AddToTable } from './AddToTable.tsx'
 import { CombatantDetail } from './CombatantDetail.tsx'
 import { CombatSetup } from './CombatSetup.tsx'
 import { artIndex, combatants, isDead, isDown, orderByInit, type Combatant } from './combat.ts'
@@ -32,7 +32,7 @@ function RailRow({
   active,
   inEncounter,
   showInit,
-  onBoard,
+  onRemove,
   onSelect,
 }: {
   c: Combatant
@@ -41,8 +41,7 @@ function RailRow({
   active: boolean
   inEncounter: boolean
   showInit: boolean
-  /** Null when they are not on the board — there is nothing to take off. */
-  onBoard: (() => void) | null
+  onRemove: () => void
   onSelect: () => void
 }) {
   const dispatch = useDm((s) => s.dispatch)
@@ -85,15 +84,13 @@ function RailRow({
         />
       )}
 
-      {/* Beside the face rather than at the end of the controls: taking a
-          ficha off the board is about *who*, not about their hit points. */}
+      {/* Beside the face rather than among the hit-point controls: taking
+          somebody off the table is about *who*, not about how hurt they are. */}
       <div className="irow-who">
         <Face src={c.portrait} name={c.name} className="irow-face" />
-        {onBoard && (
-          <button className="mini irow-off" title={es.quitarDelTablero} onClick={stop(onBoard)}>
-            ⊗
-          </button>
-        )}
+        <button className="mini irow-off" title={es.quitarDeLaMesa} onClick={stop(onRemove)}>
+          ⊗
+        </button>
       </div>
 
       <div className="irow-main">
@@ -174,13 +171,19 @@ export function InitiativeRail() {
     [characters, sheets],
   )
 
-  const all = useMemo(() => (state ? combatants(state, pcs, art) : []), [state, pcs, art])
+  const everyone = useMemo(() => (state ? combatants(state, pcs, art) : []), [state, pcs, art])
+  // The rail *is* the table: whoever has a ficha. Somebody present but hidden
+  // from the players is the reveal toggle's job (◉/○), not an absence here.
+  const all = useMemo(
+    () => (state ? everyone.filter((c) => state.field.tokens[c.ref]) : []),
+    [everyone, state],
+  )
   const ordered = useMemo(() => (state ? orderByInit(state, all) : all), [state, all])
 
   if (!state) return null
   const { encounter } = state
   const members = new Set(encounter.members)
-  const current = all.find((c) => c.ref === selected) ?? null
+  const current = everyone.find((c) => c.ref === selected) ?? null
 
   if (current) {
     return (
@@ -220,9 +223,7 @@ export function InitiativeRail() {
       active={encounter.activeRef === c.ref}
       inEncounter={inEncounter}
       showInit={encounter.on}
-      onBoard={
-        onBoard(c.ref) ? () => dispatch({ type: 'token/remove', ref: c.ref }) : null
-      }
+      onRemove={() => dispatch({ type: 'token/remove', ref: c.ref })}
       onSelect={() => setSelected(c.ref)}
     />
   )
@@ -269,20 +270,18 @@ export function InitiativeRail() {
       </div>
 
       <div className="rail-foot">
-        <button className="mini" title={es.anadirAlTablero} onClick={() => setAdding(true)}>
+        <button className="mini" title={es.anadirALaMesa} onClick={() => setAdding(true)}>
           + {es.anadir}
         </button>
         <button
           className="mini"
-          title={es.quitarTodas}
-          disabled={Object.keys(state.field.tokens).length === 0}
+          title={es.vaciarLaMesa}
+          disabled={all.length === 0}
           onClick={() => {
-            for (const ref of Object.keys(state.field.tokens)) {
-              dispatch({ type: 'token/remove', ref: ref as Ref })
-            }
+            for (const c of all) dispatch({ type: 'token/remove', ref: c.ref })
           }}
         >
-          {es.quitarTodas}
+          {es.vaciarLaMesa}
         </button>
         <div style={{ flex: 1 }} />
         <button className="mini" title={es.revelarTodos} onClick={() => dispatch({ type: 'reveal/all', on: true })}>
@@ -299,13 +298,12 @@ export function InitiativeRail() {
       </div>
 
       {adding && (
-        <AddToBoard all={all} onBoard={onBoard} onClose={() => setAdding(false)} />
+        <AddToTable all={everyone} onBoard={onBoard} onClose={() => setAdding(false)} />
       )}
 
       {starting && (
         <CombatSetup
           all={all}
-          onBoard={onBoard}
           onClose={() => setStarting(false)}
           onStart={(members, init) => {
             dispatch({ type: 'encounter/start', members, init })

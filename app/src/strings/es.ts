@@ -115,26 +115,24 @@ export const es = {
   anadir: 'Añadir',
 
   // el tablero: quién está y quién entra
-  anadirAlTablero: 'Añadir al tablero',
-  anadirAlTableroAyuda:
-    'La party, los PNJ que ya están en la mesa, y los de la campaña — estos ' +
-    'entran en la mesa al añadirlos.',
+  anadirALaMesa: 'Añadir a la mesa',
+  anadirALaMesaAyuda:
+    'Quien entre aquí sale en la barra y en el tablero. Para que los ' +
+    'jugadores no lo vean, déjalo oculto con ◉ / ○.',
   buscarCombatiente: 'Buscar…',
   yaEnLaMesa: 'Ya en la mesa',
   pnjDeLaCampana: 'PNJ de la campaña',
   cuantos: 'Cuántos',
   listo: 'Listo',
-  quitarDelTablero: 'Quitar del tablero',
-  quitarTodas: 'Quitar todas',
-  todosEnElTablero: 'Todos están ya en el tablero.',
+  quitarDeLaMesa: 'Quitar de la mesa',
+  vaciarLaMesa: 'Vaciar la mesa',
+  todosEnLaMesa: 'Ya está todo el mundo en la mesa.',
 
   // preparar el combate
   quienCombate: '¿Quién entra en el combate?',
   quienCombateAyuda:
-    'Vienen marcados los que están en el tablero. Escribe la iniciativa de ' +
-    'cada uno — nadie tira por ti.',
-  enElTablero: 'En el tablero',
-  fueraDelTablero: 'Fuera del tablero',
+    'Están todos los de la mesa, marcados. Desmarca a quien mire desde la ' +
+    'barrera, y escribe la iniciativa de cada uno — nadie tira por ti.',
   empezar: 'Empezar',
   cancelar: 'Cancelar',
   todos: 'Todos',

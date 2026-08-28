@@ -181,6 +181,24 @@ export function orderMembers(
 
 /** Initiative modifier of any combatant: NPC stat block or PC sheet. */
 /**
+ * A ficha for each newly minted PNJ. Being in the session and being on the
+ * board are the same thing — the rail lists whoever has a ficha — so anything
+ * that instantiates a PNJ has to put it somewhere. Hiding one from the
+ * players is the reveal toggle's job, not an absence of ficha.
+ */
+function withTokens(
+  field: { tokens: Record<string, Token>; cols: number; rows: number },
+  added: { id: string }[],
+): Record<string, Token> {
+  const tokens = { ...field.tokens }
+  for (const npc of added) {
+    const spot = freeSquare(tokens, field.cols, field.rows, true)
+    if (spot) tokens[makeRef('npc', npc.id)] = spot
+  }
+  return tokens
+}
+
+/**
  * The first empty square, scanning in from one edge — PCs from the left and
  * PNJ from the right, so a roster dropped onto the board does not stack up in
  * one corner. Null when the board is full.
@@ -313,7 +331,8 @@ export function reduce(
     case 'npc/add': {
       const added = instantiate(state, [{ pnjId: action.pnjId, count: action.count }], opts, newId)
       if (added.length === 0) return { state, log }
-      next = { ...state, npcs: [...state.npcs, ...added] }
+      field.tokens = withTokens(field, added)
+      next = { ...state, npcs: [...state.npcs, ...added], field }
       log.push({ kind: 'encounter', text: `Añadidos: ${added.map((n) => n.name).join(', ')}` })
       break
     }
@@ -321,7 +340,8 @@ export function reduce(
       const roster = opts.scene?.(action.sceneId)?.roster ?? []
       const added = instantiate(state, roster, opts, newId)
       if (added.length === 0) return { state, log }
-      next = { ...state, npcs: [...state.npcs, ...added] }
+      field.tokens = withTokens(field, added)
+      next = { ...state, npcs: [...state.npcs, ...added], field }
       log.push({ kind: 'encounter', text: `Reparto cargado: ${added.map((n) => n.name).join(', ')}` })
       break
     }

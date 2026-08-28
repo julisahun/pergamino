@@ -83,7 +83,7 @@ describe('npc/remove', () => {
     const ref: Ref = `npc:${id}`
     // Seeded, not assumed: the fixture is the DM's live run and its board is
     // whatever they last left on it.
-    const before = run(guils(), { type: 'token/place', ref, x: 1, y: 1 })
+    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 1, y: 1 })
     expect(before.field.tokens[ref]).toBeDefined()
 
     const state = run(before, { type: 'npc/remove', id })
@@ -321,7 +321,7 @@ describe('tablero', () => {
 
   it('leaves already-placed tokens where they are', () => {
     const ref: Ref = `npc:${guils().npcs[0]!.id}`
-    const before = run(guils(), { type: 'token/place', ref, x: 2, y: 3 })
+    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 2, y: 3 })
     const state = run(before, { type: 'token/placeAll' })
     expect(state.field.tokens[ref]).toEqual({ x: 2, y: 3 })
   })
@@ -351,6 +351,15 @@ describe('tablero', () => {
     expect(before.field.tokens[ref]).toEqual({ x: 3, y: 4 })
     // Already on the board: placing is a no-op, because moving is `token/move`.
     expect(run(before, { type: 'token/place', ref, x: 9, y: 9 })).toBe(before)
+  })
+
+  it('gives a ficha to every PNJ it mints, so none is in no list at all', () => {
+    const before = guils()
+    const pnjId = before.npcs[0]!.file.split('/').pop()!.replace(/\.md$/, '')
+    const state = run(before, { type: 'npc/add', pnjId, count: 2 })
+    const added = state.npcs.filter((n) => !before.npcs.some((o) => o.id === n.id))
+    expect(added).toHaveLength(2)
+    for (const npc of added) expect(state.field.tokens[`npc:${npc.id}`]).toBeDefined()
   })
 
   it('keeps tokens on the board when the grid shrinks', () => {
