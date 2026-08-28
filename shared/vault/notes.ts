@@ -11,6 +11,7 @@
  * note, then to the vault), then fall back to a basename match, preferring the
  * candidate nearest the note that links to it.
  */
+import { load as loadYaml } from 'js-yaml'
 import * as path from '../pathish.ts'
 import { fileAt, walkMarkdown, type VaultDir } from './source.ts'
 
@@ -23,12 +24,16 @@ export interface WikiLink {
 }
 
 export interface Note {
-  /** Vault-relative path, e.g. `campaigns/marea-baja/story/gente/vann.md`. */
+  /** Vault-relative path, e.g. `campaigns/marea-baja/pnj/vann.md`. */
   path: string
   /** File name without extension. */
   slug: string
   title: string
-  frontmatter: Record<string, string>
+  /**
+   * Parsed YAML. It carries the statblock for a `pnj/` or `objects/` note, so
+   * it holds lists and maps, not only the strings a note's own metadata needs.
+   */
+  frontmatter: Record<string, unknown>
   tags: string[]
   body: string
   links: WikiLink[]
@@ -45,16 +50,34 @@ const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
 const WIKILINK = /\[\[([^\][|]+)(?:\|([^\][]*))?\]\]/g
 const TAG = /(?:^|\s)#([\p{L}\p{N}_-]{2,})/gu
 
+/**
+ * Front matter is real YAML — a `pnj/` note keeps its statblock there, and the
+ * bitácoras this app writes have always emitted `jugadores: ["Ana", "Bea"]`,
+ * which the old `split(':')` reader handed back as that literal string.
+ *
+ * A malformed block is not an error: the DM is editing these by hand in
+ * Obsidian, and a note with a stray colon should still open.
+ */
+export function parseFrontmatter(block: string): Record<string, unknown> {
+  // `---\n---` is an empty block, not a broken one, and js-yaml throws on it.
+  if (!block.trim()) return {}
+  try {
+    const parsed = loadYaml(block)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
 export function parseNote(rel: string, raw: string): Note {
-  const frontmatter: Record<string, string> = {}
+  let frontmatter: Record<string, unknown> = {}
   let body = raw
   const fm = FRONTMATTER.exec(raw)
   if (fm) {
     body = raw.slice(fm[0].length)
-    for (const line of fm[1]!.split(/\r?\n/)) {
-      const at = line.indexOf(':')
-      if (at > 0) frontmatter[line.slice(0, at).trim()] = line.slice(at + 1).trim()
-    }
+    frontmatter = parseFrontmatter(fm[1]!)
   }
 
   const links: WikiLink[] = []
@@ -70,12 +93,38 @@ export function parseNote(rel: string, raw: string): Note {
   return {
     path: rel,
     slug,
-    title: frontmatter.ficha ?? heading?.[1]?.trim() ?? slug,
+    title:
+      (typeof frontmatter.ficha === 'string' && frontmatter.ficha.trim()) ||
+      heading?.[1]?.trim() ||
+      slug,
     frontmatter,
     tags,
     body,
     links,
   }
+}
+
+/**
+ * The note's opening paragraph, as one line of plain text.
+ *
+ * This is what a `pnj/` card shows where the old `monsters/*.json` carried a
+ * `note` field — the same sentence, no longer written twice. The `# heading`,
+ * the tag line and any front matter are already behind us; wikilinks and bold
+ * markers are flattened because the card is not a markdown surface.
+ */
+export function leadParagraph(body: string): string {
+  const paragraphs = body.replace(/^#.*$/gm, '').split(/\r?\n\s*\r?\n/)
+  for (const raw of paragraphs) {
+    const text = raw
+      .replace(WIKILINK, (_m, target: string, alias?: string) => (alias ?? target).trim())
+      .replace(/[*_`]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    // A line that is only tags is a header chip, not the note's first sentence.
+    if (!text || /^(?:#[\p{L}\p{N}_-]{2,}\s*)+$/u.test(text)) continue
+    return text
+  }
+  return ''
 }
 
 /**

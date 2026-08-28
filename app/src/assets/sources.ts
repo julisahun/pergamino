@@ -5,7 +5,7 @@
  * has no handle at all, so it asks — and only ever for keys the view it was
  * sent actually named. That is the whole of what it can reach.
  */
-import type { Monster, Npc, Portrait } from '../../../shared/types.ts'
+import type { Pnj, Npc, Portrait } from '../../../shared/types.ts'
 import { resolveNpcPortrait } from '../../../shared/session/portraits.ts'
 import type { CampaignVault } from '../../../shared/vault/binding.ts'
 import type { TableTransport } from '../transport/index.ts'
@@ -14,7 +14,7 @@ import { decodeDataUri, parseKey, typed } from './keys.ts'
 
 export interface PortraitLookup {
   npcs: () => Npc[]
-  monsters: () => Map<string, Monster>
+  pnjs: () => Map<string, Pnj>
   pcPortrait: (id: string) => Portrait | null | undefined
 }
 
@@ -39,7 +39,7 @@ export class VaultAssetSource implements AssetSource {
               file: '',
               portrait: null,
             },
-            this.portraits.monsters(),
+            this.portraits.pnjs(),
           )
     if (!portrait) return null
     // The vault stores portraits inline as `data:` URIs; some point at a file.

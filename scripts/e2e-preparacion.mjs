@@ -24,11 +24,13 @@ console.log('preparación:')
 await openPrep()
 await shot('prep-1-vacio')
 
-// Add a rat to the first scene and save it.
+// Add a rat to the first scene and save it. The scene already has a roster —
+// `beastId` entries the loader used to drop on the floor — so the row we just
+// added is the last one, not the only one.
 const card = dm.locator('.roster-card').first()
 await card.getByRole('button', { name: 'Añadir PNJ' }).click()
-await card.locator('select').selectOption('sewer-cheese-rat')
-await card.locator('.hp-input').fill('3')
+await card.locator('select').last().selectOption('sewer-cheese-rat')
+await card.locator('.hp-input').last().fill('3')
 await card.getByRole('button', { name: 'Guardar' }).click()
 await dm.waitForSelector('.roster-card .badge', { timeout: 10_000 })
 await shot('prep-2-guardado')
@@ -36,7 +38,7 @@ await shot('prep-2-guardado')
 // It came back from the vault, not from the draft that was just cleared.
 await dm.getByRole('button', { name: 'Mesa', exact: true }).click()
 await openPrep()
-const saved = await dm.locator('.roster-card').first().locator('.hp-input').inputValue()
+const saved = await dm.locator('.roster-card').first().locator('.hp-input').last().inputValue()
 console.log(`  roster read back: ${saved}`)
 if (saved !== '3') {
   console.log('  FAIL — the roster did not survive a reload of the campaign')

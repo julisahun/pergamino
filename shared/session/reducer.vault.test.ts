@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Monster, Ref, SessionState } from '../types.ts'
+import type { Pnj, Ref, SessionState } from '../types.ts'
 import { openWorld } from '../../test/fixture.ts'
 import { nextName, orderMembers, reduce, liveOf, type ReduceOpts } from './reducer.ts'
 
 const vault = await openWorld()
-const { monsters, objects } = await vault.loadCampaign()
-const byId = new Map(monsters.map((m) => [m.id, m]))
+const { pnjs, objects } = await vault.loadCampaign()
+const byId = new Map(pnjs.map((m) => [m.id, m]))
 const objById = new Map(objects.map((o) => [o.id, o]))
 const guilsRun = await vault.loadRun('guils')
 
 let counter = 0
 const opts = (extra: Partial<ReduceOpts> = {}): ReduceOpts => ({
-  monster: (id) => byId.get(id),
+  pnj: (id) => byId.get(id),
   object: (id) => objById.get(id),
   pcMaxHp: (pcId) => ({ 'pj-amparo': 10, 'pj-muro': 12, 'pj-sombra': 9 })[pcId] ?? null,
   pcName: (pcId) =>
@@ -47,34 +47,34 @@ describe('nextName', () => {
 })
 
 describe('npc/add', () => {
-  it('instantiates a monster with full HP and its stat block', () => {
-    const state = run(guils(), { type: 'npc/add', monsterId: 'ossian', count: 1 })
+  it('instantiates a pnj with full HP and its stat block', () => {
+    const state = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
     const ossian = state.npcs.at(-1)!
     expect(ossian.name).toBe('Ossian')
     expect(ossian.ac).toBe(13)
     expect(ossian.hpMax).toBe(30)
     expect(ossian.hp).toBe(30)
     expect(ossian.abilities.map((a) => a.name)).toContain('La marea responde')
-    expect(ossian.file).toBe('monsters/ossian.json')
+    expect(ossian.file).toBe('campaigns/marea-baja/pnj/ossian.md')
   })
 
   it('numbers copies around the ones already in the session', () => {
-    const state = run(guils(), { type: 'npc/add', monsterId: 'bandido', count: 2 })
+    const state = run(guils(), { type: 'npc/add', pnjId: 'bandido', count: 2 })
     expect(state.npcs.map((n) => n.name)).toEqual([
       'Bandido', 'Bandido 1', 'Bandido 2', 'Bandido 3', 'Bandido 4',
     ])
   })
 
   it('keeps the prep note out of the live note', () => {
-    const state = run(guils(), { type: 'npc/add', monsterId: 'ossian', count: 1 })
-    // The monster's prep note is long; the NPC's live note starts empty.
-    expect(byId.get('ossian')!.note).toContain('General de los medianos')
+    const state = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
+    // The PNJ's note opens with prose; the NPC's live note starts empty.
+    expect(byId.get('ossian')!.lead).not.toBe('')
     expect(state.npcs.at(-1)!.note).toBe('')
   })
 
-  it('ignores an unknown monster', () => {
+  it('ignores an unknown pnj', () => {
     const before = guils()
-    expect(run(before, { type: 'npc/add', monsterId: 'no-existe', count: 1 })).toBe(before)
+    expect(run(before, { type: 'npc/add', pnjId: 'no-existe', count: 1 })).toBe(before)
   })
 })
 
@@ -299,7 +299,7 @@ describe('tablero', () => {
   })
 
   it('places everyone without a token, never stacking two on a square', () => {
-    const before = run(guils(), { type: 'npc/add', monsterId: 'ossian', count: 3 })
+    const before = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 3 })
     const state = run(before, { type: 'token/placeAll' })
     const refs = [
       ...Object.keys(state.play).map((id) => `pc:${id}`),
@@ -470,7 +470,7 @@ describe('descansos', () => {
 })
 
 describe('roster/load', () => {
-  const withRoster = (roster: { monsterId: string; count: number }[]) => ({
+  const withRoster = (roster: { pnjId: string; count: number }[]) => ({
     ...opts(),
     scene: (id: string) => (id === 'camino-del-rio' ? { roster } : undefined),
   })
@@ -481,7 +481,7 @@ describe('roster/load', () => {
       before,
       { type: 'roster/load', sceneId: 'camino-del-rio' },
       1_000,
-      withRoster([{ monsterId: 'bandido', count: 2 }, { monsterId: 'ossian', count: 1 }]),
+      withRoster([{ pnjId: 'bandido', count: 2 }, { pnjId: 'ossian', count: 1 }]),
     )
     expect(state.npcs.map((n) => n.name)).toEqual([
       'Bandido', 'Bandido 1', 'Bandido 2', 'Bandido 3', 'Bandido 4', 'Ossian',

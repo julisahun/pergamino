@@ -27,12 +27,12 @@ const TOOLS: { id: BoardTool; label: string; title: string }[] = [
 ]
 
 export function MesaPanel() {
-  const { scenes, monsters, characters, sheets, state, frozen, assets, dispatch } = useDm()
+  const { scenes, pnjs, characters, sheets, state, frozen, assets, dispatch } = useDm()
   const [tool, setTool] = useState<BoardTool>('select')
   const [brush, setBrush] = useState(2)
   const [size, setSize] = useState(6)
 
-  const art = useMemo(() => artIndex(monsters), [monsters])
+  const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
     () =>
       characters.map((c) => ({

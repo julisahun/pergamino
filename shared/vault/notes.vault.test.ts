@@ -8,7 +8,7 @@ const get = (p: string) => index.notes.get(p)
 const linkFrom = (from: string, target: string) =>
   get(from)?.links.find((l) => l.target === target)?.resolved ?? null
 
-const VANN = 'campaigns/marea-baja/story/gente/vann.md'
+const VANN = 'campaigns/marea-baja/pnj/vann.md'
 const STORY_README = 'campaigns/marea-baja/story/README.md'
 const RUNS_README = 'campaigns/marea-baja/runs/README.md'
 
@@ -27,7 +27,8 @@ describe('the index covers the whole world', () => {
 describe('parseNote', () => {
   it('reads frontmatter, heading and tags', () => {
     const note = parseNote('x/el-cantor.md', `---\nficha: El cantor\nnivel: 1\n---\n\n# El cantor\n\n#npc #sequia\n`)
-    expect(note.frontmatter.nivel).toBe('1')
+    // Front matter is YAML, so a number stays a number.
+    expect(note.frontmatter.nivel).toBe(1)
     expect(note.title).toBe('El cantor')
     expect(note.tags).toEqual(['npc', 'sequia'])
   })
@@ -53,11 +54,11 @@ describe('wikilink resolution, against the real notes', () => {
   it('resolves a bare basename whose file is lowercase', () => {
     // vann.md writes [[faro|El faro]] and [[Vann]] appears capitalised elsewhere
     expect(linkFrom(VANN, 'faro')).toBe('campaigns/marea-baja/story/lugares/faro.md')
-    expect(linkFrom(STORY_README, 'Raimo')).toBe('campaigns/marea-baja/story/gente/raimo.md')
+    expect(linkFrom(STORY_README, 'Raimo')).toBe('campaigns/marea-baja/pnj/raimo.md')
   })
 
   it('resolves an aliased link by its target, not its alias', () => {
-    expect(linkFrom(STORY_README, 'maraia')).toBe('campaigns/marea-baja/story/gente/maraia.md')
+    expect(linkFrom(STORY_README, 'maraia')).toBe('campaigns/marea-baja/pnj/maraia.md')
   })
 
   it('resolves a path link written relative to the campaign folder', () => {
@@ -77,7 +78,7 @@ describe('wikilink resolution, against the real notes', () => {
   })
 
   it('leaves a dangling link unresolved instead of throwing', () => {
-    // bandido-lider.json is referenced in prose but no such note exists.
+    // pnj/bandido-lider.md is referenced in prose but no such note exists.
     const note = parseNote(VANN, 'ver [[no-existe-esta-nota]]')
     const resolved = index.notes.get(VANN)!.links.every((l) => l.resolved !== undefined)
     expect(resolved).toBe(true)
@@ -101,7 +102,7 @@ describe('backlinks', () => {
   })
 
   it('a note with no inbound links has no backlinks entry', () => {
-    expect(index.backlinks.get('campaigns/marea-baja/story/gente/vann.md')).toBeDefined()
+    expect(index.backlinks.get(VANN)).toBeDefined()
   })
 })
 
@@ -119,7 +120,7 @@ describe('search', () => {
   })
 
   it('finds a phrase in the body and quotes the line', () => {
-    // From story/gente/vann.md.
+    // From pnj/vann.md.
     const hits = search(index, 'el mar los ha estado guardando')
     expect(hits.length).toBeGreaterThan(0)
     expect(hits[0]!.excerpt.toLowerCase()).toContain('guardando')

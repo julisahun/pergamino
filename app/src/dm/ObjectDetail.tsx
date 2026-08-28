@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
+import { useDm } from '../state/dmStore.ts'
 
 export function ObjectDetail({
   object,
@@ -16,6 +17,8 @@ export function ObjectDetail({
   onRefill?: () => void
   onClose: () => void
 }) {
+  const { openNote } = useDm()
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -61,7 +64,19 @@ export function ObjectDetail({
           </>
         )}
 
-        <p className="reader-path" style={{ marginTop: 16 }}>
+        {/* `file` is the object's own note; the description above is its
+            opening paragraph, so there is more of it one click away. */}
+        <button
+          className="mini"
+          style={{ marginTop: 16 }}
+          onClick={() => {
+            openNote(object.file)
+            onClose()
+          }}
+        >
+          {es.verNota} →
+        </button>
+        <p className="reader-path" style={{ marginTop: 8 }}>
           {object.file}
         </p>
       </div>

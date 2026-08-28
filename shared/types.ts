@@ -28,22 +28,32 @@ export interface Ability {
   desc: string
 }
 
-/** `monsters/*.json` */
-export interface Monster {
+/**
+ * `pnj/*.md` — one note per person, statblock in its front matter.
+ *
+ * There is no separate bestiary any more: a sewer rat and a village trader are
+ * the same kind of file, and the difference between them is whether the front
+ * matter gives hit points. `hpMax === null` means the party can only talk to
+ * this one — it never reaches the board.
+ */
+export interface Pnj {
   id: string
   name: string
   tag: string | null
   ac: number
-  hpMax: number
+  /** `null` for a PNJ with no statblock, which cannot be seated. */
+  hpMax: number | null
   initMod: number
   speed: number | null
-  note: string
   portrait: Portrait | null
   abilities: Ability[]
+  /** Vault-relative path of the note — also its key in `NotesIndex`. */
   file: string
+  /** The note's opening paragraph, shown on the card. */
+  lead: string
 }
 
-/** `objects/*.json` */
+/** `objects/*.md` */
 export interface GameObject {
   id: string
   name: string
@@ -55,9 +65,9 @@ export interface GameObject {
   file: string
 }
 
-/** An entry in a scene's roster: which monster, and how many copies. */
+/** An entry in a scene's roster: which PNJ, and how many copies. */
 export interface RosterEntry {
-  monsterId: string
+  pnjId: string
   count: number
 }
 
@@ -72,27 +82,29 @@ export interface Scene {
   note: string
 }
 
-/** `runs/<mesa>/players/*.json` → `.character` */
+/**
+ * `runs/<mesa>/players/*.md` — who the character is.
+ *
+ * Every number on the card comes from the `-fc5.xml` beside it (see
+ * `sheet.ts`), which is the file that says so itself: *"Si algún número de la
+ * app no coincide con los de arriba, mandan los de arriba"*. The character
+ * creator's `dnd-creator-character` json used to sit here too, carrying a
+ * build recipe this app never read a field of; it is gone.
+ */
 export interface Character {
   id: string
   name: string
   player: string
   portrait: Portrait | null
-  species: string | null
-  class: string | null
-  background: string | null
-  size: string | null
-  buy: Record<string, number>
-  boosts: Record<string, number>
-  spells: { cantrips: string[]; level1: string[] } | Record<string, string[]>
-  [key: string]: unknown
+  /** Vault-relative path of the note — also its key in `NotesIndex`. */
+  file: string
 }
 
 // ---------------------------------------------------------------------------
-// Live state — `runs/<mesa>/session.json` v4
+// Live state — `runs/<mesa>/session.json` v5
 // ---------------------------------------------------------------------------
 
-export const SESSION_VERSION = 4
+export const SESSION_VERSION = 5
 
 export interface DeathSaves {
   ok: number
@@ -109,21 +121,25 @@ export interface LiveState {
   note: string
   gold: number
   inventory: string
-  /** Ids of `objects/*.json` currently held. */
+  /** Ids of `objects/*.md` currently held. */
   objects: string[]
   /** Spell slots spent, by level: `{ "1": 2 }`. */
   spent: Record<string, number>
 }
 
 /**
- * A monster instantiated into the session: prep data + a runtime id + live state.
+ * A PNJ instantiated into the session: prep data + a runtime id + live state.
  *
- * `Monster.note` (prep text) and `LiveState.note` (the DM's scratch note for
- * this particular creature) are different things that the vault's own schema
- * collapses into one field, losing the prep note on instantiation. Here `note`
- * is the live one; the prep note stays resolvable through `file`.
+ * `note` here is the DM's scratch note for this particular creature. The prep
+ * text is `Pnj.lead`, which stays resolvable through `file` — and `file` is a
+ * note path, so the console can open the whole thing rather than a summary.
+ *
+ * `hpMax` is narrowed back to a number: only a PNJ with hit points is ever
+ * seated, so a combatant without them cannot exist.
  */
-export interface Npc extends Omit<Monster, 'note'>, LiveState {}
+export interface Npc extends Omit<Pnj, 'lead' | 'hpMax'>, LiveState {
+  hpMax: number
+}
 
 export interface Encounter {
   on: boolean
@@ -216,7 +232,7 @@ export interface ObjectState {
 export interface SessionState {
   version: number
   play: Record<string, LiveState>
-  /** Keyed by the id in `objects/*.json`. */
+  /** Keyed by the id in `objects/*.md`. */
   objects: Record<string, ObjectState>
   playerFiles: Record<string, string>
   npcs: Npc[]

@@ -4,6 +4,7 @@
  * The file on disk is the vault's own v2/v3 schema; we extend it to v4 with
  * `field.fog`, `field.handout` and `log`, and normalise `field.reveal` keys to
  * `Ref`s (v3 keys them by bare NPC id while `field.tokens` uses `npc:<id>`).
+ * v5 repoints each seated NPC's `file` from `monsters/*.json` at its note.
  */
 import type {
   Field,
@@ -15,6 +16,7 @@ import type {
   SessionState,
 } from '../types.ts'
 import { SESSION_VERSION } from '../types.ts'
+import { PNJ_DIR } from './pnj.ts'
 import { exists, readJson, type VaultDir, type WritableVaultDir } from './source.ts'
 
 export const SESSION_FILE = 'session.json'
@@ -158,8 +160,25 @@ function migrateField(raw: unknown, npcIds: Set<string>): Field {
   }
 }
 
-/** Migrate any on-disk version (2, 3 or 4) to the in-memory v4 shape. */
-export function migrate(raw: unknown): SessionState {
+/**
+ * A seated NPC remembers where it came from. v4 files say `monsters/vann.json`;
+ * the bestiary and the cast are one folder of notes now, so the same PNJ lives
+ * at `pnj/vann.md`. Rewriting the pointer keeps a run that is mid-session
+ * resolving its portraits and its prep note after the migration.
+ *
+ * `prefix` is the campaign's own place in the vault, because `Pnj.file` is a
+ * vault-relative note path — the key it has in `NotesIndex` — and these two
+ * have to be the same string for the lookup to hit.
+ */
+const migrateNpcFile = (file: string, prefix: string): string => {
+  const m = /^monsters\/([^/]+)\.json$/.exec(file)
+  if (!m) return file
+  const rel = `${PNJ_DIR}/${m[1]}.md`
+  return prefix ? `${prefix}/${rel}` : rel
+}
+
+/** Migrate any on-disk version (2 to 5) to the in-memory v5 shape. */
+export function migrate(raw: unknown, prefix = ''): SessionState {
   const d = asRecord(raw)
   const npcsRaw = Array.isArray(d.npcs) ? d.npcs : []
   const npcs: Npc[] = npcsRaw.map((entry) => {
@@ -175,7 +194,7 @@ export function migrate(raw: unknown): SessionState {
       speed: typeof n.speed === 'number' ? n.speed : null,
       portrait: (n.portrait as Npc['portrait']) ?? null,
       abilities: Array.isArray(n.abilities) ? (n.abilities as Npc['abilities']) : [],
-      file: typeof n.file === 'string' ? n.file : '',
+      file: typeof n.file === 'string' ? migrateNpcFile(n.file, prefix) : '',
       ...mergeLiveState(n, hpMax),
     }
   })
@@ -215,15 +234,15 @@ export interface LoadResult {
  * Read `runs/<mesa>/session.json`. The directory is a plain `VaultDir`: a
  * load can never become a save.
  */
-export async function loadSession(runDir: VaultDir): Promise<LoadResult> {
+export async function loadSession(runDir: VaultDir, prefix = ''): Promise<LoadResult> {
   const raw = (await readJson(runDir, SESSION_FILE)) as Record<string, unknown> | null
   if (raw === null) return { state: emptySession(), fromVersion: null }
   const fromVersion = typeof raw.version === 'number' ? raw.version : null
-  return { state: migrate(raw), fromVersion }
+  return { state: migrate(raw, prefix), fromVersion }
 }
 
 /**
- * Persist the session. The first time we rewrite a pre-v4 file we keep the
+ * Persist the session. The first time we rewrite a pre-v5 file we keep the
  * original alongside it as `session.json.bak`.
  *
  * The old node version wrote a `.tmp` and renamed it. There is no rename in

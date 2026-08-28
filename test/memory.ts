@@ -9,8 +9,10 @@
 import { CampaignVault } from '../shared/vault/binding.ts'
 import { MemoryVault, type MemoryTree } from '../shared/vault/memory.ts'
 
-const monster = (id: string, name: string) =>
-  JSON.stringify({ id, name, ac: 12, hpMax: 11, initMod: 1, file: `monsters/${id}.json` })
+const pnj = (id: string, name: string) =>
+  `---\nid: ${id}\nac: 12\nhpMax: 11\ninitMod: 1\nabilities:\n  - name: Cimitarra\n    desc: 1d6\n---\n\n# ${name}\n\n#npc\n\nNota de preparación de ${name}.\n`
+
+const player = (id: string, name: string) => `---\nid: ${id}\nficha: ${name}\n---\n\n# ${name}\n`
 
 const scene = (id: string, name: string) =>
   JSON.stringify({ kind: 'dnd-dm-scene', scene: { id, name, art: { src: `assets/${id}.jpg` }, note: `Nota de ${name}.` } })
@@ -85,12 +87,12 @@ export function exampleTree(): MemoryTree {
     mundo: { 'talasia.md': '# Talasia\n\nEl mundo. Ver [[faro]].\n' },
     campaigns: {
       'marea-chica': {
-        monsters: {
-          'bandido.json': monster('bandido', 'Bandido'),
-          'ossian.json': monster('ossian', 'Ossian'),
+        pnj: {
+          'bandido.md': pnj('bandido', 'Bandido'),
+          'ossian.md': pnj('ossian', 'Ossian'),
         },
         objects: {
-          'anillo.json': JSON.stringify({ id: 'obj-anillo', name: 'Anillo', usos: 3 }),
+          'anillo.md': '---\nid: obj-anillo\nusos: 3\n---\n\n# Anillo\n\nUn aro de plata.\n',
         },
         scenarios: {
           'faro.json': scene('faro', 'El faro'),
@@ -98,8 +100,8 @@ export function exampleTree(): MemoryTree {
         },
         // The shared party. `runs/guils/players/` shadows it by id.
         players: {
-          'tal.json': JSON.stringify({ character: { id: 'pj-tal', name: 'Tal (campaña)' } }),
-          'nel.json': JSON.stringify({ character: { id: 'pj-nel', name: 'Nel' } }),
+          'tal.md': player('pj-tal', 'Tal (campaña)'),
+          'nel.md': player('pj-nel', 'Nel'),
         },
         assets: {
           'faro.jpg': new Uint8Array([1, 2, 3]),
@@ -110,7 +112,6 @@ export function exampleTree(): MemoryTree {
         story: {
           'README.md': '# Marea Chica\n\n#sequia\n\nEl [[faro]] y [[Ossian]].\n',
           'faro.md': '---\nficha: El faro\n---\n\n# El faro\n\n#lugar\n',
-          'ossian.md': '# Ossian\n\n#npc\n',
         },
         runs: {
           'README.md': '# runs/\n\nUna carpeta por mesa.\n',
@@ -119,7 +120,7 @@ export function exampleTree(): MemoryTree {
             'estado.md': ESTADO,
             bitacora: { '00-plantilla.md': PLANTILLA },
             players: {
-              'tal.json': JSON.stringify({ character: { id: 'pj-tal', name: 'Tal' } }),
+              'tal.md': player('pj-tal', 'Tal'),
               'tal-fc5.xml': '<character><hpMax>9</hpMax><level>1</level><abilities>10,16,12,10,10,10</abilities><slots>2,2</slots></character>',
             },
           },

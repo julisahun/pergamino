@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Scene, SessionState } from '../types.ts'
 import { openWorld } from '../../test/fixture.ts'
-import { monsterIndex } from './portraits.ts'
+import { pnjIndex } from './portraits.ts'
 import { projectDm, projectTable, type PcInfo, type ProjectContext } from './project.ts'
 
 const vault = await openWorld()
-const { monsters, scenes: sceneList } = await vault.loadCampaign()
+const { pnjs, scenes: sceneList } = await vault.loadCampaign()
 const guilsRun = await vault.loadRun('guils')
 
 function ctx(): ProjectContext {
@@ -15,7 +15,7 @@ function ctx(): ProjectContext {
     ['pj-muro', { name: 'El muro', hpMax: 12, initMod: 0, hasPortrait: false }],
     ['pj-sombra', { name: 'La sombra', hpMax: 9, initMod: 3, hasPortrait: false }],
   ])
-  return { title: 'Marea Baja', scenes, pcs, monsters: monsterIndex(monsters) }
+  return { title: 'Marea Baja', scenes, pcs, pnjs: pnjIndex(pnjs) }
 }
 
 const guils = (): SessionState => structuredClone(guilsRun.state)
@@ -141,11 +141,11 @@ describe('projectDm', () => {
 })
 
 describe('portrait fallback', () => {
-  it('gives a session NPC the art of the monster it came from', () => {
+  it('gives a session NPC the art of the pnj it came from', () => {
     const state = guils()
     // The vault stores `portrait: null` on instantiated NPCs...
     expect(state.npcs[0]!.portrait).toBeNull()
-    expect(state.npcs[0]!.file).toBe('monsters/bandido.json')
+    expect(state.npcs[0]!.file).toBe('campaigns/marea-baja/pnj/bandido.md')
     for (const npc of state.npcs) state.field.reveal[`npc:${npc.id}`] = { on: true, hp: 'none' }
     const c = projectTable(state, ctx()).combatants.find((c) => c.ref.startsWith('npc:'))!
     // ...but the token still gets a face, via a URL rather than 100 KB of base64.

@@ -10,14 +10,14 @@ import type { Action, FrozenSummary } from '../../../shared/actions.ts'
 import type {
   Character,
   GameObject,
-  Monster,
+  Pnj,
   RosterEntry,
   Scene,
   SessionState,
 } from '../../../shared/types.ts'
 import { SessionStore } from '../../../shared/session/store.ts'
 import { projectDm } from '../../../shared/session/project.ts'
-import { monsterIndex } from '../../../shared/session/portraits.ts'
+import { pnjIndex } from '../../../shared/session/portraits.ts'
 import type { CampaignVault, AssetIndex } from '../../../shared/vault/binding.ts'
 import type { NotesIndex } from '../../../shared/vault/notes.ts'
 import { search } from '../../../shared/vault/notes.ts'
@@ -73,7 +73,7 @@ export interface NoteDoc {
   path: string
   title: string
   tags: string[]
-  frontmatter: Record<string, string>
+  frontmatter: Record<string, unknown>
   html: string
   backlinks: { path: string; title: string }[]
 }
@@ -107,7 +107,7 @@ interface DmStore {
   mesa: string
   runs: string[]
   scenes: Scene[]
-  monsters: (Monster & { hasPortrait: boolean })[]
+  pnjs: (Pnj & { hasPortrait: boolean })[]
   objects: GameObject[]
   characters: Character[]
   sheets: Record<string, SheetStats>
@@ -157,7 +157,7 @@ export const useDm = create<DmStore>((set, get) => ({
   mesa: '',
   runs: [],
   scenes: [],
-  monsters: [],
+  pnjs: [],
   objects: [],
   characters: [],
   sheets: {},
@@ -241,7 +241,7 @@ export const useDm = create<DmStore>((set, get) => ({
       runs: [],
       state: null,
       scenes: [],
-      monsters: [],
+      pnjs: [],
       objects: [],
       characters: [],
       sheets: {},
@@ -347,7 +347,7 @@ export const useDm = create<DmStore>((set, get) => ({
     if (!target || !raw) throw new Error(`No encuentro el fichero de la escena ${sceneId}`)
 
     const scene = raw.scene as Record<string, unknown>
-    scene.roster = roster.filter((r) => r.monsterId && r.count > 0)
+    scene.roster = roster.filter((r) => r.pnjId && r.count > 0)
     await scenarios.write(target, `${JSON.stringify(raw, null, 2)}\n`)
     await get().reload()
   },
@@ -373,7 +373,7 @@ export const useDm = create<DmStore>((set, get) => ({
       sessionNumber: bitacora.sessionNumber,
       scenes: store.ctx.scenes,
       objects: store.campaign.objects,
-      monsters: store.campaign.monsters,
+      pnjs: store.campaign.pnjs,
       pcNames: new Map([...store.ctx.pcs].map(([id, info]) => [id, info.name])),
     })
     return {
@@ -457,7 +457,7 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
     // only one that can answer for an asset.
     assetSource = new VaultAssetSource(vault, {
       npcs: () => store.state.npcs,
-      monsters: () => monsterIndex(store.campaign.monsters),
+      pnjs: () => pnjIndex(store.campaign.pnjs),
       pcPortrait: (id) => store.characters.find((c) => c.id === id)?.portrait,
     })
     dmAssets.setSource(assetSource)
@@ -506,7 +506,7 @@ function syncFromStore(set: Setter): void {
     mesa: store.mesa,
     scenes: store.campaign.scenes,
     // Stat blocks stay here; the inline base64 does not travel with them.
-    monsters: store.campaign.monsters.map((m) => ({
+    pnjs: store.campaign.pnjs.map((m) => ({
       ...m,
       portrait: m.portrait ? { src: m.portrait.src, stamp: null } : null,
       hasPortrait: Boolean(m.portrait?.stamp || m.portrait?.src),

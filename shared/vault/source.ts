@@ -14,7 +14,7 @@
  * asks for:
  *
  *   "La preparación no se toca durante el juego; una partida sólo acumula.
- *    Nada de `runs/` edita `story/`, `monsters/`, `objects/` ni `scenarios/`."
+ *    Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`."
  */
 
 export class VaultError extends Error {
@@ -118,6 +118,15 @@ export async function exists(dir: VaultDir, name: string): Promise<boolean> {
 export async function jsonNames(dir: VaultDir): Promise<string[]> {
   const { files } = await dir.list()
   return files.filter((n) => n.endsWith('.json')).sort()
+}
+
+/**
+ * Sorted `*.md` entries. Dotfiles are skipped so an editor's swap file never
+ * loads as a PNJ with an empty statblock.
+ */
+export async function markdownNames(dir: VaultDir): Promise<string[]> {
+  const { files } = await dir.list()
+  return files.filter((n) => !n.startsWith('.') && n.toLowerCase().endsWith('.md')).sort()
 }
 
 /** Folders a vault walk never descends into. */

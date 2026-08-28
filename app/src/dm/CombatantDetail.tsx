@@ -7,28 +7,16 @@ import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import { isDead, isDown, type Combatant } from './combat.ts'
 
-/** `monsters/vann.json` ↔ `story/gente/vann.md` — resolved by slug. */
-function useStoryNote(slug: string | null): string | null {
-  const { noteList } = useDm()
-  return useMemo(() => {
-    if (!slug) return null
-    const hit = noteList().notes.find(
-      (n) => n.slug.toLowerCase() === slug.toLowerCase() && n.path.includes('story/'),
-    )
-    return hit?.path ?? null
-  }, [noteList, slug])
-}
-
 export function CombatantDetail({ c }: { c: Combatant | null }) {
-  const { dispatch, monsters, objects, openNote, state, characters } = useDm()
+  const { dispatch, pnjs, objects, openNote, state, characters } = useDm()
   const pcNameOf = (pcId: string) =>
     characters.find((ch) => ch.id === pcId)?.name || pcId
-  const storyNote = useStoryNote(c?.npc?.id ?? null)
 
   if (!c) return <p className="muted">{es.seleccionaFicha}</p>
 
-  // The prep note lives in the monster file, not on the instantiated NPC.
-  const prep = c.npc ? monsters.find((m) => m.file === c.npc!.file || m.id === c.npc!.id) : undefined
+  // The prep text lives in the pnj note, not on the instantiated NPC, and
+  // `file` is that note's path — so there is nothing to look up by slug.
+  const prep = c.npc ? pnjs.find((m) => m.file === c.npc!.file || m.id === c.npc!.id) : undefined
   const carried = objects.filter((o) => c.live.objects.includes(o.id))
   const lootable = c.npc !== null && (carried.length > 0 || c.live.gold > 0)
   const party = Object.keys(state?.play ?? {})
@@ -180,12 +168,12 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
         </section>
       )}
 
-      {(prep?.note || storyNote) && (
+      {prep && (prep.lead || prep.file) && (
         <section className="card" style={{ marginBottom: 12 }}>
           <h3>{es.notaPreparacion}</h3>
-          {prep?.note && <p className="prep-note">{prep.note}</p>}
-          {storyNote && (
-            <button className="mini" style={{ marginTop: 8 }} onClick={() => openNote(storyNote)}>
+          {prep.lead && <p className="prep-note">{prep.lead}</p>}
+          {prep.file && (
+            <button className="mini" style={{ marginTop: 8 }} onClick={() => openNote(prep.file)}>
               {es.verNota} →
             </button>
           )}

@@ -16,10 +16,17 @@
  *                                    lore is reachable from a campaign note
  *   contains `scenarios/`/`story/`   a flat campaign (`campaigns/<name>/`)
  */
+import * as path from '../pathish.ts'
 import type { Character, SessionState } from '../types.ts'
 import type { RunData, StoreVault } from '../session/store.ts'
 import { titleCase } from '../session/store.ts'
-import { loadCampaign, loadCharacters, type CampaignData } from './campaign.ts'
+import {
+  loadCampaign,
+  loadCharacters,
+  PLAYERS_DIR,
+  SCENARIOS_DIR,
+  type CampaignData,
+} from './campaign.ts'
 import { buildIndex, type NotesIndex } from './notes.ts'
 import { loadSession, saveSession } from './session.ts'
 import { readSheet, type SheetStats } from './sheet.ts'
@@ -43,9 +50,10 @@ export type VaultShape = 'world' | 'campaign'
 
 export const CAMPAIGNS_DIR = 'campaigns'
 export const RUNS_DIR = 'runs'
-export const SCENARIOS_DIR = 'scenarios'
 export const ASSETS_DIR = 'assets'
-export const PLAYERS_DIR = 'players'
+// The prep folders are named where they are loaded from.
+export { OBJECTS_DIR, PNJ_DIR } from './pnj.ts'
+export { PLAYERS_DIR, SCENARIOS_DIR } from './campaign.ts'
 
 const AUDIO_EXT = new Set(['.mp3', '.ogg', '.m4a', '.wav'])
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg'])
@@ -144,7 +152,7 @@ export class CampaignVault implements StoreVault {
   }
 
   loadCampaign(): Promise<CampaignData> {
-    return loadCampaign(this.campaignDir)
+    return loadCampaign(this.campaignDir, this.prefix)
   }
 
   /**
@@ -163,9 +171,9 @@ export class CampaignVault implements StoreVault {
       throw new VaultError(`No existe la mesa ${mesa} en ${RUNS_DIR}/`)
     }
     const [{ state, fromVersion }, shared, own] = await Promise.all([
-      loadSession(run),
-      loadCharacters(this.campaignDir),
-      loadCharacters(run),
+      loadSession(run, this.prefix),
+      loadCharacters(this.campaignDir, this.prefix),
+      loadCharacters(run, path.join(this.prefix, RUNS_DIR, mesa)),
     ])
     const sharedPlayers = await this.campaignDir.dir(PLAYERS_DIR)
     const ownPlayers = await run.dir(PLAYERS_DIR)

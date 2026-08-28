@@ -12,7 +12,7 @@ import {
 const vault = await openWorld()
 const campaign = await vault.loadCampaign()
 const scenes = new Map<string, Scene>(campaign.scenes.map((s) => [s.id, s]))
-const { objects, monsters } = campaign
+const { objects, pnjs } = campaign
 const pcNames = new Map([
   ['pj-amparo', 'El amparo'],
   ['pj-muro', 'El muro'],
@@ -109,7 +109,7 @@ describe('proposeDeviations', () => {
   it('proposes nothing from an untouched session', () => {
     const state = guils()
     state.log = []
-    const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, monsters, pcNames })
+    const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, pnjs, pcNames })
     // The bandit still carries the ring, and it is on an NPC, so nothing yet.
     expect(out.filter((d) => d.section === 'Gente')).toEqual([])
   })
@@ -117,21 +117,21 @@ describe('proposeDeviations', () => {
   it('reports a named NPC that died', () => {
     const state = guils()
     state.npcs = [{ ...state.npcs[0]!, name: 'Ossian', hp: 0 }]
-    const out = proposeDeviations(state, { sessionNumber: 2, scenes, objects, monsters, pcNames })
+    const out = proposeDeviations(state, { sessionNumber: 2, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({ section: 'Gente', text: '[[Ossian]] — **muerto**, sesión 2.' })
   })
 
   it('reports the scenes that went on screen', () => {
     const state = guils()
     state.log = [{ t: 1, kind: 'scene', text: 'faro' }]
-    const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, monsters, pcNames })
+    const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({ section: 'Lugares', text: '[[faro]] — visitado, sesión 1.' })
   })
 
   it('reports where an object ended up, by the PC\'s name', () => {
     const state = guils()
     state.play['pj-sombra']!.objects = ['obj-anillo-corriente-ahogada']
-    const out = proposeDeviations(state, { sessionNumber: 3, scenes, objects, monsters, pcNames })
+    const out = proposeDeviations(state, { sessionNumber: 3, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({
       section: 'Objetos',
       text: '[[anillo-corriente-ahogada]] — lo lleva La sombra, sesión 3.',
@@ -141,7 +141,7 @@ describe('proposeDeviations', () => {
   it('reports a consumable that was used up', () => {
     const state = guils()
     state.objects['obj-lagrima-de-milia'] = { uses: 0, spent: true }
-    const out = proposeDeviations(state, { sessionNumber: 4, scenes, objects, monsters, pcNames })
+    const out = proposeDeviations(state, { sessionNumber: 4, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({
       section: 'Objetos',
       text: '[[lagrima-de-milia]] — gastado y destruido, sesión 4.',

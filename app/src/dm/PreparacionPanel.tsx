@@ -8,7 +8,7 @@ import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 
 export function PreparacionPanel() {
-  const { scenes, monsters, state, saveRoster } = useDm()
+  const { scenes, pnjs, state, saveRoster } = useDm()
   const [drafts, setDrafts] = useState<Record<string, RosterEntry[]>>({})
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,16 +62,16 @@ export function PreparacionPanel() {
             {roster.map((entry, i) => (
               <div className="roster-row" key={i}>
                 <select
-                  value={entry.monsterId}
+                  value={entry.pnjId}
                   disabled={live}
                   onChange={(e) =>
                     setRoster(
                       scene.id,
-                      roster.map((r, j) => (j === i ? { ...r, monsterId: e.target.value } : r)),
+                      roster.map((r, j) => (j === i ? { ...r, pnjId: e.target.value } : r)),
                     )
                   }
                 >
-                  {monsters.map((m) => (
+                  {pnjs.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
                     </option>
@@ -104,9 +104,9 @@ export function PreparacionPanel() {
             ))}
             <div className="row" style={{ marginTop: 8 }}>
               <button
-                disabled={live || monsters.length === 0}
+                disabled={live || pnjs.length === 0}
                 onClick={() =>
-                  setRoster(scene.id, [...roster, { monsterId: monsters[0]!.id, count: 1 }])
+                  setRoster(scene.id, [...roster, { pnjId: pnjs[0]!.id, count: 1 }])
                 }
               >
                 {es.anadirFila}

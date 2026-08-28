@@ -16,7 +16,7 @@ export type Action =
   | { type: 'reveal/set'; ref: Ref; on?: boolean; hp?: HpReveal }
   | { type: 'reveal/all'; on: boolean }
   // --- PNJ en la sesión ---------------------------------------------------
-  | { type: 'npc/add'; monsterId: string; count: number }
+  | { type: 'npc/add'; pnjId: string; count: number }
   | { type: 'npc/remove'; id: string }
   | { type: 'npc/rename'; id: string; name: string }
   | { type: 'roster/load'; sceneId: string }

@@ -18,12 +18,11 @@ test/       fixture wiring, node-only.
 scripts/    Playwright drivers, node-only.
 dist/       the build. Gitignored; the only thing deployed.
 
-importing.md      how an outside DM maps their campaign onto this format
-check-campaign.js lints a campaign folder against that spec — point it at a
-                  folder; the repo ships none
+check-campaign.js lints a campaign folder against the *pre-merge* format —
+                  its spec (importing.md) is gone. See lint/README.md.
 lint/             the sixteen modules that linter needs — the only part of
-                  the previous app that outlived it. See lint/README.md;
-                  it is not app code and nothing here imports it.
+                  the previous app that outlived it. Not app code, and
+                  nothing here imports it.
 ```
 
 No campaign content lives here. The repo is the app: campaigns are folders the
@@ -42,7 +41,7 @@ Anything you can write without a directory handle belongs in `shared/`.
 `runs/README.md` in a campaign says:
 
 > La preparación no se toca durante el juego; una partida sólo acumula.
-> Nada de `runs/` edita `story/`, `monsters/`, `objects/` ni `scenarios/`.
+> Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`.
 
 It is enforced by **types**, not by a check. Loaders take `VaultDir`, which has
 no `write`. A handle cannot address its parent. Exactly two descents in
@@ -54,6 +53,36 @@ no `write`. A handle cannot address its parent. Exactly two descents in
 
 If you find yourself wanting a writable handle anywhere else, that is the
 design telling you no. `shared/vault/scope.test.ts` will also tell you.
+
+## One file per thing
+
+A PNJ is `pnj/<id>.md` and an object is `objects/<id>.md`: an ordinary Obsidian
+note, with the statblock in YAML front matter and the prose below it. There is
+no `monsters/` folder and no `story/gente/` — those were two halves of the same
+person, kept in step by hand, which the console then stitched back together by
+slug at render time.
+
+What falls out of that:
+
+- **The bestiary is in the notes graph.** `[[Cristelle]]` resolves to the
+  statblock, backlinks work, and `Pnj.file` *is* the note's key in `NotesIndex`
+  — so the card's "Ver nota" is `openNote(pnj.file)` with nothing to look up.
+- **`hpMax` is what makes a PNJ a combatant.** No hit points in the front
+  matter means someone the party only talks to: `instantiate` skips it and a
+  scene roster cannot seat it. `Npc` narrows `hpMax` back to a number.
+- **The id falls back to the file name**, which is already stable and unique
+  within a folder. The old format had to ask for one in prose.
+- **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
+  ~70 KB data URIs, which is exactly what a note cannot hold.
+- **Players are `players/*.md` + `-fc5.xml`.** The creator's
+  `dnd-creator-character` json is gone; the app never read a field of the build
+  recipe, and the xml says so itself — *"si algún número de la app no coincide
+  con los de arriba, mandan los de arriba"*.
+- **`scenarios/` stays json**, because it is the one prep folder the app writes
+  back to. Round-tripping a scene through the markdown renderer would cost the
+  DM their formatting every time they moved a token.
+
+`scripts/migrate-pnj.mjs` is the one-shot that did this to a real folder.
 
 ## The other boundary
 
@@ -81,6 +110,12 @@ asked for by key, over `app/src/transport/`. Nothing else.
   the write itself.
 - **No `node:path` in `shared/`.** Use `shared/pathish.ts` — POSIX only, and
   what a directory walk and an Obsidian wikilink both produce.
+- **Front matter is real YAML** (`js-yaml`), so `Note.frontmatter` is
+  `Record<string, unknown>` and a statblock can hold lists and maps. Guard the
+  empty block: js-yaml 5 *throws* on `''` where v4 returned `undefined`.
+- **A scene roster reads `pnjId ?? monsterId ?? beastId`.** The spec said
+  `beastId` and the loader only ever read `monsterId`, so every roster written
+  to spec was silently dropped. Keep the fallback.
 - **The store is async now.** `store.open(mesa)` and `store.flush()` return
   promises; `dispatch` does not.
 - **Chromium only.** The File System Access API is not in Firefox or Safari.
@@ -132,9 +167,13 @@ npm run typecheck
 npm run build
 ```
 
-`check-campaign.js` is not in that list any more: there is no campaign in the
-repo for it to lint. Run it by hand against a real folder when `importing.md`
-or `lint/` changes.
+`check-campaign.js` is not in that list, and no longer matches the format
+either — it validates `monsters/*.json` and creator player builds against a
+spec that has been deleted. Decide what to do with it before trusting it.
+
+The vault tests read the DM's live campaign, so **close the console tab before
+running them**: an open DM window re-scans the folder every 5 seconds and will
+rewrite `runs/<mesa>/session.json` underneath the suite.
 
 And, for anything on screen, one of the drivers:
 

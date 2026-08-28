@@ -6,7 +6,7 @@
  * blocks, DM notes and base64 portraits never cross this boundary.
  */
 import type {
-  Monster,
+  Pnj,
   Ref,
   RevealState,
   Scene,
@@ -49,8 +49,8 @@ export interface ProjectContext {
   title: string
   pcs: Map<string, PcInfo>
   scenes: Map<string, Scene>
-  /** Monsters keyed by both `file` and `id`, for portrait fallback. */
-  monsters: Map<string, Monster>
+  /** PNJ keyed by both `file` and `id`, for portrait fallback. */
+  pnjs: Map<string, Pnj>
 }
 
 interface CombatantSource {
@@ -87,7 +87,7 @@ function sources(state: SessionState, ctx: ProjectContext): CombatantSource[] {
       hpMax: npc.hpMax,
       temp: npc.temp,
       conditions: npc.conditions,
-      portraitUrl: resolveNpcPortrait(npc, ctx.monsters)
+      portraitUrl: resolveNpcPortrait(npc, ctx.pnjs)
         ? `/api/portrait/npc/${encodeURIComponent(npc.id)}`
         : null,
     })

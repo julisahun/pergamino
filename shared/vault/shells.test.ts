@@ -50,8 +50,8 @@ describe('loadRun', () => {
     // Nel is only in the campaign; Tal is in both, and the run wins.
     expect(run.characters.map((c) => c.id).sort()).toEqual(['pj-nel', 'pj-tal'])
     expect(run.characters.find((c) => c.id === 'pj-tal')!.name).toBe('Tal')
-    expect(run.playerFiles['pj-tal']).toBe('runs/guils/players/tal.json')
-    expect(run.playerFiles['pj-nel']).toBe('players/nel.json')
+    expect(run.playerFiles['pj-tal']).toBe('runs/guils/players/tal.md')
+    expect(run.playerFiles['pj-nel']).toBe('players/nel.md')
   })
 })
 
@@ -165,7 +165,7 @@ describe('closing a session', () => {
       sessionNumber: 1,
       scenes: new Map(campaign.scenes.map((s) => [s.id, s])),
       objects: campaign.objects,
-      monsters: campaign.monsters,
+      pnjs: campaign.pnjs,
       pcNames: new Map([['pj-tal', 'Tal']]),
     })
     expect(deviations).toContainEqual({

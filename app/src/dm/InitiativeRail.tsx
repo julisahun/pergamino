@@ -142,13 +142,13 @@ function RailRow({
 }
 
 export function InitiativeRail() {
-  const { state, characters, monsters, sheets, dispatch } = useDm()
+  const { state, characters, pnjs, sheets, dispatch } = useDm()
   const [selected, setSelected] = useState<Ref | null>(null)
   const [adding, setAdding] = useState(false)
-  const [monsterId, setMonsterId] = useState('')
+  const [pnjId, setMonsterId] = useState('')
   const [count, setCount] = useState(1)
 
-  const art = useMemo(() => artIndex(monsters), [monsters])
+  const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
     () =>
       characters.map((c) => ({
@@ -258,9 +258,9 @@ export function InitiativeRail() {
       <div className="rail-foot">
         {adding ? (
           <>
-            <select value={monsterId} onChange={(e) => setMonsterId(e.target.value)} style={{ flex: 1 }}>
+            <select value={pnjId} onChange={(e) => setMonsterId(e.target.value)} style={{ flex: 1 }}>
               <option value="">—</option>
-              {monsters.map((m) => (
+              {pnjs.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                   {m.tag ? ` · ${m.tag}` : ''}
@@ -275,9 +275,9 @@ export function InitiativeRail() {
             />
             <button
               className="mini"
-              disabled={!monsterId}
+              disabled={!pnjId}
               onClick={() => {
-                dispatch({ type: 'npc/add', monsterId, count })
+                dispatch({ type: 'npc/add', pnjId, count })
                 setAdding(false)
               }}
             >

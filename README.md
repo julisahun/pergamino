@@ -53,7 +53,7 @@ La carpeta que elijas se detecta por su forma:
 `runs/README.md` del vault dice:
 
 > **La preparación no se toca durante el juego; una partida sólo acumula.**
-> Nada de `runs/` edita `story/`, `monsters/`, `objects/` ni `scenarios/`.
+> Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`.
 
 Antes eso era una comparación de rutas (`assertWritable`). Ahora es la **forma
 de los tipos**. Los cargadores reciben un `VaultDir`, que no tiene `write`, y
@@ -119,7 +119,7 @@ Tres pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 - PG, oro, espacios de conjuro, equipo y descansos.
 - Los objetos viven en quien los lleva: dar, quitar y gastar cargas desde su
-  propia tarjeta. La descripción de `objects/*.json` se abre con `ⓘ` en vez de
+  propia tarjeta. La descripción de `objects/*.md` se abre con `ⓘ` en vez de
   estar siempre desplegada.
 
 **Notas** — `story/` y `mundo/` con `[[wikilinks]]` navegables, backlinks,
@@ -142,24 +142,30 @@ existen:
 | Fichero | Qué saca |
 |---|---|
 | `scenarios/*.json` | escena, arte, rejilla, nota de lectura, reparto |
-| `monsters/*.json` | CA, PG, iniciativa, rasgos, retrato (base64 en línea) |
-| `objects/*.json` | descripción, efectos, `mods.ac`, `usos` |
-| `players/*.json` | la party compartida de la campaña |
-| `runs/<mesa>/players/*.json` | la party de esa mesa, que **tapa** la anterior por id |
+| `pnj/*.md` | CA, PG, iniciativa, rasgos y retrato en el front matter; la nota, debajo |
+| `objects/*.md` | `mods.ac`, `usos` y efectos en el front matter; la nota, debajo |
+| `players/*.md` | la party compartida de la campaña: nombre, retrato y quién es |
+| `runs/<mesa>/players/*.md` | la party de esa mesa, que **tapa** la anterior por id |
 | `players/*-fc5.xml` | PG máximos, iniciativa y espacios **calculados** |
 | `story/**.md`, `mundo/**.md` | las notas |
 | `runs/<mesa>/session.json` | el estado vivo |
+
+Un PNJ y un objeto son **notas de Obsidian**: la ficha va en el front matter y
+la prosa debajo, en un solo fichero. Antes eran dos — `monsters/galo.json` y
+`story/gente/galo.md` — que decían lo mismo con distintas palabras y había que
+mantener a mano. Un PNJ sin `hpMax` es alguien con quien sólo se habla: sale en
+las notas, pero no se sienta en el tablero.
 
 Los PG de los PJ salen del `-fc5.xml` que genera `pregenerados/fightclub.py`, no
 de recalcular las reglas: así la Dureza Enana de El yunque (11 PG, no 10) sale
 bien sola.
 
-Las dos capas de `players/` son las que `importing.md` §6b describe: la
-campaña comparte una party y cada mesa puede tener la suya, que tapa la de
-arriba por id. El vault de Juli usa sólo la capa de mesa; la campaña de
-demostración usaba sólo la de campaña, que es como se descubrió que faltaba.
+Las dos capas de `players/`: la campaña comparte una party y cada mesa puede
+tener la suya, que tapa la de arriba por id. El vault de Juli usa sólo la capa
+de mesa; la campaña de demostración usaba sólo la de campaña, que es como se
+descubrió que faltaba.
 
-### `session.json`: v2/v3 → v4
+### `session.json`: v2/v3/v4 → v5
 
 Se adopta el esquema del vault tal cual y se amplía. Al abrir una mesa se migra
 en memoria y, la primera vez que se reescribe, se deja el original al lado como
@@ -177,12 +183,16 @@ Lo que añade v4:
 - `log` — el registro que alimenta la bitácora
 - `field.reveal` pasa a indexarse por `Ref` (`npc:<id>`), como `field.tokens`
 
+Y v5: cada PNJ sentado apuntaba a `monsters/<id>.json`; ahora apunta a su nota,
+`pnj/<id>.md`, que es la misma ruta con la que esa nota está en el índice.
+
 ## Dos cosas que el esquema del vault mezclaba
 
-- **La nota de preparación se perdía.** `Monster.note` (la nota del DM sobre la
-  criatura) y la nota viva de ese PNJ concreto son campos distintos que el
-  vault colapsa en uno, así que instanciar un monstruo borraba su nota. Aquí
-  `note` es la viva y la de preparación se resuelve por `file`.
+- **La nota de preparación se perdía.** La nota del DM sobre un PNJ y la nota
+  viva de esa copia concreta son campos distintos que el esquema viejo colapsaba
+  en uno, así que instanciar un monstruo borraba su nota. Aquí `note` es la viva
+  y la de preparación se resuelve por `file` — que ahora es la ruta de la nota,
+  así que la ficha lleva a la nota entera con un clic.
 - **Las cargas no son del portador.** La Lágrima de Milia tiene «cinco usos en
   total, acumulados a lo largo de toda la aventura», así que viven en
   `session.objects`, no en quien la lleve: pasarla de mano no la recarga.
@@ -293,8 +303,8 @@ server.py                host estático: dos páginas, assets, /api/ping
 test/                    fixtures de las pruebas
 scripts/                 los drivers de Playwright
 
-importing.md             cómo un DM de fuera lleva su campaña a este formato
-check-campaign.js        comprueba una carpeta contra esa especificación
+scripts/migrate-pnj.mjs  fusiona el formato viejo (json + nota aparte) en éste
+check-campaign.js        linter del formato anterior — ver lint/README.md
 lint/                    lo que ese linter necesita — no es código de la app
 ```
 

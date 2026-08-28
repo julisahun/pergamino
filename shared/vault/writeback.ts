@@ -5,7 +5,7 @@
  * own headings and prose; we only add bullets under the sections it already
  * has, and every write is shown to the DM before it happens.
  */
-import type { GameObject, LogEntry, Monster, Scene, SessionState } from '../types.ts'
+import type { GameObject, LogEntry, Pnj, Scene, SessionState } from '../types.ts'
 import { readText, type VaultDir, type WritableVaultDir } from './source.ts'
 
 export const BITACORA_DIR = 'bitacora'
@@ -156,7 +156,7 @@ export function proposeDeviations(
     sessionNumber: number
     scenes: Map<string, Scene>
     objects: GameObject[]
-    monsters: Monster[]
+    pnjs: Pnj[]
     pcNames: Map<string, string>
   },
 ): Deviation[] {
@@ -164,7 +164,7 @@ export function proposeDeviations(
   const tag = `sesión ${ctx.sessionNumber}`
 
   // Named NPCs that died. Rank-and-file copies are not worth a line.
-  const named = new Set(ctx.monsters.map((m) => m.name))
+  const named = new Set(ctx.pnjs.map((m) => m.name))
   for (const npc of state.npcs) {
     if (npc.hp === null || npc.hp > 0) continue
     if (!named.has(npc.name)) continue

@@ -18,7 +18,7 @@ const guils = await playersOf('guils')
 describe('readSheet', () => {
   it('matches the numbers the character notes quote', async () => {
     // last/players/el-cantor.md: "CA 14 · PG 10 · Iniciativa +3"
-    expect(await readSheet(last, 'el-cantor.json')).toEqual({
+    expect(await readSheet(last, 'el-cantor.md')).toEqual({
       hpMax: 10,
       initMod: 3,
       level: 1,
@@ -26,7 +26,7 @@ describe('readSheet', () => {
     })
     // el-yunque.md: "PG 11 · Iniciativa +1" — 11 because dwarven toughness
     // adds a point a plain d8 + CON 14 calculation would miss.
-    expect(await readSheet(last, 'el-yunque.json')).toEqual({
+    expect(await readSheet(last, 'el-yunque.md')).toEqual({
       hpMax: 11,
       initMod: 1,
       level: 1,
@@ -35,19 +35,19 @@ describe('readSheet', () => {
   })
 
   it('reads the pregenerated sheets too', async () => {
-    const muro = await readSheet(guils, 'el-muro.json')
+    const muro = await readSheet(guils, 'el-muro.md')
     expect(muro.hpMax).toBeGreaterThan(0)
     expect(muro.level).toBe(1)
   })
 
   it('gives non-casters no slots at all', async () => {
     // El muro is a fighter, La sombra a rogue.
-    expect((await readSheet(guils, 'el-muro.json')).slots).toEqual({})
-    expect((await readSheet(guils, 'la-sombra.json')).slots).toEqual({})
+    expect((await readSheet(guils, 'el-muro.md')).slots).toEqual({})
+    expect((await readSheet(guils, 'la-sombra.md')).slots).toEqual({})
   })
 
   it('returns nulls when no XML sits beside the json', async () => {
-    expect(await readSheet(last, 'no-existe.json')).toEqual({
+    expect(await readSheet(last, 'no-existe.md')).toEqual({
       hpMax: null,
       initMod: null,
       level: null,

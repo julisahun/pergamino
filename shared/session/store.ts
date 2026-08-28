@@ -6,7 +6,7 @@ import { emptyLiveState } from '../vault/session.ts'
 import type { SheetStats } from '../vault/sheet.ts'
 import { SESSION_VERSION } from '../types.ts'
 import { reduce } from './reducer.ts'
-import { monsterIndex } from './portraits.ts'
+import { pnjIndex } from './portraits.ts'
 import { projectTable, type PcInfo, type ProjectContext } from './project.ts'
 
 const PERSIST_DEBOUNCE_MS = 400
@@ -41,7 +41,7 @@ export interface StoreVault {
 
 type Listener = () => void
 
-const EMPTY_CAMPAIGN: CampaignData = { monsters: [], objects: [], scenes: [] }
+const EMPTY_CAMPAIGN: CampaignData = { pnjs: [], objects: [], scenes: [] }
 
 export class SessionStore {
   #vault: StoreVault | null = null
@@ -54,7 +54,7 @@ export class SessionStore {
     title: '',
     pcs: new Map(),
     scenes: new Map(),
-    monsters: new Map(),
+    pnjs: new Map(),
   }
   #listeners = new Set<Listener>()
   /** The frame the table screen is holding while sync is paused. */
@@ -149,7 +149,7 @@ export class SessionStore {
       title: this.#vault?.title ?? '',
       scenes,
       pcs,
-      monsters: monsterIndex(this.#campaign.monsters),
+      pnjs: pnjIndex(this.#campaign.pnjs),
     }
   }
 
@@ -174,7 +174,7 @@ export class SessionStore {
   dispatch(action: Action): void {
     const wasPaused = this.#state.field.paused
     const { state } = reduce(this.#state, action, Date.now(), {
-      monster: (id) => this.#campaign.monsters.find((m) => m.id === id),
+      pnj: (id) => this.#campaign.pnjs.find((m) => m.id === id),
       object: (id) => this.#campaign.objects.find((o) => o.id === id),
       scene: (id) => this.#campaign.scenes.find((s) => s.id === id),
       pcName: (pcId) => this.#ctx.pcs.get(pcId)?.name,

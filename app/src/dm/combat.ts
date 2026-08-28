@@ -23,14 +23,14 @@ export interface PcSheet {
   hasPortrait: boolean
 }
 
-/** Monsters that actually have art, keyed by `file` and `id`. */
+/** PNJ that actually have art, keyed by `file` and `id`. */
 export type ArtIndex = Set<string>
 
 export const artIndex = (
-  monsters: { id: string; file: string; hasPortrait?: boolean }[],
+  pnjs: { id: string; file: string; hasPortrait?: boolean }[],
 ): ArtIndex => {
   const set = new Set<string>()
-  for (const m of monsters) {
+  for (const m of pnjs) {
     if (!m.hasPortrait) continue
     if (m.file) set.add(m.file)
     set.add(m.id)

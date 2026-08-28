@@ -17,7 +17,7 @@ import type {
   SessionState,
 } from '../types.ts'
 import { makeRef, refId, refKind } from '../types.ts'
-import type { Monster } from '../types.ts'
+import type { Pnj } from '../types.ts'
 
 export interface ReduceOpts {
   /** Display name of a PC, from its sheet — the log should read "El muro". */
@@ -26,12 +26,12 @@ export interface ReduceOpts {
   pcMaxHp?: (pcId: string) => number | null
   /** Initiative modifier of a PC, from its sheet. */
   pcInitMod?: (pcId: string) => number | null
-  /** Prep data, for instantiating monsters into the session. */
-  monster?: (monsterId: string) => Monster | undefined
+  /** Prep data, for instantiating pnjs into the session. */
+  pnj?: (pnjId: string) => Pnj | undefined
   /** Prep data for magic items, so charges start from the right number. */
   object?: (objectId: string) => GameObject | undefined
   /** A scene's prepared roster, from `scenarios/*.json`. */
-  scene?: (sceneId: string) => { roster: { monsterId: string; count: number }[] } | undefined
+  scene?: (sceneId: string) => { roster: { pnjId: string; count: number }[] } | undefined
   newId?: () => string
   /** Returns 1..sides. */
   roll?: (sides: number) => number
@@ -93,24 +93,28 @@ function withLive(
 /** Turn roster entries into live NPCs, numbered around whoever is already in. */
 function instantiate(
   state: SessionState,
-  entries: { monsterId: string; count: number }[],
+  entries: { pnjId: string; count: number }[],
   opts: ReduceOpts,
   newId: () => string,
 ): Npc[] {
   const taken = new Set(state.npcs.map((n) => n.name))
   const added: Npc[] = []
   for (const entry of entries) {
-    const monster = opts.monster?.(entry.monsterId)
-    if (!monster) continue
+    const pnj = opts.pnj?.(entry.pnjId)
+    // A PNJ with no hit points in its front matter is someone the party talks
+    // to, not someone they fight. It has no place on the board.
+    if (!pnj || pnj.hpMax === null) continue
+    const hpMax = pnj.hpMax
     for (let i = 0; i < Math.max(1, entry.count); i++) {
-      const name = nextName(taken, monster.name)
+      const name = nextName(taken, pnj.name)
       taken.add(name)
-      const { note: _prepNote, ...prep } = monster
+      const { lead: _lead, ...prep } = pnj
       added.push({
         ...prep,
+        hpMax,
         id: newId(),
         name,
-        hp: monster.hpMax,
+        hp: hpMax,
         temp: 0,
         conditions: [],
         exh: 0,
@@ -289,7 +293,7 @@ export function reduce(
 
     // --- PNJ ---------------------------------------------------------------
     case 'npc/add': {
-      const added = instantiate(state, [{ monsterId: action.monsterId, count: action.count }], opts, newId)
+      const added = instantiate(state, [{ pnjId: action.pnjId, count: action.count }], opts, newId)
       if (added.length === 0) return { state, log }
       next = { ...state, npcs: [...state.npcs, ...added] }
       log.push({ kind: 'encounter', text: `Añadidos: ${added.map((n) => n.name).join(', ')}` })

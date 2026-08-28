@@ -1,11 +1,12 @@
 /**
  * Derived character numbers.
  *
- * The `.json` next to each character is the creator's raw answers; the
- * `-fc5.xml` beside it is the *computed* sheet their own `pregenerados/
- * fightclub.py` generates. Reading `<hpMax>` from there beats re-deriving
- * hit points from class, CON and species traits (dwarven toughness and the
- * like) and getting it subtly wrong at the table.
+ * The `.md` next to each character says who they are; the `-fc5.xml` beside it
+ * is the *computed* sheet the DM's own `pregenerados/fightclub.py` generates,
+ * and it is the only mechanical source there is. Reading `<hpMax>` from there
+ * beats re-deriving hit points from class, CON and species traits (dwarven
+ * toughness and the like) and getting it subtly wrong at the table — which is
+ * why the creator's build recipe is no longer kept beside it at all.
  *
  * AC is deliberately not read: the XML's `<ac>` is the armour's base value,
  * not the final number the sheets quote, and a wrong AC is worse than none.
@@ -32,9 +33,9 @@ const int = (v: string | null): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
-/** `el-cantor.json` → `el-cantor-fc5.xml`. */
-export const sheetNameFor = (jsonName: string): string =>
-  jsonName.replace(/\.json$/, '-fc5.xml')
+/** `el-cantor.md` → `el-cantor-fc5.xml`. */
+export const sheetNameFor = (noteName: string): string =>
+  noteName.replace(/\.md$/i, '-fc5.xml')
 
 const EMPTY: SheetStats = { hpMax: null, initMod: null, level: null, slots: {} }
 
@@ -64,9 +65,9 @@ export function parseSheet(xml: string): SheetStats {
   }
 }
 
-/** Read the sheet beside `jsonName` in a `players/` folder. */
-export async function readSheet(players: VaultDir, jsonName: string): Promise<SheetStats> {
-  const file = await players.file(sheetNameFor(jsonName))
+/** Read the sheet beside `noteName` in a `players/` folder. */
+export async function readSheet(players: VaultDir, noteName: string): Promise<SheetStats> {
+  const file = await players.file(sheetNameFor(noteName))
   if (!file) return emptySheet()
   try {
     return parseSheet(await file.text())

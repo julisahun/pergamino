@@ -1,13 +1,15 @@
 # lint/ — the data contract's library
 
 Not app code. These sixteen modules are what `../check-campaign.js` needs to
-read a campaign folder the way `../importing.md` says it should be read, and
-they are the only part of the previous app that outlived it.
+read a campaign folder, and they are the only part of the previous app that
+outlived it.
 
-They stayed because the linter is the executable half of the import spec: the
-spec says what a `scenarios/*.json` may contain, and the linter is what tells
-an outside DM whether theirs does. Deleting them would have left `importing.md`
-as a promise nobody checks.
+> **They now describe a format that no longer exists.** `importing.md` — the
+> spec they were the executable half of — has been deleted, and PNJ, objects
+> and players are markdown notes rather than json (see the repo's `CLAUDE.md`).
+> Pointed at a current campaign this linter reports everything as broken. It is
+> kept because the rules engine underneath is real work; decide whether to
+> rewrite it against the new format or drop it, but do not trust it as it is.
 
 ## Why they are not shared with the app
 

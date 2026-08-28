@@ -10,7 +10,7 @@
  * `runs/README.md` is still the rule being kept:
  *
  *   "La preparación no se toca durante el juego; una partida sólo acumula.
- *    Nada de `runs/` edita `story/`, `monsters/`, `objects/` ni `scenarios/`."
+ *    Nada de `runs/` edita `story/`, `pnjs/`, `objects/` ni `scenarios/`."
  */
 import { describe, expect, it } from 'vitest'
 import { openMemoryVault } from '../../test/memory.ts'
@@ -22,7 +22,7 @@ const CAMPAIGN = 'campaigns/marea-chica'
 const RUN = `${CAMPAIGN}/runs/guils`
 
 /** Every prep folder that a live session must never be able to write. */
-const PREP = ['story', 'monsters', 'objects', 'assets', 'pregenerados']
+const PREP = ['story', 'pnjs', 'objects', 'assets', 'pregenerados']
 
 describe('what a session can write', () => {
   it('lands every write inside runs/<mesa>/', async () => {
@@ -75,16 +75,16 @@ describe('what a session can write', () => {
 
   it('hands the loaders a directory that has no write to reach for', async () => {
     const { vault } = await openMemoryVault()
-    const monsters = await vault.campaignDir.dir('monsters')
-    expect(monsters).not.toBeNull()
+    const pnjs = await vault.campaignDir.dir('pnj')
+    expect(pnjs).not.toBeNull()
     // `VaultDir` has no `write`, so a loader cannot call one — this is the
     // compile-time guarantee. Casting past it buys nothing: the handle the
     // vault handed out is read-only all the way down.
-    const cast = monsters as unknown as {
+    const cast = pnjs as unknown as {
       write(n: string, d: string): Promise<void>
       createDir(n: string): Promise<unknown>
     }
-    await expect(cast.write('bandido.json', '{}')).rejects.toThrow(VaultWriteError)
+    await expect(cast.write('bandido.md', '# x')).rejects.toThrow(VaultWriteError)
     await expect(cast.createDir('nuevo')).rejects.toThrow(VaultWriteError)
   })
 
@@ -114,9 +114,9 @@ describe('what a session can write', () => {
 describe('a read-only vault', () => {
   it('throws from the handle rather than being politely refused', async () => {
     const { memory } = await openMemoryVault()
-    const monsters = await memory.root().dir('campaigns')
+    const pnjs = await memory.root().dir('campaigns')
     await expect(
-      (monsters as unknown as { write: (n: string, d: string) => Promise<void> }).write(
+      (pnjs as unknown as { write: (n: string, d: string) => Promise<void> }).write(
         'x.json',
         '{}',
       ),

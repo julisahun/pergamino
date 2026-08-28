@@ -16,11 +16,11 @@ import { Popover } from './Popover.tsx'
 import { artIndex, combatants, isDown, type Combatant } from './combat.ts'
 
 export function PartyPanel() {
-  const { state, characters, monsters, objects, sheets, dispatch } = useDm()
+  const { state, characters, pnjs, objects, sheets, dispatch } = useDm()
   const [confirmLong, setConfirmLong] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
 
-  const art = useMemo(() => artIndex(monsters), [monsters])
+  const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
     () =>
       characters.map((c) => ({
