@@ -210,10 +210,15 @@ input[type="range"] { accent-color: var(--accent); flex: 1; }
 }
 
 .scene-layer { position: absolute; inset: 0; }
+/* The whole picture, on both screens. `cover` filled the frame and cut
+   whatever did not fit, which on a 16:9 television meant the top and bottom
+   of a square map — and `Board` has always fitted its map to the natural
+   aspect, so escena and tablero disagreed about how much of the same file you
+   were looking at. Letterbox against the black behind it instead. */
 .scene-layer img {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: opacity 700ms ease;
 }
 
@@ -824,11 +829,6 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   padding: 5px 8px; border-radius: 4px;
 }
 .mesa-stage .table-title h1 { font-size: 30px; }
-/* The console letterboxes the art instead of cropping it to fill, so that
-   switching escena↔tablero does not resize the picture: `Board` fits its map
-   to the natural aspect and this has to land in the same box. The television
-   keeps `cover` — there is nothing on a TV worth a black bar. */
-.mesa-stage .scene-layer img { object-fit: contain; }
 .mesa-read {
   grid-area: read;
   border-top: 1px solid var(--line);

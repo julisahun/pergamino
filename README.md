@@ -102,9 +102,10 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 - El escenario de la consola **es** la tele, en los dos modos: el mismo arte
   con el mismo fundido, o el tablero con las fichas bajo la mano. La escena se
   elige en `Escenas ▾`, en la barra, en vez de gastar la pantalla en una
-  rejilla de miniaturas. La consola encaja el arte entero en el mismo hueco
-  que ocupa el tablero, así que cambiar de modo no cambia de tamaño la imagen;
-  la tele sí la recorta a pantalla completa, que para eso es una tele.
+  rejilla de miniaturas. El arte se ve **entero** en las dos ventanas y en los
+  dos modos: encaja en el hueco que ocupa el tablero en vez de rellenarlo
+  recortando, así que cambiar de escena a tablero no cambia de tamaño la
+  imagen y la tele no se come el borde de un mapa cuadrado.
 - Escena: arte a pantalla completa con fundido, ambiente sonoro y documentos
   (imágenes y PDF).
 - Tablero: rejilla sobre el mapa, fichas arrastrables y medición en metros
