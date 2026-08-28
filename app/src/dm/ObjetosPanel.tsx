@@ -5,17 +5,24 @@
  * the ones nobody holds and the ones already spent, which fell out of every
  * list before. Handing an item out lives here now, so the Party screen can go
  * back to being about the party.
+ *
+ * A tile is deliberately thin — name, holder, charges — because a campaign's
+ * shelf is long and the DM is looking for one thing on it. The prose, the
+ * effects and the handing over are in the sheet, one click away, which is the
+ * same sheet Party opens.
  */
 import { useMemo, useState } from 'react'
-import type { GameObject, Ref } from '../../../shared/types.ts'
+import type { GameObject } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
+import { ObjectDetail } from './ObjectDetail.tsx'
 import { artIndex, combatants, type Combatant } from './combat.ts'
 
 export function ObjetosPanel() {
-  const { objects, pnjs, characters, sheets, state, dispatch, openNote } = useDm()
+  const { objects, pnjs, characters, sheets, state, dispatch } = useDm()
   const [query, setQuery] = useState('')
   const [onlyFree, setOnlyFree] = useState(false)
+  const [detail, setDetail] = useState<string | null>(null)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
@@ -49,6 +56,11 @@ export function ObjetosPanel() {
 
   const shown = onlyFree ? found.filter((o) => !holderOf(o.id)) : found
 
+  // Looked up rather than stashed, so giving the object away from inside the
+  // sheet redraws the sheet.
+  const open = detail ? objects.find((o) => o.id === detail) ?? null : null
+  const openHolder = open ? holderOf(open.id) ?? null : null
+
   if (objects.length === 0) return <div className="panel muted">{es.sinObjetosCampana}</div>
 
   return (
@@ -73,115 +85,68 @@ export function ObjetosPanel() {
 
       <div className="obj-grid">
         {shown.map((o) => (
-          <ObjectCard
+          <ObjectTile
             key={o.id}
             object={o}
             holder={holderOf(o.id) ?? null}
-            everyone={everyone}
             uses={state?.objects[o.id]}
-            onGive={(ref) => dispatch({ type: 'object/give', ref, objectId: o.id })}
-            onTake={(ref) => dispatch({ type: 'object/take', ref, objectId: o.id })}
-            onUse={(ref) => dispatch({ type: 'object/use', ref, objectId: o.id })}
-            onRefill={() => dispatch({ type: 'object/refill', objectId: o.id })}
-            onNote={() => openNote(o.file)}
+            onOpen={() => setDetail(o.id)}
           />
         ))}
       </div>
+
+      {open && (
+        <ObjectDetail
+          object={open}
+          holder={openHolder?.name ?? null}
+          uses={state?.objects[open.id]}
+          actions={{
+            everyone,
+            holderRef: openHolder?.ref ?? null,
+            onGive: (ref) => dispatch({ type: 'object/give', ref, objectId: open.id }),
+            onTake: (ref) => dispatch({ type: 'object/take', ref, objectId: open.id }),
+            onUse: (ref) => dispatch({ type: 'object/use', ref, objectId: open.id }),
+          }}
+          onRefill={() => dispatch({ type: 'object/refill', objectId: open.id })}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   )
 }
 
-function ObjectCard({
+function ObjectTile({
   object,
   holder,
-  everyone,
   uses,
-  onGive,
-  onTake,
-  onUse,
-  onRefill,
-  onNote,
+  onOpen,
 }: {
   object: GameObject
   holder: Combatant | null
-  everyone: Combatant[]
   uses: { uses: number; spent: boolean } | undefined
-  onGive: (ref: Ref) => void
-  onTake: (ref: Ref) => void
-  onUse: (ref: Ref) => void
-  onRefill: () => void
-  onNote: () => void
+  onOpen: () => void
 }) {
   const spent = uses?.spent ?? false
   const remaining = uses?.uses ?? object.usos
 
   return (
-    <div className={`obj-card${spent ? ' spent' : ''}`}>
-      <h4>{object.name}</h4>
-      <div className="holder">
+    <button className={`obj-tile${spent ? ' spent' : ''}`} title={object.name} onClick={onOpen}>
+      <span className="obj-tile-name">{object.name}</span>
+      <span className="holder">
         {[
           spent ? es.destruido : holder ? `${es.lleva}: ${holder.name}` : es.nadieLoLleva,
           object.mods.ac ? `${es.ca} +${object.mods.ac}` : null,
         ]
           .filter(Boolean)
           .join(' · ')}
-      </div>
-
+      </span>
       {object.usos !== undefined && (
-        <div className="row" style={{ marginTop: 8 }}>
-          <span className="uses" title={`${remaining}/${object.usos} ${es.usos}`}>
-            {Array.from({ length: object.usos }, (_, i) => (
-              <span key={i} className={`use-pip${i < (remaining ?? 0) ? ' on' : ''}`} />
-            ))}
-          </span>
-          {holder && (
-            <button className="mini" onClick={() => onUse(holder.ref)}>
-              {es.usar}
-            </button>
-          )}
-          {spent && (
-            <button className="mini" onClick={onRefill}>
-              {es.recargar}
-            </button>
-          )}
-        </div>
-      )}
-
-      {object.description && <p className="obj-desc">{object.description}</p>}
-
-      {object.effects.length > 0 && (
-        <ul>
-          {object.effects.map((eff, i) => (
-            <li key={i}>{eff}</li>
+        <span className="uses" title={`${remaining}/${object.usos} ${es.usos}`}>
+          {Array.from({ length: object.usos }, (_, i) => (
+            <span key={i} className={`use-pip${i < (remaining ?? 0) ? ' on' : ''}`} />
           ))}
-        </ul>
+        </span>
       )}
-
-      <div className="row" style={{ marginTop: 10 }}>
-        <select
-          value=""
-          disabled={everyone.length === 0}
-          onChange={(e) => e.target.value && onGive(e.target.value as Ref)}
-        >
-          <option value="">{es.dar}</option>
-          {everyone
-            .filter((c) => c.ref !== holder?.ref)
-            .map((c) => (
-              <option key={c.ref} value={c.ref}>
-                {c.name}
-              </option>
-            ))}
-        </select>
-        {holder && (
-          <button className="mini" title={`${es.quitarA} ${holder.name}`} onClick={() => onTake(holder.ref)}>
-            {es.quitar}
-          </button>
-        )}
-        <div style={{ flex: 1 }} />
-        <button className="mini" onClick={onNote}>
-          {es.verNota} →
-        </button>
-      </div>
-    </div>
+    </button>
   )
 }

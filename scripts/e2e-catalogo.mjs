@@ -53,33 +53,43 @@ if (rats !== 3) console.log('  FAIL — three copies were asked for')
 console.log('objetos:')
 await dm.getByRole('button', { name: 'Objetos', exact: true }).first().click()
 await dm.waitForSelector('.obj-grid')
-const cards = await dm.locator('.obj-card').count()
-console.log(`  ${cards} object(s) listed`)
+const tiles = await dm.locator('.obj-tile').count()
+console.log(`  ${tiles} object(s) listed`)
 
-// It says who is carrying it, and the card is where it changes hands.
-const card = dm.locator('.obj-card').first()
-console.log(`  holder: ${await card.locator('.holder').innerText()}`)
+// The tile carries the holder; everything else is behind the click.
+const tile = dm.locator('.obj-tile').first()
+console.log(`  holder: ${await tile.locator('.holder').innerText()}`)
 await shot('catalogo-3-objetos')
 
-const give = card.locator('select')
-await give.selectOption({ index: 1 })
+// The sheet is where it changes hands, and it redraws in place.
+await tile.click()
+await dm.waitForSelector('.sheet')
+await dm.locator('.sheet-actions select').selectOption({ index: 1 })
 await dm.waitForTimeout(300)
-const after = await card.locator('.holder').innerText()
-console.log(`  after giving: ${after}`)
-if (!after.startsWith('Lleva:')) console.log('  FAIL — the card did not pick up the new holder')
+const inSheet = await dm.locator('.sheet .sub').innerText()
+console.log(`  after giving: ${inSheet}`)
+if (!inSheet.startsWith('Lleva:')) console.log('  FAIL — the sheet did not pick up the new holder')
 await shot('catalogo-4-entregado')
+await dm.locator('.sheet').getByRole('button', { name: 'Cerrar' }).click()
+
+const onTile = await tile.locator('.holder').innerText()
+if (!onTile.startsWith('Lleva:')) console.log('  FAIL — the tile did not pick up the new holder')
 
 // An object someone holds drops out of the "sólo sin repartir" filter — which
 // is the affordance the Party header used to carry.
 await dm.getByRole('button', { name: 'Sólo sin repartir' }).click()
 await dm.waitForTimeout(200)
-console.log(`  unassigned: ${await dm.locator('.obj-card').count()}`)
+console.log(`  unassigned: ${await dm.locator('.obj-tile').count()}`)
 
 // Put it back, so a re-run starts where this one did.
 await dm.getByRole('button', { name: 'Sólo sin repartir' }).click()
 await dm.waitForTimeout(150)
-await card.getByRole('button', { name: 'Quitar' }).click()
+await tile.click()
+await dm.waitForSelector('.sheet')
+await dm.locator('.sheet-actions').getByRole('button', { name: 'Quitar' }).click()
 await dm.waitForTimeout(300)
+await dm.locator('.sheet').getByRole('button', { name: 'Cerrar' }).click()
+await dm.waitForTimeout(150)
 
 await finish()
 if (problems.length > 0) process.exitCode = 1

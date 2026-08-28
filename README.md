@@ -143,11 +143,13 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 **Objetos** — todo lo que existe en la campaña, no sólo lo que alguien lleva.
 
-- Quién lo lleva, cargas restantes, efectos y descripción en la propia tarjeta.
+- Una balda de fichas pequeñas: nombre, quién lo lleva y cargas restantes, que
+  es lo que se busca de un vistazo. Pulsa una y la hoja trae la descripción,
+  los efectos y la nota — la misma hoja que abre Party.
 - Incluye los que no tiene nadie y los ya destruidos, que antes se caían de
   todas las listas.
-- Es el sitio donde se reparte: dar a cualquiera de la mesa, quitar, gastar una
-  carga o recargar.
+- Es el sitio donde se reparte, desde la hoja: dar a cualquiera de la mesa,
+  quitar, gastar una carga o recargar.
 
 **Notas** — `story/` y `mundo/` con `[[wikilinks]]` navegables, backlinks,
 filtro por `#etiqueta` y búsqueda.

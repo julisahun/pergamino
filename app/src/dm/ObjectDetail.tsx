@@ -1,19 +1,35 @@
 /** The full text of an object, opened on demand rather than always expanded. */
 import { useEffect } from 'react'
-import type { GameObject } from '../../../shared/types.ts'
+import type { GameObject, Ref } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
+import type { Combatant } from './combat.ts'
+
+/**
+ * Handing the object around, for the callers that own that. Party opens this
+ * sheet from a PC who is already carrying the thing and has no use for it;
+ * Objetos is the screen where objects change hands, so it passes the lot.
+ */
+export interface ObjectActions {
+  everyone: Combatant[]
+  holderRef: Ref | null
+  onGive: (ref: Ref) => void
+  onTake: (ref: Ref) => void
+  onUse: (ref: Ref) => void
+}
 
 export function ObjectDetail({
   object,
   holder,
   uses,
+  actions,
   onRefill,
   onClose,
 }: {
   object: GameObject
   holder: string | null
   uses: { uses: number; spent: boolean } | undefined
+  actions?: ObjectActions
   onRefill?: () => void
   onClose: () => void
 }) {
@@ -26,6 +42,9 @@ export function ObjectDetail({
   }, [onClose])
 
   const remaining = uses?.uses ?? object.usos
+  const spent = uses?.spent ?? false
+  // Pulled out of `actions` so the callbacks below narrow with it.
+  const heldBy = actions?.holderRef ?? null
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -35,7 +54,7 @@ export function ObjectDetail({
             <h2>{object.name}</h2>
             <div className="sub">
               {[
-                uses?.spent ? es.destruido : holder ?? es.nadieLoLleva,
+                spent ? es.destruido : holder ? `${es.lleva}: ${holder}` : es.nadieLoLleva,
                 object.mods.ac ? `${es.ca} +${object.mods.ac}` : null,
                 object.usos !== undefined ? `${remaining}/${object.usos} ${es.usos}` : null,
               ]
@@ -43,11 +62,38 @@ export function ObjectDetail({
                 .join(' · ')}
             </div>
           </div>
-          {uses?.spent && onRefill && (
-            <button onClick={onRefill}>{es.recargar}</button>
-          )}
+          {spent && onRefill && <button onClick={onRefill}>{es.recargar}</button>}
           <button onClick={onClose}>{es.cerrar}</button>
         </div>
+
+        {actions && (
+          <div className="row sheet-actions">
+            <select
+              value=""
+              disabled={actions.everyone.length === 0}
+              onChange={(e) => e.target.value && actions.onGive(e.target.value as Ref)}
+            >
+              <option value="">{es.dar}</option>
+              {actions.everyone
+                .filter((c) => c.ref !== heldBy)
+                .map((c) => (
+                  <option key={c.ref} value={c.ref}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+            {heldBy && (
+              <button className="mini" onClick={() => actions.onTake(heldBy)}>
+                {es.quitar}
+              </button>
+            )}
+            {heldBy && object.usos !== undefined && !spent && (
+              <button className="mini" onClick={() => actions.onUse(heldBy)}>
+                {es.usar}
+              </button>
+            )}
+          </div>
+        )}
 
         <p className="obj-desc">{object.description}</p>
 
