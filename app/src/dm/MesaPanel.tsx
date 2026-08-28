@@ -69,12 +69,25 @@ export function MesaPanel() {
   const { field } = state
   const current: Scene | undefined = scenes.find((s) => s.id === field.sceneId)
   const board = field.mode === 'tablero'
-  const mapUrl = assetUrl(field.map?.src)
+  // `TableBoard` falls back to the scene's art when no map is set; without the
+  // same fallback here the DM's board was blank while the players had one.
+  const mapUrl = assetUrl(field.map?.src) ?? assetUrl(current?.art?.src)
 
   const showScene = (scene: Scene) => {
     const same = field.sceneId === scene.id
     dispatch({ type: 'scene/show', sceneId: same ? null : scene.id })
-    if (!same && scene.art?.src) dispatch({ type: 'field/map', src: scene.art.src })
+    if (same) return
+    if (scene.art?.src) dispatch({ type: 'field/map', src: scene.art.src })
+    // The scene's prepped grid becomes *the* grid rather than something the
+    // projection swaps in for the television only. `field/grid` pulls the
+    // tokens back inside, which is what a resize means.
+    if (scene.grid) {
+      dispatch({
+        type: 'field/grid',
+        cols: scene.grid.cols,
+        rows: scene.grid.rows ?? field.rows,
+      })
+    }
   }
 
   const addTemplate = (t: Omit<Template, 'id'>) =>

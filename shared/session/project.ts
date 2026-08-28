@@ -136,10 +136,12 @@ export function projectTable(state: SessionState, ctx: ProjectContext): TableVie
   const { activeRef } = state.encounter
   const active = activeRef && visible.has(activeRef) ? activeRef : null
 
-  const grid =
-    field.mode === 'tablero'
-      ? { cols: scene?.grid?.cols ?? field.cols, rows: scene?.grid?.rows ?? field.rows }
-      : null
+  // The field's grid, and nothing else. This used to prefer `scene.grid` — the
+  // *prep* number — which meant the television drew 16 columns while the DM
+  // drew 24, and every cell coordinate in the frame meant two different
+  // things and tokens landed elsewhere. A scene's prepped grid is adopted into
+  // the field when the scene is shown, so there is one number.
+  const grid = field.mode === 'tablero' ? { cols: field.cols, rows: field.rows } : null
 
   return {
     title: ctx.title,

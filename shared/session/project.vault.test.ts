@@ -85,6 +85,29 @@ describe('projectTable — what reaches the TV', () => {
     expect(projectTable(state, ctx()).activeRef).toBeNull()
   })
 
+  it('gives the television the field\'s own grid, never the scene\'s prep number', () => {
+    // The two boards address the same cells: a token at x=5, and `fog.revealed`
+    // as row-major indices over `cols`, only mean one thing if both windows
+    // count the same columns. This used to prefer `scene.grid`, so a scene
+    // prepped at 16 wide drew 16 on the TV and 24 under the DM's hand.
+    const state = guils()
+    state.field.mode = 'tablero'
+    state.field.cols = 24
+    state.field.rows = 14
+    const prepped = sceneList.find((sc) => sc.grid)
+    expect(prepped, 'the fixture needs a scene with a prepped grid').toBeDefined()
+    expect(prepped!.grid!.cols).not.toBe(24)
+    state.field.sceneId = prepped!.id
+
+    expect(projectTable(state, ctx()).grid).toEqual({ cols: 24, rows: 14 })
+  })
+
+  it('has no grid at all outside tablero', () => {
+    const state = guils()
+    state.field.mode = 'escena'
+    expect(projectTable(state, ctx()).grid).toBeNull()
+  })
+
   it('says nothing about whether sync is paused — that is a DM concern', () => {
     const state = guils()
     state.field.paused = true
