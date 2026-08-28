@@ -131,6 +131,13 @@ export const es = {
   // fichas y objetos
   descansoCorto: 'Descanso corto',
   descansoLargo: 'Descanso largo',
+  // ficha
+  tiradas: 'Tiradas',
+  iniciativaLarga: 'Iniciativa',
+  competencia: 'Competencia',
+  percepcionPasiva: 'Percepción pasiva',
+  porObjetos: 'por objetos',
+
   oro: 'Oro',
   equipo: 'Equipo',
   espacios: 'Espacios de conjuro',

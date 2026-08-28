@@ -524,6 +524,33 @@ textarea {
 .pc-card textarea { min-height: 44px; font-size: 13px; }
 .slot-row { display: flex; align-items: center; gap: 6px; }
 
+/* The six scores, laid out the way a stat block does: the modifier is the
+   number you actually roll with, so it is the big one and the score sits
+   under it. Both come stated from the `-fc5.xml`. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 10px;
+}
+.stat {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 5px 2px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.stat-label {
+  font: 600 9px/1 var(--font-ui);
+  letter-spacing: 0.08em; color: var(--ink-faint);
+}
+.stat-mod { font: 600 15px/1.15 var(--font-ui); color: var(--accent); }
+.stat-score { font: 400 10px/1 var(--font-ui); color: var(--ink-dim); }
+
+.rolls { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.roll { font: 400 11.5px/1.4 var(--font-ui); color: var(--ink-faint); white-space: nowrap; }
+.roll b { font-weight: 600; color: var(--ink); }
+
 .obj-list { display: flex; flex-direction: column; gap: 8px; }
 .obj-desc { font-family: var(--font-read); line-height: 1.55; color: var(--ink-dim); margin: 6px 0 0; }
 .uses { display: flex; gap: 3px; }

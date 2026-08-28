@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
+import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -76,7 +77,7 @@ export function PartyPanel() {
           <PcCard
             key={c.ref}
             c={c}
-            slots={sheets[c.ref.slice(3)]?.slots ?? {}}
+            sheet={sheets[c.ref.slice(3)]}
             objects={objects}
             everyone={all}
             usesOf={(id) => state.objects[id]}
@@ -99,24 +100,46 @@ export function PartyPanel() {
   )
 }
 
+/** Labelled the way the sheet writes them: FUE,DES,CON,INT,SAB,CAR. */
+const SCORES: { key: keyof Abilities; label: string }[] = [
+  { key: 'str', label: 'FUE' },
+  { key: 'dex', label: 'DES' },
+  { key: 'con', label: 'CON' },
+  { key: 'int', label: 'INT' },
+  { key: 'wis', label: 'SAB' },
+  { key: 'cha', label: 'CAR' },
+]
+
 function PcCard({
   c,
-  slots,
+  sheet,
   objects,
   everyone,
   usesOf,
   onDetail,
 }: {
   c: Combatant
-  slots: Record<string, number>
+  sheet: SheetStats | undefined
   objects: GameObject[]
   everyone: Combatant[]
   usesOf: (id: string) => { uses: number; spent: boolean } | undefined
   onDetail: (id: string) => void
 }) {
   const dispatch = useDm((s) => s.dispatch)
+  const slots = sheet?.slots ?? {}
   const carried = objects.filter((o) => c.live.objects.includes(o.id))
   const acBonus = carried.reduce((sum, o) => sum + (o.mods.ac ?? 0), 0)
+  // Shown side by side rather than added up: the sheet's AC is the sheet's,
+  // and whether a second source of AC stacks is not this app's ruling to make.
+  const rolls = [
+    sheet?.initMod !== null && sheet?.initMod !== undefined
+      ? [es.iniciativaLarga, formatMod(sheet.initMod)]
+      : null,
+    sheet?.proficiency != null ? [es.competencia, formatMod(sheet.proficiency)] : null,
+    sheet?.passivePerception != null
+      ? [es.percepcionPasiva, String(sheet.passivePerception)]
+      : null,
+  ].filter(Boolean) as [string, string][]
   const givable = objects.filter((o) => !c.live.objects.includes(o.id) && !usesOf(o.id)?.spent)
 
   return (
@@ -125,16 +148,43 @@ function PcCard({
         <Face src={c.portrait} name={c.name} />
         <div style={{ flex: 1 }}>
           <h3>{c.name}</h3>
+          {sheet?.summary && <div className="sub">{sheet.summary}</div>}
           <div className="sub">
             {c.hpMax !== null && `${es.pg} ${c.live.hp ?? 0}/${c.hpMax}`}
             {c.live.temp > 0 && ` +${c.live.temp}`}
-            {acBonus > 0 && ` · ${es.ca} +${acBonus}`}
+            {sheet?.ac != null && ` · ${es.ca} ${sheet.ac}`}
+            {acBonus > 0 && ` (+${acBonus} ${es.porObjetos})`}
           </div>
         </div>
         <button className="mini" onClick={() => dispatch({ type: 'hp/full', ref: c.ref })}>
           {es.alMaximo}
         </button>
       </div>
+
+      {sheet?.abilities && (
+        <div className="stats">
+          {SCORES.map(({ key, label }) => (
+            <div className="stat" key={key} title={`${label} ${sheet.abilities![key]}`}>
+              <span className="stat-label">{label}</span>
+              <span className="stat-mod">{formatMod(abilityMod(sheet.abilities![key]))}</span>
+              <span className="stat-score">{sheet.abilities![key]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rolls.length > 0 && (
+        <div className="pc-field">
+          <span>{es.tiradas}</span>
+          <div className="rolls">
+            {rolls.map(([label, value]) => (
+              <span className="roll" key={label}>
+                {label} <b>{value}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {c.live.conditions.length > 0 && (
         <div className="chips" style={{ marginBottom: 4 }}>

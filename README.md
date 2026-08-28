@@ -126,7 +126,15 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 **Party** — la party y lo que lleva encima.
 
-- PG, oro, espacios de conjuro, equipo y descansos.
+- PG, CA, oro, espacios de conjuro, equipo y descansos.
+- Las seis características con su modificador, y las tiradas que dependen de
+  la hoja: iniciativa, competencia y percepción pasiva. Todo sale del
+  `-fc5.xml`; el modificador es aritmética sobre una puntuación dada, no una
+  regla recalculada.
+- Los números mandan desde la línea que la propia hoja declara autoritativa
+  («si algún número de la app no coincide con los de arriba, mandan los de
+  arriba»), así que la iniciativa de quien tiene *Alerta* sale bien y la CA es
+  la final, no la base de la armadura.
 - Los objetos viven en quien los lleva: dar, quitar y gastar cargas desde su
   propia tarjeta. Una carga se gasta pulsándola, igual que un espacio de
   conjuro — y volver a pulsar una apagada la devuelve. La descripción de
