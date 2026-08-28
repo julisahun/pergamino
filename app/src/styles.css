@@ -763,6 +763,11 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   padding: 5px 8px; border-radius: 4px;
 }
 .mesa-stage .table-title h1 { font-size: 30px; }
+/* The console letterboxes the art instead of cropping it to fill, so that
+   switching escena↔tablero does not resize the picture: `Board` fits its map
+   to the natural aspect and this has to land in the same box. The television
+   keeps `cover` — there is nothing on a TV worth a black bar. */
+.mesa-stage .scene-layer img { object-fit: contain; }
 .mesa-read {
   grid-area: read;
   border-top: 1px solid var(--line);
