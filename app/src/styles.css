@@ -554,6 +554,43 @@ textarea {
 .use-pip { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--accent-dim); background: transparent; padding: 0; }
 .use-pip.on { background: var(--accent); }
 
+/* --------------------------------------------- pnj and objetos catalogues */
+
+/* The bestiary: a list on the left, one stat block on the right. Same shape
+   as .notas, minus the backlinks column. */
+.catalogo {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+  overflow: hidden;
+}
+.catalogo > * { min-height: 0; overflow: auto; }
+.catalogo .detail { max-width: 720px; }
+
+.cat-sub { display: block; color: var(--ink-faint); font-size: 11px; margin-top: 2px; }
+/* On the selected row the faint ink disappears into the accent. */
+.note-list button[aria-pressed="true"] .cat-sub { color: var(--ink-dim); }
+
+/* Wide enough to read a name in, not the whole window. */
+.cat-search { flex: 1; max-width: 420px; min-width: 200px; margin-bottom: 0; }
+.cat-face {
+  width: 76px; height: 76px; border-radius: 7px;
+  object-fit: cover; background: var(--bg-raised);
+  display: grid; place-items: center;
+  font: 600 24px/1 var(--font-read); color: var(--ink-dim);
+}
+
+/* The objects catalogue is a plain grid of cards — there is no second pane,
+   because an object's whole statblock fits on its card. */
+.catalogo-ancho { height: 100%; overflow: auto; padding: 16px; }
+.obj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
 /* ------------------------------------------------------------- notas tab */
 
 .notas {

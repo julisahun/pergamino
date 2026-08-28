@@ -48,7 +48,7 @@ import {
 
 export type { SheetStats }
 
-export type Tab = 'mesa' | 'party' | 'notas' | 'sesion' | 'preparacion'
+export type Tab = 'mesa' | 'party' | 'pnj' | 'objetos' | 'notas' | 'sesion' | 'preparacion'
 
 /** Where the console is in the business of having a folder open. */
 export type Phase =

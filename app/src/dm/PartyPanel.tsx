@@ -2,11 +2,15 @@
  * The party and what they carry.
  *
  * An object lives on whoever holds it: give, take and spend charges from their
- * card. The prose from `objects/*.json` is reference, so it opens on demand
+ * card. The prose from `objects/*.md` is reference, so it opens on demand
  * instead of sitting expanded under every character.
+ *
+ * Handing an item out is a *secondary* thing to do here — the catalogue of
+ * everything the campaign has, and the item nobody is carrying yet, are the
+ * Objetos tab's job.
  */
 import { useMemo, useState } from 'react'
-import type { GameObject, Ref } from '../../../shared/types.ts'
+import type { GameObject } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
@@ -40,9 +44,6 @@ export function PartyPanel() {
   const partyRefs = party.map((c) => c.ref)
   const holderOf = (id: string) => all.find((c) => c.live.objects.includes(id))
 
-  const unassigned = objects.filter(
-    (o) => !holderOf(o.id) && !state.objects[o.id]?.spent,
-  )
   const detailObject = objects.find((o) => o.id === detail)
 
   return (
@@ -66,49 +67,6 @@ export function PartyPanel() {
           </>
         ) : (
           <button onClick={() => setConfirmLong(true)}>{es.descansoLargo}</button>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        {unassigned.length > 0 && (
-          <Popover
-            label={`${unassigned.length} ${
-              unassigned.length === 1 ? es.unoSinRepartir : es.sinRepartir
-            }`}
-          >
-            {(close) => (
-              <>
-                {unassigned.map((o) => (
-                  <div className="row" key={o.id} style={{ gap: 4, padding: '2px 4px' }}>
-                    <button
-                      style={{ flex: 1, textAlign: 'left' }}
-                      onClick={() => {
-                        setDetail(o.id)
-                        close()
-                      }}
-                    >
-                      {o.name}
-                    </button>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        if (!e.target.value) return
-                        dispatch({ type: 'object/give', ref: e.target.value as Ref, objectId: o.id })
-                        close()
-                      }}
-                    >
-                      <option value="">{es.dar}</option>
-                      {all.map((c) => (
-                        <option key={c.ref} value={c.ref}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </>
-            )}
-          </Popover>
         )}
       </div>
 

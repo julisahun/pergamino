@@ -43,6 +43,7 @@ export const es = {
 
   // pestañas
   party: 'Party',
+  objetos: 'Objetos',
   notas: 'Notas',
   preparacion: 'Preparación',
   masOpciones: 'Más',
@@ -194,11 +195,28 @@ export const es = {
 
   // mesa
   volver: 'Volver',
-  sinRepartir: 'objetos sin repartir',
-  unoSinRepartir: 'objeto sin repartir',
   lleva: 'Lleva',
   darObjeto: 'Dar objeto',
   verDetalle: 'Ver descripción',
   cerrar: 'Cerrar',
   nadieLoLleva: 'Nadie lo lleva',
+
+  // catálogos de PNJ y objetos
+  buscarPnj: 'Buscar PNJ…',
+  buscarObjeto: 'Buscar objeto…',
+  sinEtiqueta: 'Sin etiqueta',
+  soloTrato: 'Sólo trato',
+  soloTratoAyuda:
+    'Su nota no tiene puntos de golpe, así que es alguien con quien se habla: ' +
+    'no se puede sentar en el tablero ni cargar en el reparto de una escena.',
+  copias: 'Copias',
+  anadirALaSesion: 'Añadir a la sesión',
+  yaEnLaSesion: 'ya en la mesa',
+  eligePnj: 'Elige un PNJ.',
+  sinPnj: 'Esta campaña no tiene PNJ.',
+  sinObjetosCampana: 'Esta campaña no tiene objetos.',
+  sinResultados: 'Nada coincide con la búsqueda.',
+  soloSinRepartir: 'Sólo sin repartir',
+  quitarA: 'Quitar a',
+  catalogoAyuda: 'Sólo lectura: esto es la preparación, tal como está en las notas.',
 } as const

@@ -93,7 +93,7 @@ los mismos cuatro métodos sin tocar ningún panel.
 
 ## Qué hace
 
-Tres pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
+Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 **Mesa** — lo que hay en la pantalla ahora mismo, y quién va después.
 
@@ -121,6 +121,27 @@ Tres pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 - Los objetos viven en quien los lleva: dar, quitar y gastar cargas desde su
   propia tarjeta. La descripción de `objects/*.md` se abre con `ⓘ` en vez de
   estar siempre desplegada.
+- Repartir es lo secundario aquí: el catálogo entero está en **Objetos**.
+
+**PNJ** — el reparto de la campaña, con su ficha.
+
+- Todos los `pnj/*.md`, agrupados por su `tag` y con buscador que entra también
+  en los rasgos y en la nota.
+- CA, PG, velocidad, iniciativa y rasgos sin tener que sentar a nadie en el
+  tablero primero, que era la única forma de verlos.
+- Quien no tiene PG en su nota sale igualmente, marcado **sólo trato**: es
+  alguien con quien se habla, y la pantalla lo dice en vez de ofrecerlo para
+  un combate donde no cabe.
+- Lo único que escribe es la *sesión*: añadir N copias a la mesa. La
+  preparación no se toca.
+
+**Objetos** — todo lo que existe en la campaña, no sólo lo que alguien lleva.
+
+- Quién lo lleva, cargas restantes, efectos y descripción en la propia tarjeta.
+- Incluye los que no tiene nadie y los ya destruidos, que antes se caían de
+  todas las listas.
+- Es el sitio donde se reparte: dar a cualquiera de la mesa, quitar, gastar una
+  carga o recargar.
 
 **Notas** — `story/` y `mundo/` con `[[wikilinks]]` navegables, backlinks,
 filtro por `#etiqueta` y búsqueda.
@@ -229,6 +250,7 @@ node scripts/e2e.mjs              # todos, en orden
 node scripts/tour.mjs             # una captura por pantalla
 node scripts/e2e-mesa.mjs         # escenas, documentos, tablero, y las dos ventanas
 node scripts/e2e-party.mjs        # objetos, ficha del objeto, descansos
+node scripts/e2e-catalogo.mjs     # los catálogos de PNJ y de objetos
 node scripts/e2e-notas.mjs        # índice, enlaces muertos, búsqueda
 node scripts/e2e-congelar.mjs     # la mesa congelada frente a la consola
 node scripts/e2e-preparacion.mjs  # el reparto de una escena, y el bloqueo
@@ -293,7 +315,8 @@ app/
     vault/open.ts        selector, permisos, handle en IndexedDB
     transport/           la interfaz y BroadcastChannelTransport
     assets/              key → objectURL, y las dos fuentes de bytes
-    dm/                  Mesa · Party · Notas  (+ Sesión y Preparación en ⋯)
+    dm/                  Mesa · Party · PNJ · Objetos · Notas
+                         (+ Sesión y Preparación en ⋯)
     table/               la pantalla de mesa
     board/               tablero compartido por las dos ventanas
     fixtures/            la campaña de demostración (sólo desarrollo)

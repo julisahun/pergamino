@@ -3,14 +3,18 @@ import { useDm, type Tab } from '../state/dmStore.ts'
 import { es } from '../strings/es.ts'
 import { MesaPanel } from './MesaPanel.tsx'
 import { PartyPanel } from './PartyPanel.tsx'
+import { PnjPanel } from './PnjPanel.tsx'
+import { ObjetosPanel } from './ObjetosPanel.tsx'
 import { NotasPanel } from './NotasPanel.tsx'
 import { SesionPanel } from './SesionPanel.tsx'
 import { PreparacionPanel } from './PreparacionPanel.tsx'
 
-/** The three screens used during play. The bookends live behind the ⋯ menu. */
+/** The screens used during play. The bookends live behind the ⋯ menu. */
 const TABS: { id: Tab; label: string }[] = [
   { id: 'mesa', label: es.mesa },
   { id: 'party', label: es.party },
+  { id: 'pnj', label: es.pnjs },
+  { id: 'objetos', label: es.objetos },
   { id: 'notas', label: es.notas },
 ]
 
@@ -206,6 +210,10 @@ export function Console() {
         <MesaPanel />
       ) : tab === 'party' ? (
         <PartyPanel />
+      ) : tab === 'pnj' ? (
+        <PnjPanel />
+      ) : tab === 'objetos' ? (
+        <ObjetosPanel />
       ) : tab === 'notas' ? (
         <NotasPanel />
       ) : tab === 'sesion' ? (

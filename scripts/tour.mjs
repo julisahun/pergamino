@@ -19,6 +19,8 @@ await shot('mesa-tablero')
 
 for (const [tab, name] of [
   ['Party', 'party'],
+  ['PNJ', 'pnj'],
+  ['Objetos', 'objetos'],
   ['Notas', 'notas'],
 ]) {
   await dm.getByRole('button', { name: tab, exact: true }).first().click()

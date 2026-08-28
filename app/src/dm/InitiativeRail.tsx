@@ -6,6 +6,7 @@
 import { useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Ref, RevealState } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
+import { isCombatant } from '../../../shared/vault/campaign.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -260,7 +261,9 @@ export function InitiativeRail() {
           <>
             <select value={pnjId} onChange={(e) => setMonsterId(e.target.value)} style={{ flex: 1 }}>
               <option value="">—</option>
-              {pnjs.map((m) => (
+              {/* Only those with hit points: `instantiate` drops the rest on
+                  the floor, so offering them here promises nothing. */}
+              {pnjs.filter(isCombatant).map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                   {m.tag ? ` · ${m.tag}` : ''}

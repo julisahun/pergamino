@@ -21,6 +21,7 @@ const SCRIPTS = [
   'e2e-congelar.mjs',
   'e2e-notas.mjs',
   'e2e-party.mjs',
+  'e2e-catalogo.mjs',
   'e2e-preparacion.mjs',
 ]
 

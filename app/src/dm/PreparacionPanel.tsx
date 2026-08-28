@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import type { RosterEntry } from '../../../shared/types.ts'
+import { isCombatant } from '../../../shared/vault/campaign.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 
@@ -15,6 +16,9 @@ export function PreparacionPanel() {
 
   if (!state) return null
   const live = state.encounter.on || state.field.sceneId !== null
+  // A PNJ with no hit points cannot be seated — `instantiate` skips it — so a
+  // roster must not be able to name one.
+  const seatable = pnjs.filter(isCombatant)
 
   const rosterOf = (sceneId: string): RosterEntry[] =>
     drafts[sceneId] ?? scenes.find((s) => s.id === sceneId)?.roster ?? []
@@ -71,7 +75,7 @@ export function PreparacionPanel() {
                     )
                   }
                 >
-                  {pnjs.map((m) => (
+                  {seatable.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
                     </option>
@@ -104,9 +108,9 @@ export function PreparacionPanel() {
             ))}
             <div className="row" style={{ marginTop: 8 }}>
               <button
-                disabled={live || pnjs.length === 0}
+                disabled={live || seatable.length === 0}
                 onClick={() =>
-                  setRoster(scene.id, [...roster, { pnjId: pnjs[0]!.id, count: 1 }])
+                  setRoster(scene.id, [...roster, { pnjId: seatable[0]!.id, count: 1 }])
                 }
               >
                 {es.anadirFila}
