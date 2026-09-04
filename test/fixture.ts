@@ -17,7 +17,9 @@ import nodePath from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { PcInfo } from '../shared/session/project.ts'
 import type { RunData } from '../shared/session/store.ts'
+import type { SessionState } from '../shared/types.ts'
 import { CampaignVault } from '../shared/vault/binding.ts'
+import { emptyLiveState } from '../shared/vault/session.ts'
 import { openNodeVault } from '../shared/vault/node.ts'
 import type { WritableVaultDir } from '../shared/vault/source.ts'
 import { CAMPAIGN, WORLD, worldRootPath } from './roots.ts'
@@ -47,12 +49,13 @@ export const openWorld = (): Promise<CampaignVault> =>
  * The mesa the campaign runs. `runs/README.md` lists exactly one, and the
  * suite has no business inventing another — a mesa is a group of people.
  *
- * Its `session.json` is a **live gameplay file**: the console rewrites it
- * every few seconds while it is open, and the DM moves tokens and reveals
- * people between one run of the suite and the next. So a test may read it for
- * *shape* — a real party, real NPCs instantiated from real prep — but must
- * set up any condition it actually asserts. Nothing here may depend on which
- * scene was last on screen or who happened to be hidden.
+ * **Nothing here reads `session.json`.** It is not a fixture and never was:
+ * the app writes it on the first change, the console rewrites it every few
+ * seconds while it is open, and the DM deletes it between sessions — a mesa
+ * marked `estado: sin empezar` has none at all, which is what `loadRun`'s
+ * `fromVersion: null` means. Tests that need someone at the table therefore
+ * *build* the state, from the party and the prep that are real files. What the
+ * vault supplies is the campaign; the scenario is the test's own.
  */
 export const MESA = 'last'
 
@@ -78,5 +81,21 @@ export function pcsOf(run: RunData): Map<string, PcInfo> {
   )
 }
 
-/** The PCs a run has live state for, which is who can be on the board. */
-export const playingPcs = (run: RunData): string[] => Object.keys(run.state.play).sort()
+/** The party, by id, in a stable order. Everyone with a note is a PC. */
+export const playingPcs = (run: RunData): string[] => run.characters.map((c) => c.id).sort()
+
+/**
+ * The run's state with the whole party seated at full HP — what
+ * `SessionStore.open` does on the way in, done here for the tests that drive
+ * the reducer and the projection directly instead of through the store.
+ *
+ * Seating is what makes a PC addressable: `state.play` is the live layer, and
+ * a `hp/damage` at someone who is not in it does nothing.
+ */
+export function seated(run: RunData): SessionState {
+  const play = { ...run.state.play }
+  for (const c of run.characters) {
+    play[c.id] ??= emptyLiveState(run.sheets.get(c.id)?.hpMax ?? null)
+  }
+  return { ...run.state, play }
+}

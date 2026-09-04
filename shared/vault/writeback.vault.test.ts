@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Scene, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs } from '../../test/fixture.ts'
+import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
+import { reduce } from '../session/reducer.ts'
 import {
   applyDeviations,
   bitacoraFilename,
@@ -15,7 +16,25 @@ const scenes = new Map<string, Scene>(campaign.scenes.map((s) => [s.id, s]))
 const { objects, pnjs } = campaign
 
 const run = await vault.loadRun(MESA)
-const last = (): SessionState => structuredClone(run.state)
+/**
+ * The party seated and one bandit carrying nothing yet, built from the notes:
+ * a mesa that has not been played has no `session.json` to read.
+ */
+const BASE: SessionState = reduce(
+  seated(run),
+  { type: 'npc/add', pnjId: 'bandido', count: 1 },
+  1_000,
+  {
+    pnj: (id) => pnjs.find((p) => p.id === id),
+    object: (id) => objects.find((o) => o.id === id),
+    pcMaxHp: () => null,
+    pcName: (id) => pcsOf(run).get(id)?.name,
+    pcInitMod: () => null,
+    newId: () => 'seed-1',
+  },
+).state
+
+const last = (): SessionState => structuredClone(BASE)
 
 // The party as the run itself names it, not as a literal that can rot.
 const pcs = pcsOf(run)

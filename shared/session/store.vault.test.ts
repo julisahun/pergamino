@@ -26,6 +26,9 @@ describe('sync pause', () => {
     store = new SessionStore()
     store.bind(vault)
     await store.open(MESA)
+    // The mesa has no `session.json` until the app writes one, so both the
+    // frame these tests hold and the people on the board are put there here.
+    store.dispatch({ type: 'npc/add', pnjId: 'bandido', count: 3 })
     store.dispatch({ type: 'scene/show', sceneId: START })
   })
 
@@ -53,8 +56,11 @@ describe('sync pause', () => {
 
   it('hides token moves made while paused', () => {
     const ref = anNpc()
-    // Put someone on the board in the open, so there is a position to freeze.
+    // Put someone on the board in the open, on a known square. `npc/add`
+    // already gave them a ficha, and placing an placed token is a no-op —
+    // moving is `token/move` — so clear it first.
     store.dispatch({ type: 'reveal/set', ref, on: true })
+    store.dispatch({ type: 'token/remove', ref })
     store.dispatch({ type: 'token/place', ref, x: 4, y: 4 })
     const before = store.tableView().tokens[ref]
     expect(before).toEqual({ x: 4, y: 4 })

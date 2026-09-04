@@ -167,7 +167,7 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 185 with the DM's vault present, 49 without
+npm test                 # 188 with the DM's vault present, 57 without
 npm run typecheck
 npm run build
 ```
@@ -180,9 +180,14 @@ exits 2 rather than reporting zero of everything; `--force` runs the old checks
 anyway. Deciding whether to port or drop it is still open — see
 `lint/README.md`.
 
-The vault tests read the DM's live campaign, so **close the console tab before
-running them**: an open DM window re-scans the folder every 5 seconds and will
-rewrite `runs/<mesa>/session.json` underneath the suite.
+The vault tests read the DM's live campaign — the prep, the party and the
+sheets, which are files a human edits deliberately. They no longer read
+`runs/<mesa>/session.json`, and must not: the app writes it on the first change
+of a session, rewrites it every few seconds while the console is open, and the
+DM deletes it between sessions, so a mesa marked `sin empezar` has none at all.
+A test that needs someone at the table **builds** the state — `seated()` in
+`test/fixture.ts`, plus `npc/add` from real prep. Twice now, anchoring on that
+file has broken the suite for reasons that had nothing to do with the code.
 
 And, for anything on screen, one of the drivers:
 

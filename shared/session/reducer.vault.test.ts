@@ -10,7 +10,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Ref, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs } from '../../test/fixture.ts'
+import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
 import { nextName, orderMembers, reduce, liveOf, type ReduceOpts } from './reducer.ts'
 
 const vault = await openWorld()
@@ -40,9 +40,24 @@ const opts = (extra: Partial<ReduceOpts> = {}): ReduceOpts => ({
   ...extra,
 })
 
-const last = (): SessionState => structuredClone(runData.state)
 const run = (s: SessionState, ...actions: Parameters<typeof reduce>[1][]): SessionState =>
   actions.reduce((acc, a) => reduce(acc, a, 1_000, opts()).state, s)
+
+/**
+ * The party seated and three bandits on the board — built from the notes, not
+ * read out of `session.json`, which a mesa this campaign has not played does
+ * not have. Everything downstream indexes `npcs[0]`, so it has to be someone.
+ */
+let seedCounter = 0
+const BASE: SessionState = reduce(
+  seated(runData),
+  { type: 'npc/add', pnjId: 'bandido', count: 3 },
+  1_000,
+  // Its own id prefix: `counter` resets per test, so sharing one would hand
+  // out `test-1` twice and the second NPC would collide with the seeded one.
+  { ...opts(), newId: () => `seed-${++seedCounter}` },
+).state
+const last = (): SessionState => structuredClone(BASE)
 
 /** A fixed board, so a clamp has a known edge to clamp to. */
 const board = (s: SessionState): SessionState =>

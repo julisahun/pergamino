@@ -12,7 +12,7 @@
 import { useMemo, useState } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
-import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
+import { abilityMod, formatMod, type Abilities, type SheetStats, type StatedMod } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -139,7 +139,21 @@ function PcCard({
     sheet?.passivePerception != null
       ? [es.percepcionPasiva, String(sheet.passivePerception)]
       : null,
+    // The casting line, for whoever has one. A rogue's sheet has none, so
+    // these fall away rather than showing a dash.
+    sheet?.spellDc != null ? [es.cdConjuros, String(sheet.spellDc)] : null,
+    sheet?.spellAttack != null ? [es.ataqueConjuros, formatMod(sheet.spellAttack)] : null,
+    sheet?.spellAbility ? [es.conjurosPor, sheet.spellAbility] : null,
   ].filter(Boolean) as [string, string][]
+
+  /**
+   * Skills and saves, only where the sheet quotes them. Nothing is derived:
+   * see `statedMods` in `sheet.ts` for why a guess is worse than a blank.
+   */
+  const stated: [string, StatedMod[]][] = [
+    [es.habilidades, sheet?.skills ?? []],
+    [es.tiradasSalvacion, sheet?.saves ?? []],
+  ].filter(([, mods]) => (mods as StatedMod[]).length > 0) as [string, StatedMod[]][]
   const givable = objects.filter((o) => !c.live.objects.includes(o.id) && !usesOf(o.id)?.spent)
 
   return (
@@ -185,6 +199,19 @@ function PcCard({
           </div>
         </div>
       )}
+
+      {stated.map(([label, mods]) => (
+        <div className="pc-field" key={label}>
+          <span>{label}</span>
+          <div className="rolls">
+            {mods.map((m) => (
+              <span className="roll" key={m.name}>
+                {m.name} <b>{formatMod(m.mod)}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {c.live.conditions.length > 0 && (
         <div className="chips" style={{ marginBottom: 4 }}>

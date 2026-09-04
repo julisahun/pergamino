@@ -39,6 +39,18 @@ export interface Abilities {
   cha: number
 }
 
+/**
+ * One modifier the sheet states by name: `Sigilo +7`.
+ *
+ * Named rather than keyed, because the sheet is what decides which of these
+ * are worth quoting — a rogue's two expertises and a cleric's none are the
+ * same shape here.
+ */
+export interface StatedMod {
+  name: string
+  mod: number
+}
+
 export interface SheetStats {
   hpMax: number | null
   /** From the sheet's own line — DEX plus whatever else the build adds. */
@@ -52,6 +64,16 @@ export interface SheetStats {
   ac: number | null
   passivePerception: number | null
   proficiency: number | null
+  /** The casting ability the `Conjuros:` line names. Null for non-casters. */
+  spellAbility: string | null
+  /** `CD 13` — the save DC for this character's spells. */
+  spellDc: number | null
+  /** `ataque +5` — the spell attack bonus. */
+  spellAttack: number | null
+  /** What the `Habilidades:` line quotes, in the order it quotes it. */
+  skills: StatedMod[]
+  /** What the `Salvaciones:` line quotes. */
+  saves: StatedMod[]
   /** The sheet's own first line: «Enano guerrero de nivel 1 (Guardia).» */
   summary: string | null
 }
@@ -86,10 +108,20 @@ const EMPTY: SheetStats = {
   ac: null,
   passivePerception: null,
   proficiency: null,
+  spellAbility: null,
+  spellDc: null,
+  spellAttack: null,
+  skills: [],
+  saves: [],
   summary: null,
 }
 
-export const emptySheet = (): SheetStats => ({ ...EMPTY, slots: {} })
+export const emptySheet = (): SheetStats => ({
+  ...EMPTY,
+  slots: {},
+  skills: [],
+  saves: [],
+})
 
 /** The prose the sheet declares authoritative, or '' when there is none. */
 function noteText(xml: string): string {
@@ -101,6 +133,39 @@ function noteText(xml: string): string {
 const numberAfter = (text: string, label: string): number | null => {
   const m = new RegExp(`\\b${label}\\s*([+-]?\\d+)`).exec(text)
   return m ? Number.parseInt(m[1]!, 10) : null
+}
+
+/**
+ * The rest of the line the sheet opens with `label:` — `Conjuros`,
+ * `Habilidades`, `Salvaciones`.
+ *
+ * Scoped to the one line on purpose. `ataque` reads as the spell attack only
+ * because it is asked for inside `Conjuros:`; loose in the note it would just
+ * as happily match a weapon's.
+ */
+const statedLine = (text: string, label: string): string | null => {
+  const m = new RegExp(`^[ \\t]*${label}\\s*:\\s*(.+)$`, 'im').exec(text)
+  return m ? m[1]!.trim() : null
+}
+
+/**
+ * `Sigilo +7 · Percepción +5` → the two of them, in that order.
+ *
+ * Nothing is computed here: a skill modifier is proficiency and expertise on
+ * top of an ability, and this app does not re-derive that — the sheet says the
+ * number or the app does not show one. Fight Club states skill proficiency as
+ * opaque numeric ids (`<proficiency>104</proficiency>`), so deriving it would
+ * mean guessing which skill each id is, and a guess here is a wrong number in
+ * front of the players.
+ */
+function statedMods(line: string | null): StatedMod[] {
+  if (!line) return []
+  const out: StatedMod[] = []
+  for (const part of line.split(/[·,]/)) {
+    const m = /^\s*(.+?)\s*([+-]\d+)\s*$/.exec(part)
+    if (m) out.push({ name: m[1]!.trim(), mod: Number.parseInt(m[2]!, 10) })
+  }
+  return out
 }
 
 /** The XML parsing on its own, so it can be tested without a vault. */
@@ -133,6 +198,12 @@ export function parseSheet(xml: string): SheetStats {
   const note = noteText(xml)
   const stated = numberAfter(note, 'Iniciativa')
 
+  // `Conjuros: Inteligencia · CD 13 · ataque +5 · 2 espacios de nivel 1`.
+  // The slots are read off `<slots>` above; what only this line has is the
+  // ability the spells key off and the two numbers the DM reads out loud.
+  const conjuros = statedLine(note, 'Conjuros')
+  const spellAbility = conjuros?.split(/[·,]/)[0]?.trim() || null
+
   return {
     hpMax: int(tag(xml, 'hpMax')) ?? numberAfter(note, 'PG'),
     // The sheet's line wins; DEX alone is the fallback when there is no line.
@@ -143,6 +214,11 @@ export function parseSheet(xml: string): SheetStats {
     ac: numberAfter(note, 'CA'),
     passivePerception: numberAfter(note, 'Percepción pasiva'),
     proficiency: numberAfter(note, 'Competencia'),
+    spellAbility,
+    spellDc: conjuros ? numberAfter(conjuros, 'CD') : null,
+    spellAttack: conjuros ? numberAfter(conjuros, 'ataque') : null,
+    skills: statedMods(statedLine(note, 'Habilidades')),
+    saves: statedMods(statedLine(note, 'Salvaciones')),
     summary: note.split('\n')[0]?.trim() || null,
   }
 }

@@ -9,9 +9,10 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { HpReveal, Ref, Scene, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs } from '../../test/fixture.ts'
+import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
 import { pnjIndex } from './portraits.ts'
 import { projectDm, projectTable, type ProjectContext } from './project.ts'
+import { reduce } from './reducer.ts'
 
 const vault = await openWorld()
 const { pnjs, scenes: sceneList } = await vault.loadCampaign()
@@ -22,7 +23,29 @@ function ctx(): ProjectContext {
   return { title: 'Marea Baja', scenes, pcs: pcsOf(run), pnjs: pnjIndex(pnjs) }
 }
 
-const last = (): SessionState => structuredClone(run.state)
+/**
+ * The party seated and three bandits on the board, built from the notes. A
+ * mesa this campaign has not played has no `session.json`, so there is no live
+ * state to borrow — and borrowing it was never safe anyway.
+ */
+const BASE: SessionState = reduce(
+  seated(run),
+  { type: 'npc/add', pnjId: 'bandido', count: 3 },
+  1_000,
+  {
+    pnj: (id) => pnjs.find((p) => p.id === id),
+    object: () => undefined,
+    pcMaxHp: (id) => pcsOf(run).get(id)?.hpMax ?? null,
+    pcName: (id) => pcsOf(run).get(id)?.name,
+    pcInitMod: (id) => pcsOf(run).get(id)?.initMod ?? null,
+    newId: (() => {
+      let n = 0
+      return () => `seed-${++n}`
+    })(),
+  },
+).state
+
+const last = (): SessionState => structuredClone(BASE)
 const npcRef = (state: SessionState, i = 0): Ref => `npc:${state.npcs[i]!.id}`
 
 /** Reveal exactly `on`, at `hp` mode, and hide every other NPC. */

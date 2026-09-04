@@ -12,6 +12,7 @@ import { ESTADO, PLANTILLA, openMemoryVault, V3_SESSION } from '../../test/memor
 import { SESSION_VERSION } from '../types.ts'
 import { SessionStore } from '../session/store.ts'
 import { applyDeviations, draftBitacora, proposeDeviations } from './writeback.ts'
+import { emptySheet } from './sheet.ts'
 
 const RUN = 'campaigns/marea-chica/runs/guils'
 
@@ -38,18 +39,16 @@ describe('loadRun', () => {
   it('reads the characters and the sheet beside each one', async () => {
     const { vault } = await openMemoryVault()
     const run = await vault.loadRun('guils')
-    // No `<note>` in this fixture's xml, so the stated line is absent and
+    // No `<note>` in this fixture's xml, so every stated field is absent and
     // initiative falls back to DEX 16 → +3. `sheet.test.ts` covers both paths.
+    // Spread over `emptySheet()` so a new stated field cannot break this.
     expect(run.sheets.get('pj-tal')).toEqual({
+      ...emptySheet(),
       hpMax: 9,
       initMod: 3,
       level: 1,
       slots: { '1': 2 },
       abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 10, cha: 10 },
-      ac: null,
-      passivePerception: null,
-      proficiency: null,
-      summary: null,
     })
   })
 

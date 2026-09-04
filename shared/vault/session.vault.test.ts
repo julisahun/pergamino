@@ -1,12 +1,14 @@
 /**
- * `migrate` against the real files the DM's app has written.
+ * `migrate` and `loadSession` against whatever the DM's vault actually holds.
  *
- * The campaign runs one mesa and its `session.json` is already at the current
- * version, so what the real vault can still prove is the promise that matters
- * on *every* load: migrating a file the app wrote invents nothing, rewrites
- * nothing and drops nothing. Assertions are therefore made against the raw
- * file rather than against literals — this is live gameplay state, and the DM
- * moves people around between one run of the suite and the next.
+ * `session.json` is not a fixture: the app writes it on the first change of a
+ * session and the DM deletes it between them, so a mesa marked
+ * `estado: sin empezar` has none — which is exactly the `fromVersion: null`
+ * case asserted below. When there *is* one, the promise worth checking against
+ * real gameplay state is the one that runs on every load: migrating a file the
+ * app wrote invents nothing, rewrites nothing and drops nothing. Those
+ * assertions are made against the raw file rather than against literals, and
+ * they skip themselves when there is no file to make them about.
  *
  * The step-by-step v3 → v5 conversion — bare reveal ids, the v4 fields
  * arriving with defaults — is asserted on `MemoryVault` in `shells.test.ts`,
@@ -57,15 +59,15 @@ describe('normaliseReveal', () => {
   })
 })
 
-describe(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
-  const state = migrate(liveRaw)
+describe.skipIf(!liveRaw)(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
+  const state = migrate(liveRaw ?? {})
 
   it('lands on the current version', () => {
     expect(state.version).toBe(SESSION_VERSION)
   })
 
   it('keeps every PC that had live state, with their numbers', () => {
-    const play = liveRaw.play as Record<string, { hp: number; temp: number }>
+    const play = liveRaw!.play as Record<string, { hp: number; temp: number }>
     expect(Object.keys(state.play).sort()).toEqual(Object.keys(play).sort())
     for (const [id, live] of Object.entries(play)) {
       expect(state.play[id]!.hp).toBe(live.hp)
@@ -78,12 +80,12 @@ describe(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
     // decides whether the paths are campaign- or run-relative. What `migrate`
     // promises is that it does not invent, rewrite or drop them — the store
     // fills in anything missing when it opens the run.
-    expect(state.playerFiles).toEqual(liveRaw.playerFiles)
+    expect(state.playerFiles).toEqual(liveRaw!.playerFiles)
   })
 
   it('keeps every NPC, its prep data and its live HP', () => {
     type RawNpc = { id: string; name: string; hp: number; hpMax: number; abilities: unknown[] }
-    const npcs = liveRaw.npcs as RawNpc[]
+    const npcs = liveRaw!.npcs as RawNpc[]
     expect(npcs.length).toBeGreaterThan(0)
     expect(state.npcs.map((n) => n.id)).toEqual(npcs.map((n) => n.id))
     for (const [i, npc] of state.npcs.entries()) {
@@ -95,7 +97,7 @@ describe(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
   })
 
   it('keeps the encounter as the DM left it', () => {
-    const enc = liveRaw.encounter as { on: boolean; round: number; members: string[] }
+    const enc = liveRaw!.encounter as { on: boolean; round: number; members: string[] }
     expect(state.encounter.on).toBe(enc.on)
     expect(state.encounter.round).toBe(enc.round)
     expect(state.encounter.members).toEqual(enc.members)
@@ -110,7 +112,7 @@ describe(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
   })
 
   it('keeps the board', () => {
-    const field = liveRaw.field as Raw
+    const field = liveRaw!.field as Raw
     expect(state.field.mode).toBe(field.mode)
     expect(state.field.sceneId).toBe(field.sceneId)
     expect(state.field.map).toEqual(field.map)
@@ -139,8 +141,18 @@ describe.skipIf(!backupRaw)(`migrating the backup (${RUNS_DIR}/${MESA})`, () => 
 describe('loadSession', () => {
   it('reports the on-disk version alongside the migrated state', async () => {
     const { state, fromVersion } = await loadSession(lastDir)
-    expect(fromVersion).toBe(liveRaw.version)
+    // Null when the mesa has not been played — the file is the app's to write.
+    expect(fromVersion).toBe(liveRaw ? liveRaw.version : null)
     expect(state.version).toBe(SESSION_VERSION)
+  })
+
+  it('gives a mesa that has not been played an empty session', async () => {
+    const { state } = await loadSession(lastDir)
+    if (liveRaw) return // played since; the describe above covers it
+    expect(state.npcs).toEqual([])
+    expect(state.play).toEqual({})
+    expect(state.encounter.on).toBe(false)
+    expect(state.field.sceneId).toBeNull()
   })
 
   it('returns an empty session where there is no session.json', async () => {
@@ -155,7 +167,7 @@ describe('loadSession', () => {
 
 describe('migration is idempotent', () => {
   it('re-migrating a migrated state changes nothing', () => {
-    const once = migrate(liveRaw)
+    const once = migrate(liveRaw ?? {})
     const twice = migrate(JSON.parse(JSON.stringify(once)))
     expect(twice).toEqual(once)
   })

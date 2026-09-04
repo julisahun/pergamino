@@ -78,8 +78,101 @@ describe('parseSheet', () => {
       ac: null,
       passivePerception: null,
       proficiency: null,
+      spellAbility: null,
+      spellDc: null,
+      spellAttack: null,
+      skills: [],
+      saves: [],
       summary: null,
     })
+  })
+
+  it('gives a non-caster no casting line at all', () => {
+    expect(sheet.spellAbility).toBeNull()
+    expect(sheet.spellDc).toBeNull()
+    expect(sheet.spellAttack).toBeNull()
+  })
+
+  it('quotes no skill or save the sheet does not state', () => {
+    // Tolmo's sheet has no `Habilidades:` line, and this app will not derive
+    // one: Fight Club states skill proficiency as opaque numeric ids.
+    expect(sheet.skills).toEqual([])
+    expect(sheet.saves).toEqual([])
+  })
+})
+
+/** A caster, with the two lines a rogue's sheet does not carry. */
+const ABRAXAS = `<?xml version='1.0' encoding='UTF-8'?>
+<pc version="5">
+ <character>
+  <name>Abraxas</name>
+  <class><name>Mago</name><level>1</level></class>
+  <slots>3,2,0,0,0,0,0,0,0,0,</slots>
+  <note>
+   <name>Marea Baja — mesa Last</name>
+   <text>Elfo mago de nivel 1 (Erudito). Tamaño Mediano.
+
+CA 12 · PG 9 · Iniciativa +2 · Percepción pasiva 12 · Competencia +2
+Conjuros: Inteligencia · CD 13 · ataque +5 · 2 espacios de nivel 1
+Habilidades: Arcanos +5 · Historia +5
+Salvaciones: INT +5 · SAB +2
+
+Si algún número de la app no coincide con los de arriba, mandan los de arriba.</text>
+  </note>
+  <abilities>8,14,16,17,10,8,</abilities>
+  <hpMax>9</hpMax>
+ </character>
+</pc>`
+
+describe('the casting line', () => {
+  const sheet = parseSheet(ABRAXAS)
+
+  it('reads the ability, the DC and the attack bonus', () => {
+    expect(sheet.spellAbility).toBe('Inteligencia')
+    expect(sheet.spellDc).toBe(13)
+    expect(sheet.spellAttack).toBe(5)
+  })
+
+  it('still takes the slots from <slots>, not from the prose', () => {
+    // The line says "2 espacios de nivel 1" and so does the tag; the tag is
+    // the one that can express levels 2-9.
+    expect(sheet.slots).toEqual({ '1': 2 })
+  })
+
+  it('does not mistake a weapon attack for the spell attack', () => {
+    // `ataque` is asked for inside the `Conjuros:` line and nowhere else.
+    const withWeapon = parseSheet(ABRAXAS.replace('Idiomas', 'Daga: ataque +7 · Idiomas'))
+    expect(withWeapon.spellAttack).toBe(5)
+  })
+})
+
+describe('stated skills and saves', () => {
+  const sheet = parseSheet(ABRAXAS)
+
+  it('keeps them in the order the sheet quotes them', () => {
+    expect(sheet.skills).toEqual([
+      { name: 'Arcanos', mod: 5 },
+      { name: 'Historia', mod: 5 },
+    ])
+    expect(sheet.saves).toEqual([
+      { name: 'INT', mod: 5 },
+      { name: 'SAB', mod: 2 },
+    ])
+  })
+
+  it('accepts a comma-separated line as well as a middot one', () => {
+    const commas = parseSheet(
+      ABRAXAS.replace('Habilidades: Arcanos +5 · Historia +5', 'Habilidades: Sigilo +7, Percepción +5'),
+    )
+    expect(commas.skills).toEqual([
+      { name: 'Sigilo', mod: 7 },
+      { name: 'Percepción', mod: 5 },
+    ])
+  })
+
+  it('reads a negative modifier', () => {
+    const bad = parseSheet(ABRAXAS.replace('Arcanos +5', 'Atletismo -1'))
+    expect(bad.skills[0]).toEqual({ name: 'Atletismo', mod: -1 })
   })
 })
 

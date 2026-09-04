@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { openWorld } from '../../test/fixture.ts'
 import { RUNS_DIR } from './binding.ts'
 import { dirAt } from './source.ts'
-import { abilityMod, readSheet } from './sheet.ts'
+import { abilityMod, emptySheet, readSheet } from './sheet.ts'
 
 const vault = await openWorld()
 
@@ -34,6 +34,12 @@ describe('readSheet', () => {
       ac: 12,
       passivePerception: 12,
       proficiency: 2,
+      spellAbility: 'Inteligencia',
+      spellDc: 13,
+      spellAttack: 5,
+      // No sheet states these yet — see the casting-line test below.
+      skills: [],
+      saves: [],
       summary: expect.stringContaining('nivel 1'),
     })
     // croma.md: "PG 11 · Iniciativa −1" — 11 because dureza enana adds a
@@ -77,17 +83,43 @@ describe('readSheet', () => {
     expect((await readSheet(last, pj('abraxas'))).slots).toEqual({ '1': 2 })
   })
 
+  it('reads the casting line of everyone who casts', async () => {
+    // Three of the four cast, off three different abilities.
+    for (const [name, ability, dc, attack] of [
+      ['abraxas', 'Inteligencia', 13, 5],
+      ['aluci', 'Carisma', 12, 4],
+      ['croma', 'Sabiduría', 13, 5],
+    ] as const) {
+      const sheet = await readSheet(last, pj(name))
+      expect(sheet.spellAbility, name).toBe(ability)
+      expect(sheet.spellDc, name).toBe(dc)
+      expect(sheet.spellAttack, name).toBe(attack)
+    }
+  })
+
+  it('gives the rogue no casting line', async () => {
+    const toribio = await readSheet(last, pj('toribio'))
+    expect(toribio.spellAbility).toBeNull()
+    expect(toribio.spellDc).toBeNull()
+    expect(toribio.spellAttack).toBeNull()
+    expect(toribio.slots).toEqual({})
+  })
+
+  it('quotes no skill or save until a sheet states one', async () => {
+    // `pregenerados/fichas.py` does not emit `Habilidades:`/`Salvaciones:`
+    // yet. When it does, these light up with no app change — and until then
+    // the app shows nothing rather than deriving a number, because Fight Club
+    // states skill proficiency as opaque ids only.
+    for (const name of ['abraxas', 'aluci', 'croma', 'toribio']) {
+      const sheet = await readSheet(last, pj(name))
+      expect(sheet.skills, name).toEqual([])
+      expect(sheet.saves, name).toEqual([])
+    }
+  })
+
   it('returns nulls when no XML sits beside the note', async () => {
-    expect(await readSheet(last, pj('no-existe'))).toEqual({
-      hpMax: null,
-      initMod: null,
-      level: null,
-      slots: {},
-      abilities: null,
-      ac: null,
-      passivePerception: null,
-      proficiency: null,
-      summary: null,
-    })
+    // Compared against `emptySheet()` rather than a restated literal, which
+    // is one more thing that cannot fall behind the type.
+    expect(await readSheet(last, pj('no-existe'))).toEqual(emptySheet())
   })
 })

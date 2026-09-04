@@ -161,6 +161,11 @@ export const es = {
   competencia: 'Competencia',
   percepcionPasiva: 'Percepción pasiva',
   porObjetos: 'por objetos',
+  cdConjuros: 'CD conjuros',
+  ataqueConjuros: 'Ataque conjuros',
+  conjurosPor: 'Conjuros por',
+  habilidades: 'Habilidades',
+  tiradasSalvacion: 'Salvaciones',
 
   oro: 'Oro',
   equipo: 'Equipo',
