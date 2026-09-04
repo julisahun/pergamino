@@ -30,6 +30,7 @@ import {
   type Deviation,
 } from '../../../shared/vault/writeback.ts'
 import { AssetCache } from '../assets/cache.ts'
+import { noteFromUrl } from './noteUrl.ts'
 import { VaultAssetSource } from '../assets/sources.ts'
 import { BroadcastChannelTransport } from '../transport/broadcast.ts'
 import type { TableTransport } from '../transport/index.ts'
@@ -153,7 +154,8 @@ export const useDm = create<DmStore>((set, get) => ({
   vaultName: '',
   campaign: '',
   campaigns: [],
-  tab: 'mesa',
+  // A URL that names a note but lands on Mesa is a URL that did nothing.
+  tab: noteFromUrl() ? 'notas' : 'mesa',
   mesa: '',
   runs: [],
   scenes: [],

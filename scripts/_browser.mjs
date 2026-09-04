@@ -4,9 +4,29 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+/**
+ * Chromium's binary: playwright's cached download if there is one, otherwise a
+ * browser that is actually installed.
+ *
+ * The fallback is here because the cache is not: `playwright-core` ships no
+ * browser, so a machine that has never run `playwright install` had every
+ * driver fail on `ENOENT ms-playwright` — while Chrome sat in /Applications.
+ * The File System Access API needs Chromium anyway, so anything that can open
+ * this app can drive it. `CHROME=/path/to/binary` overrides both.
+ */
 export function findChromium() {
+  if (process.env.CHROME) {
+    if (!fs.existsSync(process.env.CHROME)) {
+      throw new Error(`CHROME is set but not there: ${process.env.CHROME}`)
+    }
+    return process.env.CHROME
+  }
+
   const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright')
-  for (const dir of fs.readdirSync(cache).filter((d) => d.startsWith('chromium-'))) {
+  const cached = fs.existsSync(cache)
+    ? fs.readdirSync(cache).filter((d) => d.startsWith('chromium-'))
+    : []
+  for (const dir of cached) {
     const mac = path.join(cache, dir, 'chrome-mac-arm64')
     if (!fs.existsSync(mac)) continue
     for (const app of fs.readdirSync(mac).filter((a) => a.endsWith('.app'))) {
@@ -14,7 +34,20 @@ export function findChromium() {
       if (fs.existsSync(bin)) return bin
     }
   }
-  throw new Error('No cached chromium found')
+
+  for (const bin of [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+  ]) {
+    if (fs.existsSync(bin)) return bin
+  }
+
+  throw new Error(
+    'No chromium to drive: install one, or set CHROME=/path/to/binary. ' +
+      '`npx playwright install chromium` also works.',
+  )
 }
 
 export const BASE = process.env.BASE ?? 'http://127.0.0.1:5173'

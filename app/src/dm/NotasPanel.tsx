@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { es } from '../strings/es.ts'
 import { useDm, type NoteDoc, type NoteRef } from '../state/dmStore.ts'
+import { noteFromUrl, rememberNoteInUrl } from '../state/noteUrl.ts'
 
 interface Hit {
   path: string
@@ -36,6 +37,7 @@ export function NotasPanel() {
     const doc = readNote(path)
     if (!doc) return
     setCurrent(doc)
+    rememberNoteInUrl(doc.path)
     bodyRef.current?.parentElement?.scrollTo({ top: 0 })
   }
 
@@ -46,9 +48,23 @@ export function NotasPanel() {
     clearPendingNote()
   }, [pendingNote, clearPendingNote])
 
-  // Open the campaign index first, so the panel is never blank.
+  /**
+   * What to show when nothing has been picked yet: the note the URL names, or
+   * the campaign index, so the panel is never blank.
+   *
+   * `pendingNote` is in the guard because both effects run in the same commit
+   * on first mount, and `current` here is still the render's stale `null` — so
+   * without it this opened the README straight over the note another tab had
+   * just asked for, which is what made «Ver nota» look like it only switched
+   * tabs.
+   */
   useEffect(() => {
-    if (current || index.notes.length === 0) return
+    if (current || pendingNote || index.notes.length === 0) return
+    const wanted = noteFromUrl()
+    if (wanted && readNote(wanted)) {
+      open(wanted)
+      return
+    }
     const readme = index.notes.find((n) => n.path.endsWith('story/README.md'))
     open((readme ?? index.notes[0]!).path)
     // eslint-disable-next-line react-hooks/exhaustive-deps

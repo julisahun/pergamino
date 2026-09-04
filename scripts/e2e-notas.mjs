@@ -54,4 +54,52 @@ if (await tag.count()) {
   await shot('notas-4-tag')
 }
 
+/*
+ * The note being read is in the URL, and «Ver nota» from another tab lands on
+ * it. Both used to be broken in the same place: the panel's «open the index
+ * first» effect ran in the same commit as the one that honours the note
+ * another tab asked for, read a stale `current`, and opened story/README.md
+ * straight over it — so «Ver nota» looked like it only switched tabs.
+ */
+const notaParam = () => new URL(dm.url()).searchParams.get('nota')
+
+await dm.getByRole('button', { name: 'Party', exact: true }).click()
+await dm.waitForTimeout(300)
+await dm.locator('.pc-card .mini').first().click()
+await dm.waitForTimeout(300)
+await dm.locator('.sheet').getByRole('button', { name: 'Ver nota' }).click()
+await dm.waitForTimeout(500)
+
+const opened = await dm.locator('.reader-path').innerText()
+console.log(`  «Ver nota» opened: ${opened}`)
+if (!opened.includes('pip-nosewick')) {
+  console.log("  FAIL — «Ver nota» did not open the PC's own note")
+  process.exitCode = 1
+}
+if (notaParam() !== opened) {
+  console.log(`  FAIL — ?nota= says ${notaParam()}, reader says ${opened}`)
+  process.exitCode = 1
+}
+await shot('notas-5-ver-nota')
+
+// A reload comes back to the same note, on this tab rather than on Mesa.
+await dm.reload({ waitUntil: 'networkidle' })
+await dm.waitForSelector('.reader-path')
+const afterReload = await dm.locator('.reader-path').innerText()
+console.log(`  after reload: ${afterReload}`)
+if (afterReload !== opened) {
+  console.log('  FAIL — the URL did not bring the note back')
+  process.exitCode = 1
+}
+
+// A path nothing answers to must not leave the panel blank.
+await dm.goto(`${new URL(dm.url()).origin}/index.html?fixture=example&nota=no/such/note.md`)
+await dm.waitForSelector('.reader-path')
+const fallback = await dm.locator('.reader-path').innerText()
+console.log(`  bogus ?nota falls back to: ${fallback}`)
+if (!fallback.endsWith('README.md')) {
+  console.log('  FAIL — a dead ?nota should fall back to the index')
+  process.exitCode = 1
+}
+
 await finish()
