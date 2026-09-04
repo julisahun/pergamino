@@ -13,7 +13,7 @@ import * as path from '../pathish.ts'
 import type { Character, GameObject, Pnj, Portrait, Scene } from '../types.ts'
 import { loadObjects, loadPnj, OBJECTS_DIR, PNJ_DIR } from './pnj.ts'
 import { parseNote } from './notes.ts'
-import { jsonNames, markdownNames, readJson, type VaultDir } from './source.ts'
+import { fileAt, jsonNames, markdownNames, readJson, type VaultDir } from './source.ts'
 
 export { isCombatant, loadObjects, loadPnj, OBJECTS_DIR, PNJ_DIR } from './pnj.ts'
 
@@ -70,13 +70,52 @@ async function readJsonDir<T>(
 }
 
 /**
- * A run's characters, read from `runs/<mesa>/players/*.md`.
+ * The notes that name a character: one folder per PJ, `players/<pj>/<pj>.md`.
+ *
+ * A PJ is a folder, so the note called like the folder is the character and
+ * nothing else in there is. The rest — `toribio-trasfondo.md`, the guía, the
+ * creator json, the pdfs — is *that character's* material, not another member
+ * of the party. Without that rule the trasfondo walks onto the board as a
+ * second PJ.
+ *
+ * A loose `players/x.md` is therefore not a character. Anything in the folder
+ * that is not the note is reachable as a note in its own right through
+ * `NotesIndex`, which is where a trasfondo belongs.
+ */
+async function characterNotes(players: VaultDir): Promise<string[]> {
+  const names: string[] = []
+  for (const sub of (await players.list()).dirs) {
+    if (sub.startsWith('.')) continue
+    // One bad folder costs one character, not the whole party. Descending is
+    // a read per PJ that the flat layout never made, and in the browser a read
+    // throws where node's returns nothing: `FsaDir.list()` surfaces the
+    // `NotAllowedError` of a lapsed grant and the `NotFoundError` of a folder
+    // that has been moved, and uncaught here that would fail `loadRun` — an
+    // error screen with no party rather than a party missing one member.
+    try {
+      const dir = await players.dir(sub)
+      if (!dir) continue
+      // Case-insensitively, because the folder is named by hand in Obsidian.
+      const own = (await markdownNames(dir)).find(
+        (n) => n.slice(0, -3).toLowerCase() === sub.toLowerCase(),
+      )
+      if (own) names.push(`${sub}/${own}`)
+    } catch (err) {
+      console.warn(`[vault] skipping ${PLAYERS_DIR}/${sub}/: ${(err as Error).message}`)
+    }
+  }
+  return names.sort()
+}
+
+/**
+ * A run's characters, read from `runs/<mesa>/players/<pj>/<pj>.md`.
  *
  * The note is the identity — a name, a portrait, and the prose about who this
  * person is. Everything with a number in it comes from the `-fc5.xml` beside
  * it, which `sheet.ts` reads; nothing here re-derives anything.
  *
- * `file` is the entry name inside the folder, which is what finds the sheet.
+ * `file` is the path relative to `players/`, so `toribio/toribio.md`, which is
+ * what finds the sheet.
  */
 export async function loadCharacters(
   runDir: VaultDir | null,
@@ -85,9 +124,9 @@ export async function loadCharacters(
   const players = runDir ? await runDir.dir(PLAYERS_DIR) : null
   if (!players) return []
   const out: { character: Character; file: string }[] = []
-  for (const name of await markdownNames(players)) {
+  for (const name of await characterNotes(players)) {
     try {
-      const file = await players.file(name)
+      const file = await fileAt(players, name)
       if (!file) continue
       const note = parseNote(path.join(prefix, PLAYERS_DIR, name), await file.text())
       const fm = note.frontmatter

@@ -1,5 +1,19 @@
+/**
+ * `migrate` against the real files the DM's app has written.
+ *
+ * The campaign runs one mesa and its `session.json` is already at the current
+ * version, so what the real vault can still prove is the promise that matters
+ * on *every* load: migrating a file the app wrote invents nothing, rewrites
+ * nothing and drops nothing. Assertions are therefore made against the raw
+ * file rather than against literals — this is live gameplay state, and the DM
+ * moves people around between one run of the suite and the next.
+ *
+ * The step-by-step v3 → v5 conversion — bare reveal ids, the v4 fields
+ * arriving with defaults — is asserted on `MemoryVault` in `shells.test.ts`,
+ * which runs everywhere and cannot rot.
+ */
 import { describe, expect, it } from 'vitest'
-import { openWorld } from '../../test/fixture.ts'
+import { MESA, openWorld } from '../../test/fixture.ts'
 import { RUNS_DIR } from './binding.ts'
 import { loadSession, migrate, normaliseReveal, SESSION_FILE } from './session.ts'
 import { dirAt, readJson } from './source.ts'
@@ -12,12 +26,14 @@ const runDir = async (mesa: string) => {
   if (!dir) throw new Error(`No run folder for ${mesa}`)
   return dir
 }
-const guilsDir = await runDir('guils')
-const lastDir = await runDir('last')
+const lastDir = await runDir(MESA)
 
 // Read up front: a `describe` callback is not the place for I/O.
-const guilsRaw = (await readJson(guilsDir, SESSION_FILE)) as Record<string, unknown>
-const templateRaw = (await readJson(vault.campaignDir, SESSION_FILE)) as Record<string, unknown>
+type Raw = Record<string, unknown>
+const liveRaw = (await readJson(lastDir, SESSION_FILE)) as Raw
+// The `.bak` is a byproduct of a migration the app did at the table, so it is
+// real older-version data — but it is not guaranteed to be there.
+const backupRaw = (await readJson(lastDir, `${SESSION_FILE}.bak`)) as Raw | null
 
 describe('normaliseReveal', () => {
   it('prefixes bare npc ids with npc:', () => {
@@ -41,102 +57,105 @@ describe('normaliseReveal', () => {
   })
 })
 
-describe('migrating the real v3 file (runs/guils)', () => {
-  const raw = guilsRaw
-  const state = migrate(raw)
+describe(`migrating the live file (${RUNS_DIR}/${MESA})`, () => {
+  const state = migrate(liveRaw)
 
-  it('came from v3 and lands on v4', () => {
-    expect(raw.version).toBe(3)
+  it('lands on the current version', () => {
     expect(state.version).toBe(SESSION_VERSION)
   })
 
-  it('keeps all three PCs and their live state', () => {
-    expect(Object.keys(state.play).sort()).toEqual(['pj-amparo', 'pj-muro', 'pj-sombra'])
+  it('keeps every PC that had live state, with their numbers', () => {
+    const play = liveRaw.play as Record<string, { hp: number; temp: number }>
+    expect(Object.keys(state.play).sort()).toEqual(Object.keys(play).sort())
+    for (const [id, live] of Object.entries(play)) {
+      expect(state.play[id]!.hp).toBe(live.hp)
+      expect(state.play[id]!.temp).toBe(live.temp)
+    }
   })
 
   it('carries playerFiles through untouched', () => {
-    // Deliberately not asserting the *value*: this is a live gameplay file,
-    // and whichever app last wrote it decides whether the paths are
-    // campaign-relative (`players/x.json`) or run-relative
-    // (`runs/guils/players/x.json`). What `migrate` promises is that it does
-    // not invent, rewrite or drop them — the store fills in anything missing
-    // when it opens the run.
-    expect(state.playerFiles).toEqual(raw.playerFiles)
+    // Deliberately not asserting the *value*: whichever app last wrote this
+    // decides whether the paths are campaign- or run-relative. What `migrate`
+    // promises is that it does not invent, rewrite or drop them — the store
+    // fills in anything missing when it opens the run.
+    expect(state.playerFiles).toEqual(liveRaw.playerFiles)
   })
 
-  it('keeps the three bandits with prep data and live HP intact', () => {
-    expect(state.npcs).toHaveLength(3)
-    const [first] = state.npcs
-    expect(first!.name).toBe('Bandido')
-    expect(first!.ac).toBe(12)
-    expect(first!.hpMax).toBe(11)
-    expect(first!.hp).toBe(11)
-    expect(first!.abilities[0]!.name).toBe('Cimitarra')
-    expect(first!.objects).toEqual(['obj-anillo-corriente-ahogada'])
+  it('keeps every NPC, its prep data and its live HP', () => {
+    type RawNpc = { id: string; name: string; hp: number; hpMax: number; abilities: unknown[] }
+    const npcs = liveRaw.npcs as RawNpc[]
+    expect(npcs.length).toBeGreaterThan(0)
+    expect(state.npcs.map((n) => n.id)).toEqual(npcs.map((n) => n.id))
+    for (const [i, npc] of state.npcs.entries()) {
+      expect(npc.name).toBe(npcs[i]!.name)
+      expect(npc.hp).toBe(npcs[i]!.hp)
+      expect(npc.hpMax).toBe(npcs[i]!.hpMax)
+      expect(npc.abilities).toEqual(npcs[i]!.abilities)
+    }
   })
 
-  it('keeps the in-flight encounter', () => {
-    expect(state.encounter.on).toBe(true)
-    expect(state.encounter.round).toBe(1)
-    expect(state.encounter.members).toHaveLength(6)
-    expect(state.encounter.members).toContain('pc:pj-amparo')
+  it('keeps the encounter as the DM left it', () => {
+    const enc = liveRaw.encounter as { on: boolean; round: number; members: string[] }
+    expect(state.encounter.on).toBe(enc.on)
+    expect(state.encounter.round).toBe(enc.round)
+    expect(state.encounter.members).toEqual(enc.members)
   })
 
-  it('normalises reveal keys to match token keys', () => {
-    const revealKeys = Object.keys(state.field.reveal).sort()
-    const npcTokenKeys = Object.keys(state.field.tokens)
-      .filter((k) => k.startsWith('npc:'))
-      .sort()
-    expect(revealKeys).toEqual(npcTokenKeys)
-    // The DM had hidden the third bandit; that must survive the migration.
-    expect(Object.values(state.field.reveal).filter((r) => !r.on)).toHaveLength(1)
+  it('keys reveal the way tokens are keyed', () => {
+    // The v3 → v4 normalisation is what made this true; on a current file it
+    // is the invariant that has to hold, or the TV hides the wrong person.
+    for (const key of Object.keys(state.field.reveal)) {
+      expect(key).toMatch(/^(?:pc|npc):/)
+    }
   })
 
-  it('keeps the board and adds the v4 fields', () => {
-    expect(state.field.mode).toBe('tablero')
-    expect(state.field.sceneId).toBe('camino-del-rio')
-    expect(state.field.map).toEqual({ src: 'assets/path_arena.jpeg' })
-    expect(state.field.cols).toBe(16)
-    expect(state.field.rows).toBe(9)
-    expect(Object.keys(state.field.tokens)).toHaveLength(6)
-    expect(state.field.handout).toBeNull()
-    expect(state.log).toEqual([])
+  it('keeps the board', () => {
+    const field = liveRaw.field as Raw
+    expect(state.field.mode).toBe(field.mode)
+    expect(state.field.sceneId).toBe(field.sceneId)
+    expect(state.field.map).toEqual(field.map)
+    expect(state.field.cols).toBe(field.cols)
+    expect(state.field.rows).toBe(field.rows)
+    expect(Object.keys(state.field.tokens)).toEqual(Object.keys(field.tokens as object))
   })
 })
 
-describe('migrating the v2 template (campaign root)', () => {
-  const raw = templateRaw
-  const state = migrate(raw)
+describe.skipIf(!backupRaw)(`migrating the backup (${RUNS_DIR}/${MESA})`, () => {
+  it('came from an older version and lands on the current one', () => {
+    expect(backupRaw!.version).toBeLessThan(SESSION_VERSION)
+    expect(migrate(backupRaw!).version).toBe(SESSION_VERSION)
+  })
 
-  it('came from v2 and lands on v4 with safe defaults', () => {
-    expect(raw.version).toBe(2)
-    expect(state.version).toBe(SESSION_VERSION)
-    expect(state.npcs).toEqual([])
-    expect(state.encounter.on).toBe(false)
-    expect(state.field.mode).toBe('escena')
-    expect(state.field.hud).toBe(true)
-    expect(state.field.cols).toBe(24)
-    expect(state.field.rows).toBe(14)
+  it('keeps what the backup was holding and defaults the rest', () => {
+    const state = migrate(backupRaw!)
+    const field = backupRaw!.field as Raw
+    expect(state.field.sceneId).toBe(field.sceneId)
+    expect(state.field.map).toEqual(field.map)
+    expect(state.log).toEqual(backupRaw!.log ?? [])
+    expect(state.field.handout).toBeNull()
   })
 })
 
 describe('loadSession', () => {
   it('reports the on-disk version alongside the migrated state', async () => {
-    const { state, fromVersion } = await loadSession(guilsDir)
-    expect(fromVersion).toBe(3)
+    const { state, fromVersion } = await loadSession(lastDir)
+    expect(fromVersion).toBe(liveRaw.version)
     expect(state.version).toBe(SESSION_VERSION)
   })
 
-  it('returns an empty session for a run with no session.json', async () => {
-    const { state, fromVersion } = await loadSession(lastDir)
+  it('returns an empty session where there is no session.json', async () => {
+    // The campaign root holds prep, not a session — a run is the only place
+    // live state lives.
+    const { state, fromVersion } = await loadSession(vault.campaignDir)
     expect(fromVersion).toBeNull()
     expect(state.npcs).toEqual([])
+    expect(state.play).toEqual({})
   })
 })
 
 describe('migration is idempotent', () => {
-  it('re-migrating a v4 state changes nothing', () => {
-    const once = migrate(guilsRaw)
+  it('re-migrating a migrated state changes nothing', () => {
+    const once = migrate(liveRaw)
     const twice = migrate(JSON.parse(JSON.stringify(once)))
     expect(twice).toEqual(once)
   })

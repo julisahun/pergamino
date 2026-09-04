@@ -27,7 +27,7 @@
  * The scores in `<abilities>` are post-boost and stated, so their modifiers
  * are arithmetic on a given number rather than a rule being re-derived.
  */
-import type { VaultDir } from './source.ts'
+import { fileAt, type VaultDir } from './source.ts'
 
 /** The six scores, in the order `<abilities>` writes them. */
 export interface Abilities {
@@ -147,9 +147,14 @@ export function parseSheet(xml: string): SheetStats {
   }
 }
 
-/** Read the sheet beside `noteName` in a `players/` folder. */
+/**
+ * Read the sheet beside `noteName` in a `players/` folder.
+ *
+ * `noteName` is what the loader enumerated, so it is `toribio/toribio.md` for
+ * a character with a folder — and the xml is beside the *note*, inside it.
+ */
 export async function readSheet(players: VaultDir, noteName: string): Promise<SheetStats> {
-  const file = await players.file(sheetNameFor(noteName))
+  const file = await fileAt(players, sheetNameFor(noteName))
   if (!file) return emptySheet()
   try {
     return parseSheet(await file.text())

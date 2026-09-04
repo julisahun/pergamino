@@ -120,10 +120,12 @@ describe('search', () => {
   })
 
   it('finds a phrase in the body and quotes the line', () => {
-    // From pnj/vann.md.
-    const hits = search(index, 'el mar los ha estado guardando')
+    // From pnj/vann.md, where Vann names the attackers as villagers. The
+    // excerpt is the line the phrase sits on, so the phrase has to be one the
+    // note does not wrap across two.
+    const hits = search(index, 'salieron del mar')
     expect(hits.length).toBeGreaterThan(0)
-    expect(hits[0]!.excerpt.toLowerCase()).toContain('guardando')
+    expect(hits[0]!.excerpt.toLowerCase()).toContain('salieron del mar')
   })
 
   it('ignores a query that is too short', () => {

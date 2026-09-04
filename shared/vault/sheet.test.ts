@@ -97,4 +97,11 @@ describe('sheetNameFor', () => {
   it('pairs the note with the xml beside it', () => {
     expect(sheetNameFor('el-cantor.md')).toBe('el-cantor-fc5.xml')
   })
+
+  it("keeps the PJ's folder, so the xml stays inside it", () => {
+    // A PJ is a folder, and the loader enumerates `<pj>/<pj>.md`. Only the
+    // last segment is the note name; rewriting the whole path would look for
+    // the sheet one level up, where nothing is.
+    expect(sheetNameFor('toribio/toribio.md')).toBe('toribio/toribio-fc5.xml')
+  })
 })

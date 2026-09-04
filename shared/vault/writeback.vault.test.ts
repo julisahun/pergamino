@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Scene, SessionState } from '../types.ts'
-import { openWorld } from '../../test/fixture.ts'
+import { MESA, openWorld, pcsOf, playingPcs } from '../../test/fixture.ts'
 import {
   applyDeviations,
   bitacoraFilename,
@@ -13,18 +13,21 @@ const vault = await openWorld()
 const campaign = await vault.loadCampaign()
 const scenes = new Map<string, Scene>(campaign.scenes.map((s) => [s.id, s]))
 const { objects, pnjs } = campaign
-const pcNames = new Map([
-  ['pj-amparo', 'El amparo'],
-  ['pj-muro', 'El muro'],
-  ['pj-sombra', 'La sombra'],
-])
 
-const guilsRun = await vault.loadRun('guils')
-const guils = (): SessionState => structuredClone(guilsRun.state)
+const run = await vault.loadRun(MESA)
+const last = (): SessionState => structuredClone(run.state)
 
-const sessionNumber = await vault.nextSessionNumber('guils')
-const template = await vault.readTemplate('guils')
-const estado = await vault.readEstado('guils')
+// The party as the run itself names it, not as a literal that can rot.
+const pcs = pcsOf(run)
+const pcNames = new Map([...pcs].map(([id, info]) => [id, info.name]))
+/** A PC with live state, so it is someone who can be handed an object. */
+const somePc = playingPcs(run)[0]!
+const someName = pcNames.get(somePc)!
+const players = playingPcs(run).map((id) => pcNames.get(id)!)
+
+const sessionNumber = await vault.nextSessionNumber(MESA)
+const template = await vault.readTemplate(MESA)
+const estado = await vault.readEstado(MESA)
 
 describe('session numbering', () => {
   it('starts at 1 when only the template is there', () => {
@@ -38,18 +41,18 @@ describe('session numbering', () => {
 })
 
 describe('draftBitacora', () => {
-  const state = guils()
+  const state = last()
   state.log = [
     { t: 1, kind: 'scene', text: 'camino-del-rio' },
     { t: 2, kind: 'encounter', text: 'Combate iniciado (6)' },
     { t: 3, kind: 'death', text: 'Bandido cae a 0 PG' },
-    { t: 4, kind: 'loot', text: 'La sombra saquea a Bandido: Anillo de la Corriente Ahogada' },
+    { t: 4, kind: 'loot', text: `${someName} saquea a Bandido: Anillo de la Corriente Ahogada` },
     { t: 5, kind: 'scene', text: 'faro' },
   ]
   const draft = draftBitacora(state, {
     date: '2026-08-27',
     scenes,
-    players: ['El muro', 'La sombra', 'El amparo'],
+    players,
     sessionNumber,
     template,
   })
@@ -61,14 +64,16 @@ describe('draftBitacora', () => {
 
   it('fills the front matter the template declares', () => {
     expect(draft.content).toMatch(/^---\nsesion: 1\nfecha: 2026-08-27\n/)
-    expect(draft.content).toContain('jugadores: ["El muro", "La sombra", "El amparo"]')
+    expect(draft.content).toContain(
+      `jugadores: [${players.map((p) => JSON.stringify(p)).join(', ')}]`,
+    )
   })
 
   it('leaves a blank line between the front matter and the heading', () => {
     expect(draft.content).toContain('---\n\n# Sesión 1 — título')
   })
 
-  it('puts the facts after each section\'s own guidance, not before it', () => {
+  it("puts the facts after each section's own guidance, not before it", () => {
     const happened = draft.content.slice(
       draft.content.indexOf('## Qué pasó'),
       draft.content.indexOf('## Decisiones'),
@@ -78,8 +83,13 @@ describe('draftBitacora', () => {
     )
   })
 
-  it('keeps the run\'s own section headings', () => {
-    for (const heading of ['## Qué pasó', '## Decisiones', '## Cambios de mundo', '## Pendiente para la próxima']) {
+  it("keeps the run's own section headings", () => {
+    for (const heading of [
+      '## Qué pasó',
+      '## Decisiones',
+      '## Cambios de mundo',
+      '## Pendiente para la próxima',
+    ]) {
       expect(draft.content).toContain(heading)
     }
   })
@@ -107,45 +117,62 @@ describe('draftBitacora', () => {
 
 describe('proposeDeviations', () => {
   it('proposes nothing from an untouched session', () => {
-    const state = guils()
+    const state = last()
     state.log = []
     const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, pnjs, pcNames })
-    // The bandit still carries the ring, and it is on an NPC, so nothing yet.
+    // Nobody has died and nothing has left an NPC's hands, so there is
+    // nothing to say about the people yet.
     expect(out.filter((d) => d.section === 'Gente')).toEqual([])
   })
 
   it('reports a named NPC that died', () => {
-    const state = guils()
+    const state = last()
     state.npcs = [{ ...state.npcs[0]!, name: 'Ossian', hp: 0 }]
     const out = proposeDeviations(state, { sessionNumber: 2, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({ section: 'Gente', text: '[[Ossian]] — **muerto**, sesión 2.' })
   })
 
   it('reports the scenes that went on screen', () => {
-    const state = guils()
+    const state = last()
     state.log = [{ t: 1, kind: 'scene', text: 'faro' }]
     const out = proposeDeviations(state, { sessionNumber: 1, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({ section: 'Lugares', text: '[[faro]] — visitado, sesión 1.' })
   })
 
-  it('reports where an object ended up, by the PC\'s name', () => {
-    const state = guils()
-    state.play['pj-sombra']!.objects = ['obj-anillo-corriente-ahogada']
+  it("reports where an object ended up, by the PC's name", () => {
+    const state = last()
+    state.play[somePc]!.objects = ['obj-anillo-corriente-ahogada']
     const out = proposeDeviations(state, { sessionNumber: 3, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({
       section: 'Objetos',
-      text: '[[anillo-corriente-ahogada]] — lo lleva La sombra, sesión 3.',
+      text: `[[anillo-corriente-ahogada]] — lo lleva ${someName}, sesión 3.`,
     })
   })
 
   it('reports a consumable that was used up', () => {
-    const state = guils()
+    const state = last()
+    // Nobody may be holding it: whoever has it in hand is the more useful
+    // fact, and it wins — see the next test.
+    for (const live of Object.values(state.play)) {
+      live.objects = live.objects.filter((id) => id !== 'obj-lagrima-de-milia')
+    }
     state.objects['obj-lagrima-de-milia'] = { uses: 0, spent: true }
     const out = proposeDeviations(state, { sessionNumber: 4, scenes, objects, pnjs, pcNames })
     expect(out).toContainEqual({
       section: 'Objetos',
       text: '[[lagrima-de-milia]] — gastado y destruido, sesión 4.',
     })
+  })
+
+  it('says who holds an object rather than that it was spent', () => {
+    const state = last()
+    state.play[somePc]!.objects = ['obj-lagrima-de-milia']
+    state.objects['obj-lagrima-de-milia'] = { uses: 0, spent: true }
+    const out = proposeDeviations(state, { sessionNumber: 5, scenes, objects, pnjs, pcNames })
+    const mine = out.filter((d) => d.text.includes('lagrima-de-milia'))
+    expect(mine).toEqual([
+      { section: 'Objetos', text: `[[lagrima-de-milia]] — lo lleva ${someName}, sesión 5.` },
+    ])
   })
 })
 
@@ -159,13 +186,16 @@ describe('applyDeviations, against the real estado.md', () => {
   it('adds each bullet under its own heading', () => {
     const deviations: Deviation[] = [
       { section: 'Gente', text: '[[Raimo]] — **muerto**, sesión 1.' },
-      { section: 'Objetos', text: '[[anillo-corriente-ahogada]] — lo lleva La sombra, sesión 1.' },
+      {
+        section: 'Objetos',
+        text: `[[anillo-corriente-ahogada]] — lo lleva ${someName}, sesión 1.`,
+      },
     ]
     const out = applyDeviations(current, deviations)
     const gente = out.slice(out.indexOf('## Gente'), out.indexOf('## Lugares'))
     const objetos = out.slice(out.indexOf('## Objetos'), out.indexOf('## Decisiones'))
     expect(gente).toContain('[[Raimo]] — **muerto**, sesión 1.')
-    expect(objetos).toContain('lo lleva La sombra')
+    expect(objetos).toContain(`lo lleva ${someName}`)
     expect(gente).not.toContain('anillo-corriente-ahogada')
   })
 

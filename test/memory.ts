@@ -69,16 +69,31 @@ export const V3_SESSION = {
       file: 'monsters/bandido.json',
       abilities: [{ id: 'a1', name: 'Cimitarra', desc: '1d6' }],
     },
+    // On the board but not revealed: an ambush the DM is holding back. That
+    // it stays hidden across a migration is the whole point of keeping it.
+    {
+      id: 'n2',
+      name: 'Bandido 1',
+      ac: 12,
+      hpMax: 11,
+      hp: 11,
+      file: 'monsters/bandido.json',
+      abilities: [{ id: 'a1', name: 'Cimitarra', desc: '1d6' }],
+    },
   ],
-  encounter: { on: true, round: 2, members: ['pc:pj-tal', 'npc:n1'], init: {} },
+  encounter: { on: true, round: 2, members: ['pc:pj-tal', 'npc:n1', 'npc:n2'], init: {} },
   field: {
     mode: 'tablero',
     cols: 16,
     rows: 9,
     sceneId: 'faro',
-    tokens: { 'pc:pj-tal': { x: 1, y: 1 }, 'npc:n1': { x: 4, y: 4 } },
+    tokens: {
+      'pc:pj-tal': { x: 1, y: 1 },
+      'npc:n1': { x: 4, y: 4 },
+      'npc:n2': { x: 5, y: 4 },
+    },
     // v3 keys reveal by bare NPC id — the thing the migration normalises.
-    reveal: { n1: { on: true, hp: 'bar' } },
+    reveal: { n1: { on: true, hp: 'bar' }, n2: { on: false, hp: 'none' } },
   },
 }
 
@@ -99,9 +114,10 @@ export function exampleTree(): MemoryTree {
           'taberna.json': scene('taberna', 'La taberna'),
         },
         // The shared party. `runs/guils/players/` shadows it by id.
+        // One folder per PJ, which is what the loader looks for.
         players: {
-          'tal.md': player('pj-tal', 'Tal (campaña)'),
-          'nel.md': player('pj-nel', 'Nel'),
+          tal: { 'tal.md': player('pj-tal', 'Tal (campaña)') },
+          nel: { 'nel.md': player('pj-nel', 'Nel') },
         },
         assets: {
           'faro.jpg': new Uint8Array([1, 2, 3]),
@@ -120,8 +136,11 @@ export function exampleTree(): MemoryTree {
             'estado.md': ESTADO,
             bitacora: { '00-plantilla.md': PLANTILLA },
             players: {
-              'tal.md': player('pj-tal', 'Tal'),
-              'tal-fc5.xml': '<character><hpMax>9</hpMax><level>1</level><abilities>10,16,12,10,10,10</abilities><slots>2,2</slots></character>',
+              tal: {
+                'tal.md': player('pj-tal', 'Tal'),
+                // The sheet is beside the note, so inside the PJ's folder.
+                'tal-fc5.xml': '<character><hpMax>9</hpMax><level>1</level><abilities>10,16,12,10,10,10</abilities><slots>2,2</slots></character>',
+              },
             },
           },
         },

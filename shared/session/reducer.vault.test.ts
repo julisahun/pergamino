@@ -1,29 +1,89 @@
+/**
+ * The reducer against the real campaign: real PNJ statblocks, real objects,
+ * the real party.
+ *
+ * Nothing here restates a name or a number the vault already holds. The old
+ * version of this file hardcoded a party (`pj-muro`, `El muro`, hpMax 12) and
+ * rotted the moment the campaign changed its mesa, so every PC, every name and
+ * every maximum is derived — and any live state a test depends on is set up by
+ * that test, because `runs/last/session.json` is a file the DM is still using.
+ */
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Pnj, Ref, SessionState } from '../types.ts'
-import { openWorld } from '../../test/fixture.ts'
+import type { Ref, SessionState } from '../types.ts'
+import { MESA, openWorld, pcsOf, playingPcs } from '../../test/fixture.ts'
 import { nextName, orderMembers, reduce, liveOf, type ReduceOpts } from './reducer.ts'
 
 const vault = await openWorld()
 const { pnjs, objects } = await vault.loadCampaign()
 const byId = new Map(pnjs.map((m) => [m.id, m]))
 const objById = new Map(objects.map((o) => [o.id, o]))
-const guilsRun = await vault.loadRun('guils')
+const runData = await vault.loadRun(MESA)
+const pcs = pcsOf(runData)
+
+/** The PCs the mesa has live state for — whoever they are this campaign. */
+const playing = playingPcs(runData)
+const [PC1, PC2, PC3] = playing as [string, string, string]
+const A: Ref = `pc:${PC1}`
+const B: Ref = `pc:${PC2}`
+const C: Ref = `pc:${PC3}`
+const nameOf = (id: string): string => pcs.get(id)!.name
+const hpMaxOf = (id: string): number => pcs.get(id)!.hpMax!
 
 let counter = 0
 const opts = (extra: Partial<ReduceOpts> = {}): ReduceOpts => ({
   pnj: (id) => byId.get(id),
   object: (id) => objById.get(id),
-  pcMaxHp: (pcId) => ({ 'pj-amparo': 10, 'pj-muro': 12, 'pj-sombra': 9 })[pcId] ?? null,
-  pcName: (pcId) =>
-    ({ 'pj-amparo': 'El amparo', 'pj-muro': 'El muro', 'pj-sombra': 'La sombra' })[pcId],
-  pcInitMod: (pcId) => ({ 'pj-amparo': 1, 'pj-muro': 0, 'pj-sombra': 3 })[pcId] ?? null,
+  pcMaxHp: (pcId) => pcs.get(pcId)?.hpMax ?? null,
+  pcName: (pcId) => pcs.get(pcId)?.name,
+  pcInitMod: (pcId) => pcs.get(pcId)?.initMod ?? null,
   newId: () => `test-${++counter}`,
   ...extra,
 })
 
-const guils = (): SessionState => structuredClone(guilsRun.state)
+const last = (): SessionState => structuredClone(runData.state)
 const run = (s: SessionState, ...actions: Parameters<typeof reduce>[1][]): SessionState =>
   actions.reduce((acc, a) => reduce(acc, a, 1_000, opts()).state, s)
+
+/** A fixed board, so a clamp has a known edge to clamp to. */
+const board = (s: SessionState): SessionState =>
+  run(s, { type: 'field/grid', cols: 16, rows: 9 })
+
+/**
+ * An empty board.
+ *
+ * The mesa's live board can legitimately hold two tokens on one square —
+ * `token/move` puts a token where the DM dropped it and nowhere else. So "no
+ * two on a square" is a promise of *automatic* placement, and a test of it has
+ * to start from nothing rather than from whatever the table looks like.
+ */
+function clearBoard(): SessionState {
+  const state = last()
+  state.field.tokens = {}
+  return state
+}
+
+/**
+ * The mesa is mid-adventure and already holds charges and loot. Charge tests
+ * need the object entering play for the first time, which is when `object/give`
+ * fills it from prep.
+ */
+function emptyHanded(): SessionState {
+  const state = last()
+  state.objects = {}
+  for (const live of Object.values(state.play)) live.objects = []
+  for (const npc of state.npcs) npc.objects = []
+  return state
+}
+
+/** The names `count` fresh copies of `pnjId` would take, given `taken`. */
+function nextNames(taken: string[], ...pnjIds: string[]): string[] {
+  const seen = new Set(taken)
+  return pnjIds.map((id) => {
+    const name = nextName(seen, byId.get(id)!.name)
+    seen.add(name)
+    return name
+  })
+}
 
 beforeEach(() => {
   counter = 0
@@ -47,43 +107,52 @@ describe('nextName', () => {
 
 describe('npc/add', () => {
   it('instantiates a pnj with full HP and its stat block', () => {
-    const state = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
+    const prep = byId.get('ossian')!
+    const state = run(last(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
     const ossian = state.npcs.at(-1)!
-    expect(ossian.name).toBe('Ossian')
-    expect(ossian.ac).toBe(13)
-    expect(ossian.hpMax).toBe(30)
-    expect(ossian.hp).toBe(30)
-    expect(ossian.abilities.map((a) => a.name)).toContain('La marea responde')
+    expect(ossian.name).toBe(prep.name)
+    expect(ossian.ac).toBe(prep.ac)
+    expect(ossian.hpMax).toBe(prep.hpMax)
+    expect(ossian.hp).toBe(prep.hpMax) // and arrives at full
+    expect(ossian.abilities.map((a) => a.name)).toEqual(prep.abilities.map((a) => a.name))
     expect(ossian.file).toBe('campaigns/marea-baja/pnj/ossian.md')
   })
 
   it('numbers copies around the ones already in the session', () => {
-    const state = run(guils(), { type: 'npc/add', pnjId: 'bandido', count: 2 })
+    const before = last()
+    const taken = before.npcs.map((n) => n.name)
+    const state = run(before, { type: 'npc/add', pnjId: 'bandido', count: 2 })
     expect(state.npcs.map((n) => n.name)).toEqual([
-      'Bandido', 'Bandido 1', 'Bandido 2', 'Bandido 3', 'Bandido 4',
+      ...taken,
+      ...nextNames(taken, 'bandido', 'bandido'),
     ])
   })
 
   it('keeps the prep note out of the live note', () => {
-    const state = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
+    const state = run(last(), { type: 'npc/add', pnjId: 'ossian', count: 1 })
     // The PNJ's note opens with prose; the NPC's live note starts empty.
     expect(byId.get('ossian')!.lead).not.toBe('')
     expect(state.npcs.at(-1)!.note).toBe('')
   })
 
   it('ignores an unknown pnj', () => {
-    const before = guils()
+    const before = last()
     expect(run(before, { type: 'npc/add', pnjId: 'no-existe', count: 1 })).toBe(before)
   })
 })
 
 describe('npc/remove', () => {
   it('clears the npc from tokens, reveal, members and init', () => {
-    const id = guils().npcs[0]!.id
+    const id = last().npcs[0]!.id
     const ref: Ref = `npc:${id}`
     // Seeded, not assumed: the fixture is the DM's live run and its board is
     // whatever they last left on it.
-    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 1, y: 1 })
+    const before = run(
+      last(),
+      { type: 'token/remove', ref },
+      { type: 'token/place', ref, x: 1, y: 1 },
+      { type: 'encounter/init', ref, value: 12 },
+    )
     expect(before.field.tokens[ref]).toBeDefined()
 
     const state = run(before, { type: 'npc/remove', id })
@@ -96,53 +165,54 @@ describe('npc/remove', () => {
 })
 
 describe('damage and healing', () => {
-  const ref: Ref = 'pc:pj-muro'
+  const ref = A
+  const hpMax = hpMaxOf(PC1)
 
   it('spends temporary HP before real HP', () => {
     const state = run(
-      guils(),
-      { type: 'hp/set', ref, hp: 12 },
+      last(),
+      { type: 'hp/set', ref, hp: hpMax },
       { type: 'hp/temp', ref, temp: 5 },
       { type: 'hp/damage', ref, amount: 3 },
     )
     expect(liveOf(state, ref)!.temp).toBe(2)
-    expect(liveOf(state, ref)!.hp).toBe(12)
+    expect(liveOf(state, ref)!.hp).toBe(hpMax)
   })
 
   it('carries the overflow past temporary HP into real HP', () => {
     const state = run(
-      guils(),
-      { type: 'hp/set', ref, hp: 12 },
+      last(),
+      { type: 'hp/set', ref, hp: hpMax },
       { type: 'hp/temp', ref, temp: 5 },
       { type: 'hp/damage', ref, amount: 8 },
     )
     expect(liveOf(state, ref)!.temp).toBe(0)
-    expect(liveOf(state, ref)!.hp).toBe(9)
+    expect(liveOf(state, ref)!.hp).toBe(hpMax - 3)
   })
 
   it('floors at 0 and knocks a PC unconscious', () => {
     const state = run(
-      guils(),
+      last(),
       { type: 'hp/set', ref, hp: 4 },
       { type: 'hp/damage', ref, amount: 99 },
     )
     expect(liveOf(state, ref)!.hp).toBe(0)
     expect(liveOf(state, ref)!.conditions).toContain('Inconsciente')
-    expect(state.log.map((l) => l.text)).toContain('El muro cae a 0 PG')
+    expect(state.log.map((l) => l.text)).toContain(`${nameOf(PC1)} cae a 0 PG`)
   })
 
   it('caps healing at max HP', () => {
     const state = run(
-      guils(),
+      last(),
       { type: 'hp/set', ref, hp: 4 },
       { type: 'hp/heal', ref, amount: 99 },
     )
-    expect(liveOf(state, ref)!.hp).toBe(12)
+    expect(liveOf(state, ref)!.hp).toBe(hpMax)
   })
 
   it('healing from 0 ends the dying state', () => {
     const state = run(
-      guils(),
+      last(),
       { type: 'hp/set', ref, hp: 0 },
       { type: 'death/mark', ref, outcome: 'fail' },
       { type: 'death/mark', ref, outcome: 'fail' },
@@ -155,90 +225,94 @@ describe('damage and healing', () => {
   })
 
   it('caps an NPC at its own hpMax, not a PC table', () => {
-    const before = guils()
-    const ref: Ref = `npc:${before.npcs[0]!.id}`
+    const before = last()
+    const npc = before.npcs[0]!
+    const ref: Ref = `npc:${npc.id}`
     const state = run(before, { type: 'hp/heal', ref, amount: 50 })
-    expect(liveOf(state, ref)!.hp).toBe(11)
+    expect(liveOf(state, ref)!.hp).toBe(npc.hpMax)
   })
 })
 
 describe('death saves', () => {
-  const ref: Ref = 'pc:pj-sombra'
+  const ref = B
 
   it('logs death on the third failure', () => {
     const state = run(
-      guils(),
+      last(),
       { type: 'death/mark', ref, outcome: 'fail' },
       { type: 'death/mark', ref, outcome: 'fail' },
       { type: 'death/mark', ref, outcome: 'fail' },
     )
     expect(liveOf(state, ref)!.death).toEqual({ ok: 0, fail: 3 })
-    expect(state.log.at(-1)!.text).toBe('La sombra muere')
+    expect(state.log.at(-1)!.text).toBe(`${nameOf(PC2)} muere`)
   })
 
   it('logs stabilisation on the third success', () => {
     const state = run(
-      guils(),
+      last(),
       { type: 'death/mark', ref, outcome: 'ok' },
       { type: 'death/mark', ref, outcome: 'ok' },
       { type: 'death/mark', ref, outcome: 'ok' },
     )
-    expect(state.log.at(-1)!.text).toBe('La sombra se estabiliza')
+    expect(state.log.at(-1)!.text).toBe(`${nameOf(PC2)} se estabiliza`)
   })
 })
 
 describe('initiative order', () => {
   it('sorts highest first', () => {
-    const before = guils()
     const state = run(
-      before,
-      { type: 'encounter/init', ref: 'pc:pj-muro', value: 18 },
-      { type: 'encounter/init', ref: 'pc:pj-sombra', value: 7 },
-      { type: 'encounter/init', ref: 'pc:pj-amparo', value: 12 },
+      last(),
+      { type: 'encounter/init', ref: A, value: 18 },
+      { type: 'encounter/init', ref: B, value: 7 },
+      { type: 'encounter/init', ref: C, value: 12 },
     )
-    const order = orderMembers(state, ['pc:pj-sombra', 'pc:pj-muro', 'pc:pj-amparo'], opts())
-    expect(order).toEqual(['pc:pj-muro', 'pc:pj-amparo', 'pc:pj-sombra'])
+    expect(orderMembers(state, [B, A, C], opts())).toEqual([A, C, B])
   })
 
   it('breaks a tie on the initiative modifier', () => {
-    const before = guils()
-    const bandit: Ref = `npc:${before.npcs[0]!.id}` // initMod +1
+    const before = last()
+    const bandit: Ref = `npc:${before.npcs[0]!.id}`
+    const banditMod = before.npcs[0]!.initMod ?? 0
+    // Whoever in this party the bandit actually out-modifies.
+    const slower = playing.find((id) => (pcs.get(id)!.initMod ?? 0) < banditMod)
+    expect(slower, 'the party needs someone slower than a bandit').toBeDefined()
+    const pc: Ref = `pc:${slower!}`
     const state = run(
       before,
       { type: 'encounter/init', ref: bandit, value: 10 },
-      { type: 'encounter/init', ref: 'pc:pj-muro', value: 10 },
+      { type: 'encounter/init', ref: pc, value: 10 },
     )
-    expect(orderMembers(state, ['pc:pj-muro', bandit], opts())[0]).toBe(bandit)
+    expect(orderMembers(state, [pc, bandit], opts())[0]).toBe(bandit)
   })
 
   it('takes the initiatives stated when the fight starts', () => {
     // Nothing is rolled into the session any more: the DM reads the numbers
     // off the table and `encounter/start` carries them.
-    const before = guils()
+    const before = last()
     const bandit: Ref = `npc:${before.npcs[0]!.id}`
     const state = run(before, {
       type: 'encounter/start',
-      members: ['pc:pj-muro', bandit],
-      init: { 'pc:pj-muro': 14, [bandit]: 7 },
+      members: [A, bandit],
+      init: { [A]: 14, [bandit]: 7 },
     })
-    expect(state.encounter.init['pc:pj-muro']).toBe(14)
+    expect(state.encounter.init[A]).toBe(14)
     expect(state.encounter.init[bandit]).toBe(7)
-    expect(orderMembers(state, state.encounter.members, opts())[0]).toBe('pc:pj-muro')
+    expect(orderMembers(state, state.encounter.members, opts())[0]).toBe(A)
   })
 })
 
 describe('turn advance', () => {
   const seed = (): SessionState =>
     run(
-      guils(),
-      { type: 'encounter/members', members: ['pc:pj-muro', 'pc:pj-amparo'] },
-      { type: 'encounter/init', ref: 'pc:pj-muro', value: 18 },
-      { type: 'encounter/init', ref: 'pc:pj-amparo', value: 5 },
+      last(),
+      { type: 'encounter/members', members: [A, B] },
+      { type: 'encounter/init', ref: A, value: 18 },
+      { type: 'encounter/init', ref: B, value: 5 },
     )
 
   it('starts on the highest initiative', () => {
     const state = run(seed(), { type: 'encounter/advance', delta: 1 })
-    expect(state.encounter.activeRef).toBe('pc:pj-muro')
+    expect(state.encounter.activeRef).toBe(A)
     expect(state.encounter.round).toBe(1)
   })
 
@@ -249,7 +323,7 @@ describe('turn advance', () => {
       { type: 'encounter/advance', delta: 1 },
       { type: 'encounter/advance', delta: 1 },
     )
-    expect(state.encounter.activeRef).toBe('pc:pj-muro')
+    expect(state.encounter.activeRef).toBe(A)
     expect(state.encounter.round).toBe(2)
   })
 
@@ -262,53 +336,56 @@ describe('turn advance', () => {
       { type: 'encounter/advance', delta: -1 },
     )
     expect(state.encounter.round).toBe(1)
-    expect(state.encounter.activeRef).toBe('pc:pj-amparo')
+    expect(state.encounter.activeRef).toBe(B)
   })
 
   it('never drops below round 1', () => {
-    const state = run(seed(), { type: 'encounter/advance', delta: -1 }, { type: 'encounter/advance', delta: -1 })
+    const state = run(
+      seed(),
+      { type: 'encounter/advance', delta: -1 },
+      { type: 'encounter/advance', delta: -1 },
+    )
     expect(state.encounter.round).toBeGreaterThanOrEqual(1)
   })
 })
 
 describe('conditions', () => {
   it('toggles on and off', () => {
-    const ref: Ref = 'pc:pj-muro'
-    const on = run(guils(), { type: 'condition/toggle', ref, condition: 'Envenenado' })
-    expect(liveOf(on, ref)!.conditions).toEqual(['Envenenado'])
-    const off = run(on, { type: 'condition/toggle', ref, condition: 'Envenenado' })
-    expect(liveOf(off, ref)!.conditions).toEqual([])
+    const before = run(last(), { type: 'condition/clear', ref: A })
+    const on = run(before, { type: 'condition/toggle', ref: A, condition: 'Envenenado' })
+    expect(liveOf(on, A)!.conditions).toContain('Envenenado')
+    const off = run(on, { type: 'condition/toggle', ref: A, condition: 'Envenenado' })
+    expect(liveOf(off, A)!.conditions).not.toContain('Envenenado')
   })
 })
 
 describe('purity', () => {
   it('does not mutate the state it was given', () => {
-    const before = guils()
+    const before = last()
     const snapshot = JSON.stringify(before)
-    run(before, { type: 'hp/damage', ref: 'pc:pj-muro', amount: 5 })
+    run(before, { type: 'hp/damage', ref: A, amount: 5 })
     expect(JSON.stringify(before)).toBe(snapshot)
   })
 
   it('returns the same object when nothing changed', () => {
-    const before = guils()
-    expect(reduce(before, { type: 'hp/damage', ref: 'pc:pj-muro', amount: 0 }, 1, opts()).state)
-      .toBe(before)
+    const before = last()
+    expect(reduce(before, { type: 'hp/damage', ref: A, amount: 0 }, 1, opts()).state).toBe(before)
   })
 })
 
 describe('tablero', () => {
   it('clamps a token to the board', () => {
-    const state = run(guils(), { type: 'token/move', ref: 'pc:pj-muro', x: 99, y: -4 })
-    expect(state.field.tokens['pc:pj-muro']).toEqual({ x: 15, y: 0 }) // 16x9 board
+    const state = run(board(last()), { type: 'token/move', ref: A, x: 99, y: -4 })
+    expect(state.field.tokens[A]).toEqual({ x: 15, y: 0 }) // 16x9 board
   })
 
   it('snaps a fractional drop to the nearest square', () => {
-    const state = run(guils(), { type: 'token/move', ref: 'pc:pj-muro', x: 3.6, y: 2.2 })
-    expect(state.field.tokens['pc:pj-muro']).toEqual({ x: 4, y: 2 })
+    const state = run(board(last()), { type: 'token/move', ref: A, x: 3.6, y: 2.2 })
+    expect(state.field.tokens[A]).toEqual({ x: 4, y: 2 })
   })
 
   it('places everyone without a token, never stacking two on a square', () => {
-    const before = run(guils(), { type: 'npc/add', pnjId: 'ossian', count: 3 })
+    const before = run(clearBoard(), { type: 'npc/add', pnjId: 'ossian', count: 3 })
     const state = run(before, { type: 'token/placeAll' })
     const refs = [
       ...Object.keys(state.play).map((id) => `pc:${id}`),
@@ -320,41 +397,47 @@ describe('tablero', () => {
   })
 
   it('leaves already-placed tokens where they are', () => {
-    const ref: Ref = `npc:${guils().npcs[0]!.id}`
-    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 2, y: 3 })
+    const ref: Ref = `npc:${last().npcs[0]!.id}`
+    const before = run(
+      last(),
+      { type: 'token/remove', ref },
+      { type: 'token/place', ref, x: 2, y: 3 },
+    )
     const state = run(before, { type: 'token/placeAll' })
     expect(state.field.tokens[ref]).toEqual({ x: 2, y: 3 })
   })
 
   it('puts one combatant on the board and takes them off again', () => {
-    const before = run(guils(), { type: 'field/grid', cols: 10, rows: 8 })
-    const ref: Ref = 'pc:pj-muro'
-    const cleared = run(before, { type: 'token/remove', ref })
-    expect(cleared.field.tokens[ref]).toBeUndefined()
+    const before = run(clearBoard(), { type: 'field/grid', cols: 10, rows: 8 })
+    const cleared = run(before, { type: 'token/remove', ref: A })
+    expect(cleared.field.tokens[A]).toBeUndefined()
 
-    const placed = run(cleared, { type: 'token/place', ref })
-    expect(placed.field.tokens[ref]).toBeDefined()
+    const placed = run(cleared, { type: 'token/place', ref: A })
+    expect(placed.field.tokens[A]).toBeDefined()
     // Nobody lands on top of anybody.
     const squares = Object.values(placed.field.tokens).map((t) => `${t.x},${t.y}`)
     expect(new Set(squares).size).toBe(squares.length)
 
     // Placing someone already there changes nothing.
-    expect(run(placed, { type: 'token/place', ref })).toBe(placed)
+    expect(run(placed, { type: 'token/place', ref: A })).toBe(placed)
     // Nor does removing someone who is not.
-    const gone = run(placed, { type: 'token/remove', ref })
-    expect(run(gone, { type: 'token/remove', ref })).toBe(gone)
+    const gone = run(placed, { type: 'token/remove', ref: A })
+    expect(run(gone, { type: 'token/remove', ref: A })).toBe(gone)
   })
 
   it('honours an explicit square, and leaves a placed token where it is', () => {
-    const ref: Ref = 'pc:pj-muro'
-    const before = run(guils(), { type: 'token/remove', ref }, { type: 'token/place', ref, x: 3, y: 4 })
-    expect(before.field.tokens[ref]).toEqual({ x: 3, y: 4 })
+    const before = run(
+      last(),
+      { type: 'token/remove', ref: A },
+      { type: 'token/place', ref: A, x: 3, y: 4 },
+    )
+    expect(before.field.tokens[A]).toEqual({ x: 3, y: 4 })
     // Already on the board: placing is a no-op, because moving is `token/move`.
-    expect(run(before, { type: 'token/place', ref, x: 9, y: 9 })).toBe(before)
+    expect(run(before, { type: 'token/place', ref: A, x: 9, y: 9 })).toBe(before)
   })
 
   it('gives a ficha to every PNJ it mints, so none is in no list at all', () => {
-    const before = guils()
+    const before = last()
     const pnjId = before.npcs[0]!.file.split('/').pop()!.replace(/\.md$/, '')
     const state = run(before, { type: 'npc/add', pnjId, count: 2 })
     const added = state.npcs.filter((n) => !before.npcs.some((o) => o.id === n.id))
@@ -363,7 +446,7 @@ describe('tablero', () => {
   })
 
   it('keeps tokens on the board when the grid shrinks', () => {
-    const state = run(guils(), { type: 'field/grid', cols: 8, rows: 5 })
+    const state = run(last(), { type: 'field/grid', cols: 8, rows: 5 })
     for (const t of Object.values(state.field.tokens)) {
       expect(t.x).toBeLessThan(8)
       expect(t.y).toBeLessThan(5)
@@ -371,7 +454,7 @@ describe('tablero', () => {
   })
 
   it('drops an npc token when the npc is removed', () => {
-    const before = guils()
+    const before = last()
     const id = before.npcs[0]!.id
     const state = run(before, { type: 'npc/remove', id })
     expect(state.field.tokens[`npc:${id}`]).toBeUndefined()
@@ -381,8 +464,7 @@ describe('tablero', () => {
 describe('objetos', () => {
   const LAGRIMA = 'obj-lagrima-de-milia' // usos: 5
   const ANILLO = 'obj-anillo-corriente-ahogada' // no charges
-  const muro: Ref = 'pc:pj-muro'
-  const sombra: Ref = 'pc:pj-sombra'
+  const USOS = objById.get(LAGRIMA)!.usos!
 
   /** One charge off the bottle — what a click on the rightmost lit pip says. */
   const spendOne = (state: SessionState): SessionState =>
@@ -393,91 +475,93 @@ describe('objetos', () => {
     })
 
   it('gives an item and starts its charges at the prep value', () => {
-    const state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    expect(liveOf(state, muro)!.objects).toContain(LAGRIMA)
-    expect(state.objects[LAGRIMA]).toEqual({ uses: 5, spent: false })
+    const state = run(emptyHanded(), { type: 'object/give', ref: A, objectId: LAGRIMA })
+    expect(liveOf(state, A)!.objects).toContain(LAGRIMA)
+    expect(state.objects[LAGRIMA]).toEqual({ uses: USOS, spent: false })
   })
 
   it('an object is only ever in one pair of hands', () => {
     const state = run(
-      guils(),
-      { type: 'object/give', ref: muro, objectId: ANILLO },
-      { type: 'object/give', ref: sombra, objectId: ANILLO },
+      emptyHanded(),
+      { type: 'object/give', ref: A, objectId: ANILLO },
+      { type: 'object/give', ref: B, objectId: ANILLO },
     )
-    expect(liveOf(state, muro)!.objects).not.toContain(ANILLO)
-    expect(liveOf(state, sombra)!.objects).toContain(ANILLO)
+    expect(liveOf(state, A)!.objects).not.toContain(ANILLO)
+    expect(liveOf(state, B)!.objects).toContain(ANILLO)
   })
 
-  it('takes the bandit loot the guils fixture already has', () => {
-    const before = guils()
-    const bandit: Ref = `npc:${before.npcs[0]!.id}`
+  it('takes the loot an NPC is carrying', () => {
+    const base = emptyHanded()
+    const bandit: Ref = `npc:${base.npcs[0]!.id}`
+    const before = run(base, { type: 'object/give', ref: bandit, objectId: ANILLO })
     expect(liveOf(before, bandit)!.objects).toEqual([ANILLO])
-    const state = run(before, { type: 'loot/transfer', from: bandit, to: sombra })
+
+    const state = run(before, { type: 'loot/transfer', from: bandit, to: B })
     expect(liveOf(state, bandit)!.objects).toEqual([])
-    expect(liveOf(state, sombra)!.objects).toContain(ANILLO)
+    expect(liveOf(state, B)!.objects).toContain(ANILLO)
     expect(state.log.at(-1)!.text).toBe(
-      'La sombra saquea a Bandido: Anillo de la Corriente Ahogada',
+      `${nameOf(PC2)} saquea a ${base.npcs[0]!.name}: ${objById.get(ANILLO)!.name}`,
     )
   })
 
   it('spends charges across holders, not per holder', () => {
     // "Cinco usos en total, acumulados a lo largo de toda la aventura."
-    let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
+    let state = run(emptyHanded(), { type: 'object/give', ref: A, objectId: LAGRIMA })
     state = spendOne(spendOne(state))
-    expect(state.objects[LAGRIMA]!.uses).toBe(3)
+    expect(state.objects[LAGRIMA]!.uses).toBe(USOS - 2)
     // Handing it on does not refill it.
-    state = run(state, { type: 'object/give', ref: sombra, objectId: LAGRIMA })
-    expect(state.objects[LAGRIMA]!.uses).toBe(3)
+    state = run(state, { type: 'object/give', ref: B, objectId: LAGRIMA })
+    expect(state.objects[LAGRIMA]!.uses).toBe(USOS - 2)
   })
 
-  it('destroys the bottle on the fifth use and takes it out of their hands', () => {
+  it('destroys the bottle on the last use and takes it out of their hands', () => {
     // "Al gastar el quinto uso el vidrio se raja y el agua se derrama."
-    let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    for (let i = 0; i < 5; i++) state = spendOne(state)
+    let state = run(emptyHanded(), { type: 'object/give', ref: A, objectId: LAGRIMA })
+    for (let i = 0; i < USOS; i++) state = spendOne(state)
     expect(state.objects[LAGRIMA]).toEqual({ uses: 0, spent: true })
-    expect(liveOf(state, muro)!.objects).not.toContain(LAGRIMA)
-    expect(state.log.at(-1)!.text).toBe('Lágrima de Milia se destruye')
+    expect(liveOf(state, A)!.objects).not.toContain(LAGRIMA)
+    expect(state.log.at(-1)!.text).toBe(`${objById.get(LAGRIMA)!.name} se destruye`)
   })
 
-  it('will not spend a sixth charge', () => {
-    let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
-    for (let i = 0; i < 6; i++) state = spendOne(state)
+  it('will not spend one charge past the last', () => {
+    let state = run(emptyHanded(), { type: 'object/give', ref: A, objectId: LAGRIMA })
+    for (let i = 0; i < USOS + 1; i++) state = spendOne(state)
     expect(state.objects[LAGRIMA]!.uses).toBe(0)
-    // And the sixth click did not log a second destruction.
+    // And the extra click did not log a second destruction.
     expect(state.log.filter((e) => e.text.endsWith('se destruye'))).toHaveLength(1)
   })
 
   it('puts a charge back, the way a spent spell slot goes back', () => {
-    let state = run(guils(), { type: 'object/give', ref: muro, objectId: LAGRIMA })
+    let state = run(emptyHanded(), { type: 'object/give', ref: A, objectId: LAGRIMA })
     state = spendOne(spendOne(state))
-    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: 4 })
-    expect(state.objects[LAGRIMA]).toEqual({ uses: 4, spent: false })
-    // Clicking past the last pip cannot conjure a sixth charge.
-    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: 9 })
-    expect(state.objects[LAGRIMA]!.uses).toBe(5)
+    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: USOS - 1 })
+    expect(state.objects[LAGRIMA]).toEqual({ uses: USOS - 1, spent: false })
+    // Clicking past the last pip cannot conjure another charge.
+    state = run(state, { type: 'object/charges', objectId: LAGRIMA, uses: USOS + 4 })
+    expect(state.objects[LAGRIMA]!.uses).toBe(USOS)
   })
 
   it('ignores charges on an item that has none', () => {
-    const before = run(guils(), { type: 'object/give', ref: muro, objectId: ANILLO })
+    const before = run(emptyHanded(), { type: 'object/give', ref: A, objectId: ANILLO })
     expect(before.objects[ANILLO]).toBeUndefined()
     expect(run(before, { type: 'object/charges', objectId: ANILLO, uses: 0 })).toBe(before)
   })
 })
 
 describe('descansos', () => {
-  const refs: Ref[] = ['pc:pj-muro', 'pc:pj-sombra']
+  const refs: Ref[] = [A, B]
 
   it('a long rest restores HP, slots and one level of exhaustion', () => {
     const before = run(
-      guils(),
-      { type: 'hp/set', ref: 'pc:pj-muro', hp: 2 },
-      { type: 'exh/set', ref: 'pc:pj-muro', value: 3 },
-      { type: 'slots/set', ref: 'pc:pj-muro', level: '1', spent: 2 },
-      { type: 'condition/toggle', ref: 'pc:pj-muro', condition: 'Inconsciente' },
+      last(),
+      { type: 'hp/set', ref: A, hp: 2 },
+      { type: 'exh/set', ref: A, value: 3 },
+      { type: 'slots/set', ref: A, level: '1', spent: 2 },
+      { type: 'condition/toggle', ref: A, condition: 'Inconsciente' },
     )
     const state = run(before, { type: 'rest/long', refs })
-    const live = liveOf(state, 'pc:pj-muro')!
-    expect(live.hp).toBe(12)
+    const live = liveOf(state, A)!
+    expect(live.hp).toBe(hpMaxOf(PC1))
     expect(live.exh).toBe(2)
     expect(live.spent).toEqual({})
     expect(live.conditions).not.toContain('Inconsciente')
@@ -485,13 +569,13 @@ describe('descansos', () => {
 
   it('a short rest only clears the dying state', () => {
     const before = run(
-      guils(),
-      { type: 'hp/set', ref: 'pc:pj-muro', hp: 3 },
-      { type: 'death/mark', ref: 'pc:pj-muro', outcome: 'fail' },
+      last(),
+      { type: 'hp/set', ref: A, hp: 3 },
+      { type: 'death/mark', ref: A, outcome: 'fail' },
     )
     const state = run(before, { type: 'rest/short', refs })
-    expect(liveOf(state, 'pc:pj-muro')!.hp).toBe(3)
-    expect(liveOf(state, 'pc:pj-muro')!.death).toEqual({ ok: 0, fail: 0 })
+    expect(liveOf(state, A)!.hp).toBe(3)
+    expect(liveOf(state, A)!.death).toEqual({ ok: 0, fail: 0 })
   })
 })
 
@@ -502,21 +586,24 @@ describe('roster/load', () => {
   })
 
   it('loads a scene roster, numbering around whoever is already there', () => {
-    const before = guils() // already holds Bandido, Bandido 1, Bandido 2
+    const before = last()
+    const taken = before.npcs.map((n) => n.name)
     const { state } = reduce(
       before,
       { type: 'roster/load', sceneId: 'camino-del-rio' },
       1_000,
-      withRoster([{ pnjId: 'bandido', count: 2 }, { pnjId: 'ossian', count: 1 }]),
+      withRoster([
+        { pnjId: 'bandido', count: 2 },
+        { pnjId: 'ossian', count: 1 },
+      ]),
     )
-    expect(state.npcs.map((n) => n.name)).toEqual([
-      'Bandido', 'Bandido 1', 'Bandido 2', 'Bandido 3', 'Bandido 4', 'Ossian',
-    ])
-    expect(state.log.at(-1)!.text).toBe('Reparto cargado: Bandido 3, Bandido 4, Ossian')
+    const added = nextNames(taken, 'bandido', 'bandido', 'ossian')
+    expect(state.npcs.map((n) => n.name)).toEqual([...taken, ...added])
+    expect(state.log.at(-1)!.text).toBe(`Reparto cargado: ${added.join(', ')}`)
   })
 
   it('does nothing for a scene with an empty roster', () => {
-    const before = guils()
+    const before = last()
     expect(
       reduce(before, { type: 'roster/load', sceneId: 'camino-del-rio' }, 1_000, withRoster([]))
         .state,
@@ -524,10 +611,9 @@ describe('roster/load', () => {
   })
 
   it('does nothing for a scene it does not know', () => {
-    const before = guils()
+    const before = last()
     expect(
-      reduce(before, { type: 'roster/load', sceneId: 'no-existe' }, 1_000, withRoster([]))
-        .state,
+      reduce(before, { type: 'roster/load', sceneId: 'no-existe' }, 1_000, withRoster([])).state,
     ).toBe(before)
   })
 })

@@ -15,6 +15,8 @@
  */
 import nodePath from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { PcInfo } from '../shared/session/project.ts'
+import type { RunData } from '../shared/session/store.ts'
 import { CampaignVault } from '../shared/vault/binding.ts'
 import { openNodeVault } from '../shared/vault/node.ts'
 import type { WritableVaultDir } from '../shared/vault/source.ts'
@@ -40,3 +42,41 @@ export const worldRoot = (): WritableVaultDir => openNodeVault(worldRootAbs())
 /** `talasia/` with `marea-baja` open — the vault the app is written against. */
 export const openWorld = (): Promise<CampaignVault> =>
   CampaignVault.open(worldRoot(), { campaign, readOnly: true })
+
+/**
+ * The mesa the campaign runs. `runs/README.md` lists exactly one, and the
+ * suite has no business inventing another — a mesa is a group of people.
+ *
+ * Its `session.json` is a **live gameplay file**: the console rewrites it
+ * every few seconds while it is open, and the DM moves tokens and reveals
+ * people between one run of the suite and the next. So a test may read it for
+ * *shape* — a real party, real NPCs instantiated from real prep — but must
+ * set up any condition it actually asserts. Nothing here may depend on which
+ * scene was last on screen or who happened to be hidden.
+ */
+export const MESA = 'last'
+
+/**
+ * What the projection and the reducer know about each PC: the name off the
+ * note and the numbers off the `-fc5.xml`, derived from the run rather than
+ * restated as a literal in every suite that needs it.
+ *
+ * Restating it is how the old fixtures rotted — they kept naming a party the
+ * campaign had already replaced.
+ */
+export function pcsOf(run: RunData): Map<string, PcInfo> {
+  return new Map(
+    run.characters.map((c) => [
+      c.id,
+      {
+        name: c.name,
+        hpMax: run.sheets.get(c.id)?.hpMax ?? null,
+        initMod: run.sheets.get(c.id)?.initMod ?? null,
+        hasPortrait: c.portrait !== null,
+      },
+    ]),
+  )
+}
+
+/** The PCs a run has live state for, which is who can be on the board. */
+export const playingPcs = (run: RunData): string[] => Object.keys(run.state.play).sort()

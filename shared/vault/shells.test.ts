@@ -22,12 +22,14 @@ describe('loadRun', () => {
 
     expect(run.fromVersion).toBe(3)
     expect(run.state.version).toBe(SESSION_VERSION)
-    expect(run.state.npcs).toHaveLength(1)
+    expect(run.state.npcs).toHaveLength(2)
     expect(run.state.npcs[0]!.abilities[0]!.name).toBe('Cimitarra')
     expect(run.state.encounter.round).toBe(2)
     expect(run.state.field.sceneId).toBe('faro')
     // v3 keyed reveal by bare id; v4 keys it the way tokens are keyed.
-    expect(Object.keys(run.state.field.reveal)).toEqual(['npc:n1'])
+    expect(Object.keys(run.state.field.reveal).sort()).toEqual(['npc:n1', 'npc:n2'])
+    // The DM had the second bandit hidden; that must survive the migration.
+    expect(run.state.field.reveal['npc:n2']).toEqual({ on: false, hp: 'none' })
     // And the v4 fields arrive with safe defaults.
     expect(run.state.field.handout).toBeNull()
     expect(run.state.log).toEqual([])
@@ -57,8 +59,8 @@ describe('loadRun', () => {
     // Nel is only in the campaign; Tal is in both, and the run wins.
     expect(run.characters.map((c) => c.id).sort()).toEqual(['pj-nel', 'pj-tal'])
     expect(run.characters.find((c) => c.id === 'pj-tal')!.name).toBe('Tal')
-    expect(run.playerFiles['pj-tal']).toBe('runs/guils/players/tal.md')
-    expect(run.playerFiles['pj-nel']).toBe('players/nel.md')
+    expect(run.playerFiles['pj-tal']).toBe('runs/guils/players/tal/tal.md')
+    expect(run.playerFiles['pj-nel']).toBe('players/nel/nel.md')
   })
 })
 

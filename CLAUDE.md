@@ -74,10 +74,15 @@ What falls out of that:
   within a folder. The old format had to ask for one in prose.
 - **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
   ~70 KB data URIs, which is exactly what a note cannot hold.
-- **Players are `players/*.md` + `-fc5.xml`.** The creator's
-  `dnd-creator-character` json is gone; the app never read a field of the build
-  recipe, and the xml says so itself — *"si algún número de la app no coincide
-  con los de arriba, mandan los de arriba"*.
+- **A PJ is a folder: `players/<pj>/<pj>.md` + `<pj>-fc5.xml`.** The note named
+  like the folder *is* the character; nothing else in there is. A player
+  accumulates a trasfondo, a guía, pdfs and the creator's json beside it, and
+  none of those is another member of the party — which is what a flat
+  `players/*.md` could not say. A loose `players/x.md` is not a character at
+  all, and the extra notes stay reachable through `NotesIndex` like any note.
+  The app still never reads a field of the creator's build recipe, and the xml
+  says so itself — *"si algún número de la app no coincide con los de arriba,
+  mandan los de arriba"*.
 - **`scenarios/` stays json**, because it is the one prep folder the app writes
   back to. Round-tripping a scene through the markdown renderer would cost the
   DM their formatting every time they moved a token.
@@ -162,14 +167,18 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 172 with the DM's vault present, 41 without
+npm test                 # 185 with the DM's vault present, 49 without
 npm run typecheck
 npm run build
 ```
 
 `check-campaign.js` is not in that list, and no longer matches the format
 either — it validates `monsters/*.json` and creator player builds against a
-spec that has been deleted. Decide what to do with it before trusting it.
+spec that has been deleted. Pointed at a current campaign it now detects the
+markers (`pnj/<id>.md`, `objects/<id>.md`, `players/<pj>/<pj>.md`), says so and
+exits 2 rather than reporting zero of everything; `--force` runs the old checks
+anyway. Deciding whether to port or drop it is still open — see
+`lint/README.md`.
 
 The vault tests read the DM's live campaign, so **close the console tab before
 running them**: an open DM window re-scans the folder every 5 seconds and will

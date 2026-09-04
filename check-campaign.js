@@ -597,16 +597,56 @@ function checkRuns(root, all, ids) {
 
 /* ----------------------------------------------------------------- main */
 
+/* The markers of the format that replaced the one below. */
+const NEW_FORMAT = [
+  ['pnj/<id>.md', p => /^pnj\/[^/]+\.md$/.test(p)],
+  ['objects/<id>.md', p => /^objects\/[^/]+\.md$/.test(p)],
+  ['players/<pj>/<pj>.md', p => /(^|\/)players\/[^/]+\/[^/]+\.md$/.test(p)],
+];
+
 function main(argv) {
-  const root = argv[0];
+  const force = argv.includes('--force');
+  const root = argv.find(a => !a.startsWith('-'));
   if (!root) {
-    console.error('usage: node dm/check-campaign.js <campaign-folder>');
+    console.error('usage: node check-campaign.js <campaign-folder> [--force]');
     return 2;
   }
   try { if (!statSync(root).isDirectory()) throw new Error('not a directory'); }
   catch (e) { console.error(`cannot read ${root}: ${e.message}`); return 2; }
 
   const all = walk(root).sort();
+
+  /* Every `pick()` below matches a flat `*.json`, and the note index only ever
+     scans `story/` and the runs. Pointed at a current campaign that does not
+     degrade, it *inverts*: PNJ, objects and players come out as zero of each,
+     and then every `[[Ossian]]` in the prose is reported as resolving to
+     nothing, because `pnj/ossian.md` was never indexed as a note. The output
+     says the campaign is broken when what is broken is this checker.
+
+     Silence would be kinder than that, so say which markers were found and
+     stop. `--force` runs the old checks anyway, for an old-format folder that
+     happens to trip a marker. */
+  if (!force) {
+    const markers = NEW_FORMAT.filter(([, match]) => all.some(match)).map(([marker]) => marker);
+    if (markers.length) {
+      console.error(`${root}
+is in the current campaign format, which this linter does not read.
+
+Found: ${markers.join(', ')}
+
+It validates the pre-merge format — monsters/<id>.json, objects/<id>.json and
+a creator build per player — against \`importing.md\`, which has been deleted.
+The player checks in particular have lost their input for good: the app now
+reads the derived numbers out of the \`-fc5.xml\` beside each note and never
+re-derives a build, so there is no recipe left here to validate.
+
+Nothing is wrong with the campaign, and the app reads it correctly. What has
+to happen is the decision lint/README.md asks for: port this to the new format
+or drop it. Re-run with --force to see the old checks regardless.`);
+      return 2;
+    }
+  }
+
   const pick = (top) => all.filter(p => {
     const parts = p.split('/');
     return parts.length === 2 && parts[0] === top && p.endsWith('.json');

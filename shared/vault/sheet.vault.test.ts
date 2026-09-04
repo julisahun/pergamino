@@ -13,66 +13,72 @@ const playersOf = async (mesa: string) => {
   return dir
 }
 const last = await playersOf('last')
-const guils = await playersOf('guils')
+
+/**
+ * A PJ is a folder, so the note the loader enumerates is `<pj>/<pj>.md` and
+ * the sheet it finds is `<pj>/<pj>-fc5.xml` — inside the folder, not beside it.
+ */
+const pj = (name: string) => `${name}/${name}.md`
 
 describe('readSheet', () => {
   it('matches the numbers the character notes quote', async () => {
-    // last/players/el-cantor-fc5.xml:
-    // "CA 14 · PG 10 · Iniciativa +3 · Percepción pasiva 13 · Competencia +2"
-    expect(await readSheet(last, 'el-cantor.md')).toEqual({
-      hpMax: 10,
-      initMod: 3,
+    // abraxas.md: "CA 12 (15 con Armadura de Mago) · PG 9 · Iniciativa +2 ·
+    // Percepción pasiva 12 · Competencia +2 · Conjuros: Inteligencia, CD 13,
+    // ataque +5, dos espacios de nivel 1" — the 15 is a spell, not the sheet.
+    expect(await readSheet(last, pj('abraxas'))).toEqual({
+      hpMax: 9,
+      initMod: 2,
       level: 1,
-      slots: { '1': 2 }, // a level 1 bard has two first-level slots
-      abilities: { str: 8, dex: 16, con: 14, int: 8, wis: 13, cha: 15 },
-      ac: 14,
-      passivePerception: 13,
+      slots: { '1': 2 },
+      abilities: { str: 8, dex: 14, con: 16, int: 17, wis: 10, cha: 8 },
+      ac: 12,
+      passivePerception: 12,
       proficiency: 2,
       summary: expect.stringContaining('nivel 1'),
     })
-    // el-yunque.md: "PG 11 · Iniciativa +1" — 11 because dwarven toughness
-    // adds a point a plain d8 + CON 14 calculation would miss.
-    const yunque = await readSheet(last, 'el-yunque.md')
-    expect(yunque.hpMax).toBe(11)
-    expect(yunque.initMod).toBe(1)
-    expect(yunque.ac).toBe(16)
+    // croma.md: "PG 11 · Iniciativa −1" — 11 because dureza enana adds a
+    // point a plain d8 + CON 14 calculation would miss.
+    const croma = await readSheet(last, pj('croma'))
+    expect(croma.hpMax).toBe(11)
+    expect(croma.initMod).toBe(-1)
+    expect(croma.ac).toBe(14)
   })
 
   it('takes the stated initiative over DEX wherever the two disagree', async () => {
-    // Three of the six sheets have *Alerta*, which the DEX score cannot show.
-    for (const [mesa, file, dex, stated] of [
-      [guils, 'tolmo.md', 10, 2],
-      [guils, 'sirga.md', 17, 5],
-      [last, 'la-ganzua.md', 17, 5],
-    ] as const) {
-      const sheet = await readSheet(mesa, file)
-      expect(sheet.abilities!.dex).toBe(dex)
-      expect(abilityMod(dex)).not.toBe(stated)
-      expect(sheet.initMod).toBe(stated)
-    }
+    // Toribio has *Alerta*, which the DEX score alone cannot show: DEX 17 is
+    // +3, and the sheet states +5.
+    const sheet = await readSheet(last, pj('toribio'))
+    expect(sheet.abilities!.dex).toBe(17)
+    expect(abilityMod(17)).toBe(3)
+    expect(sheet.initMod).toBe(5)
   })
 
-  it('quotes the final AC, never the armour item\'s base value', async () => {
-    // tolmo wears cota de malla, `<ac>16</ac>`; the sheet says 19.
-    expect((await readSheet(guils, 'tolmo.md')).ac).toBe(19)
+  it("quotes the final AC, never the armour item's base value", async () => {
+    // Toribio wears armadura de cuero, `<ac>11</ac>`; the sheet says 14.
+    expect((await readSheet(last, pj('toribio'))).ac).toBe(14)
+    // Croma stacks camisote de mallas `<ac>13</ac>` and escudo `<ac>2</ac>`
+    // over DEX −1; neither number is the 14 the sheet states.
+    expect((await readSheet(last, pj('croma'))).ac).toBe(14)
   })
 
-  it('reads the pregenerated sheets too', async () => {
-    const tolmo = await readSheet(guils, 'tolmo.md')
-    expect(tolmo.hpMax).toBeGreaterThan(0)
-    expect(tolmo.level).toBe(1)
-    expect(tolmo.summary).toBe('Enano guerrero de nivel 1 (Guardia). Tamaño Mediano.')
+  it('reads the summary the sheet declares authoritative', async () => {
+    const toribio = await readSheet(last, pj('toribio'))
+    expect(toribio.level).toBe(1)
+    expect(toribio.summary).toBe('Mediano pícaro de nivel 1 (Criminal). Tamaño Pequeño.')
+    const aluci = await readSheet(last, pj('aluci'))
+    expect(aluci.summary).toBe('Humano bardo de nivel 1 (Marinero). Tamaño Mediano.')
   })
 
   it('gives non-casters no slots at all, and casters theirs', async () => {
-    // Tolmo is a fighter and Sirga a rogue; Vidal is a level 1 cleric.
-    expect((await readSheet(guils, 'tolmo.md')).slots).toEqual({})
-    expect((await readSheet(guils, 'sirga.md')).slots).toEqual({})
-    expect((await readSheet(guils, 'vidal.md')).slots).toEqual({ '1': 2 })
+    // Toribio is a rogue; Aluci is a bard, Croma a cleric, Abraxas a wizard.
+    expect((await readSheet(last, pj('toribio'))).slots).toEqual({})
+    expect((await readSheet(last, pj('aluci'))).slots).toEqual({ '1': 2 })
+    expect((await readSheet(last, pj('croma'))).slots).toEqual({ '1': 2 })
+    expect((await readSheet(last, pj('abraxas'))).slots).toEqual({ '1': 2 })
   })
 
-  it('returns nulls when no XML sits beside the json', async () => {
-    expect(await readSheet(last, 'no-existe.md')).toEqual({
+  it('returns nulls when no XML sits beside the note', async () => {
+    expect(await readSheet(last, pj('no-existe'))).toEqual({
       hpMax: null,
       initMod: null,
       level: null,

@@ -11,6 +11,22 @@ outlived it.
 > kept because the rules engine underneath is real work; decide whether to
 > rewrite it against the new format or drop it, but do not trust it as it is.
 
+`check-campaign.js` no longer pretends otherwise: it looks for `pnj/<id>.md`,
+`objects/<id>.md` and `players/<pj>/<pj>.md`, and if it finds any of them it
+says so and exits 2 instead of running. It used to *invert* on a current
+campaign — zero monsters, zero objects, zero players, and then every
+`[[Ossian]]` in the prose reported as resolving to nothing, because `pnj/` is
+not in its note index — which reads as a broken campaign rather than a broken
+checker. `--force` runs the old checks anyway.
+
+Note what a rewrite cannot get back: the player checks validated a **creator
+build recipe**, and that json is gone from the format. The app reads the
+derived numbers from the `-fc5.xml` beside each note and never re-derives a
+build, so `rules/engine.js` would have nothing left to validate. What still
+has meaning is the reference integrity — do wikilinks resolve, do scene
+rosters name real PNJ, is every asset referenced — and none of that needs the
+rules engine.
+
 ## Why they are not shared with the app
 
 The app that replaced it does not implement 5e character rules at all. It
