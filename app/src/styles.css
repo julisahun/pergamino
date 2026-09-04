@@ -388,6 +388,9 @@ input[type="range"] { accent-color: var(--accent); flex: 1; }
 
 .detail h2 { font: 500 20px/1.2 var(--font-read); margin: 0 0 2px; }
 .detail .sub { color: var(--ink-faint); font-size: 12px; margin-bottom: 12px; }
+/* What the television is calling this one, when it is not what the console
+   calls it. Quiet: it is a reminder, not a stat. */
+.mask-line { color: var(--ink-faint); font-size: 11px; font-style: italic; margin: 2px 0 6px; }
 .ability { border-top: 1px solid var(--line); padding: 9px 0; }
 .ability:last-child { border-bottom: 1px solid var(--line); }
 .ability strong { display: block; font: 600 13px/1.3 var(--font-ui); color: var(--accent); }

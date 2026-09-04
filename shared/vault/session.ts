@@ -107,6 +107,9 @@ export function normaliseReveal(raw: unknown, npcIds: Set<string>): Record<strin
     const state: RevealState = {
       on: d.on === true,
       hp: d.hp === 'bar' || d.hp === 'exact' ? d.hp : 'none',
+      // Masked unless the DM took the mask off, so an older file — which has
+      // no such key — keeps every alias in place when it is reopened.
+      name: d.name === 'real' ? 'real' : 'alias',
     }
     if (key.startsWith('pc:') || key.startsWith('npc:')) {
       out[key] = state
@@ -183,6 +186,7 @@ export function migrate(raw: unknown, prefix = ''): SessionState {
     return {
       id: String(n.id ?? ''),
       name: typeof n.name === 'string' ? n.name : '',
+      alias: typeof n.alias === 'string' && n.alias.trim() ? n.alias.trim() : null,
       tag: typeof n.tag === 'string' ? n.tag : null,
       ac: num(n.ac, 10),
       hpMax,

@@ -308,10 +308,15 @@ export function reduce(
       const current = field.reveal[action.ref] ?? {
         on: isPc,
         hp: isPc ? ('exact' as const) : ('none' as const),
+        name: 'alias' as const,
       }
       field.reveal = {
         ...field.reveal,
-        [action.ref]: { on: action.on ?? current.on, hp: action.hp ?? current.hp },
+        [action.ref]: {
+          on: action.on ?? current.on,
+          hp: action.hp ?? current.hp,
+          name: action.name ?? current.name,
+        },
       }
       next = { ...state, field }
       break
@@ -320,7 +325,13 @@ export function reduce(
       const reveal = { ...field.reveal }
       for (const npc of state.npcs) {
         const ref = makeRef('npc', npc.id)
-        reveal[ref] = { on: action.on, hp: reveal[ref]?.hp ?? 'none' }
+        // Putting the board on screen is not the same as naming what is on
+        // it: a masked PNJ stays masked through a `revelar todos`.
+        reveal[ref] = {
+          on: action.on,
+          hp: reveal[ref]?.hp ?? 'none',
+          name: reveal[ref]?.name ?? 'alias',
+        }
       }
       field.reveal = reveal
       next = { ...state, field }

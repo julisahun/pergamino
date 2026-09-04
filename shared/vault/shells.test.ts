@@ -30,7 +30,7 @@ describe('loadRun', () => {
     // v3 keyed reveal by bare id; v4 keys it the way tokens are keyed.
     expect(Object.keys(run.state.field.reveal).sort()).toEqual(['npc:n1', 'npc:n2'])
     // The DM had the second bandit hidden; that must survive the migration.
-    expect(run.state.field.reveal['npc:n2']).toEqual({ on: false, hp: 'none' })
+    expect(run.state.field.reveal['npc:n2']).toEqual({ on: false, hp: 'none', name: 'alias' })
     // And the v4 fields arrive with safe defaults.
     expect(run.state.field.handout).toBeNull()
     expect(run.state.log).toEqual([])
@@ -71,7 +71,7 @@ describe('saveSession', () => {
 
     const written = JSON.parse(memory.read(`${RUN}/session.json`)!)
     expect(written.version).toBe(SESSION_VERSION)
-    expect(written.field.reveal['npc:n1']).toEqual({ on: true, hp: 'bar' })
+    expect(written.field.reveal['npc:n1']).toEqual({ on: true, hp: 'bar', name: 'alias' })
   })
 
   it('keeps the pre-v4 original as session.json.bak, once', async () => {

@@ -23,6 +23,7 @@ const SCRIPTS = [
   'e2e-notas.mjs',
   'e2e-party.mjs',
   'e2e-catalogo.mjs',
+  'e2e-mascara.mjs',
   'e2e-preparacion.mjs',
 ]
 

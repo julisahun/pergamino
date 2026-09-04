@@ -37,6 +37,15 @@ export interface Ability {
 export interface Pnj {
   id: string
   name: string
+  /**
+   * What the *table* is told this one is called, when it must not be told the
+   * truth. Tulio is a name the party has no business hearing until someone in
+   * the fiction says it out loud — but the console has to go on calling him
+   * Tulio, or the DM cannot tell which of three drowned soldiers carries the
+   * medal and the sixteen hit points. `null`, the ordinary case, means both
+   * screens say `name`.
+   */
+  alias: string | null
   tag: string | null
   ac: number
   /** `null` for a PNJ with no statblock, which cannot be seated. */
@@ -149,9 +158,20 @@ export interface Encounter {
 
 export type HpReveal = 'none' | 'bar' | 'exact'
 
+/** Whether the mask comes off: `alias` while it is on, `real` once it does. */
+export type NameReveal = 'alias' | 'real'
+
 export interface RevealState {
   on: boolean
   hp: HpReveal
+  /**
+   * Only means anything for a combatant whose note gives an `alias`; for
+   * everyone else the two values name the same person. Taking the mask off is
+   * a thing that happens *during* play — Vann fought in that war and
+   * recognises the corpse — so it belongs here, with the rest of what the
+   * table is allowed to see, and not in the prep note.
+   */
+  name: NameReveal
 }
 
 export interface Token {

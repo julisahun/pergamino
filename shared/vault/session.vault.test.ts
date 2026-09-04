@@ -40,17 +40,17 @@ const backupRaw = (await readJson(lastDir, `${SESSION_FILE}.bak`)) as Raw | null
 describe('normaliseReveal', () => {
   it('prefixes bare npc ids with npc:', () => {
     const out = normaliseReveal({ abc: { on: true, hp: 'none' } }, new Set(['abc']))
-    expect(out).toEqual({ 'npc:abc': { on: true, hp: 'none' } })
+    expect(out).toEqual({ 'npc:abc': { on: true, hp: 'none', name: 'alias' } })
   })
 
   it('leaves already-prefixed refs alone', () => {
     const out = normaliseReveal({ 'npc:abc': { on: true, hp: 'bar' } }, new Set(['abc']))
-    expect(out).toEqual({ 'npc:abc': { on: true, hp: 'bar' } })
+    expect(out).toEqual({ 'npc:abc': { on: true, hp: 'bar', name: 'alias' } })
   })
 
   it('keeps a setting whose npc is gone rather than dropping it', () => {
     const out = normaliseReveal({ ghost: { on: true, hp: 'exact' } }, new Set())
-    expect(out['npc:ghost']).toEqual({ on: true, hp: 'exact' })
+    expect(out['npc:ghost']).toEqual({ on: true, hp: 'exact', name: 'alias' })
   })
 
   it('defaults an unrecognised hp mode to none', () => {

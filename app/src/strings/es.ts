@@ -85,6 +85,11 @@ export const es = {
   // combate / revelado
   visible: 'Visible',
   oculto: 'Oculto',
+  laMesaVe: 'La mesa ve',
+  nombreTapado: 'Nombre tapado',
+  nombreALaVista: 'La mesa ve su nombre',
+  revelarNombre: 'Revelar el nombre a la mesa',
+  taparNombre: 'Volver a taparle el nombre',
   ronda: 'Ronda',
   turnoDe: 'Turno de',
   revelarTodos: 'Revelar todos',

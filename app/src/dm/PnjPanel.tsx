@@ -123,6 +123,9 @@ export function PnjPanel() {
               />
               <div style={{ flex: 1 }}>
                 <h2>{current.name}</h2>
+                {current.alias && (
+                  <div className="mask-line">{`${es.laMesaVe}: ${current.alias}`}</div>
+                )}
                 <div className="sub">{statLine(current)}</div>
               </div>
             </div>

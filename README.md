@@ -196,7 +196,7 @@ existen:
 | Fichero | Qué saca |
 |---|---|
 | `scenarios/*.json` | escena, arte, rejilla, nota de lectura, reparto |
-| `pnj/*.md` | CA, PG, iniciativa, rasgos y retrato en el front matter; la nota, debajo |
+| `pnj/*.md` | CA, PG, iniciativa, rasgos, retrato y `alias` en el front matter; la nota, debajo |
 | `objects/*.md` | `mods.ac`, `usos` y efectos en el front matter; la nota, debajo |
 | `players/*.md` | la party compartida de la campaña: nombre, retrato y quién es |
 | `runs/<mesa>/players/*.md` | la party de esa mesa, que **tapa** la anterior por id |
@@ -209,6 +209,28 @@ la prosa debajo, en un solo fichero. Antes eran dos — `monsters/galo.json` y
 `story/gente/galo.md` — que decían lo mismo con distintas palabras y había que
 mantener a mano. Un PNJ sin `hpMax` es alguien con quien sólo se habla: sale en
 las notas, pero no se sienta en el tablero.
+
+### `alias`: el nombre que oye la mesa
+
+```yaml
+id: tulio
+alias: Soldado ahogado
+```
+
+Un enemigo con nombre propio es un cabo de la historia, y leerlo en la pantalla
+lo regala antes de tiempo. Con `alias`, la pantalla de mesa dice *Soldado
+ahogado* y la consola sigue diciendo *Tulio* — que es lo que hace falta para
+saber cuál de los tres lleva la medalla y los 16 PG. La ficha de la consola
+avisa con **«La mesa ve: …»**, y el botón `A` de su fila en el raíl destapa el
+nombre cuando toca (`N`, y otra vez `A` para volver a taparlo). Es una decisión
+de partida, así que se guarda en `field.reveal` del `session.json`, no en la
+nota: la nota sólo dice cuál es la máscara.
+
+Como una máscara buena es la que no se distingue de las de al lado, los nombres
+chocan. Gana el nombre de verdad — quien no lleva máscara se llama en las dos
+pantallas exactamente igual — y los tapados cogen el siguiente número libre:
+*Soldado ahogado*, *Soldado ahogado 1* y Tulio como *Soldado ahogado 2*. La
+bitácora es de la consola, así que ahí sigue apuntando lo que hizo Tulio.
 
 Los PG de los PJ salen del `-fc5.xml` que genera `pregenerados/fightclub.py`, no
 de recalcular las reglas: así la Dureza Enana de El yunque (11 PG, no 10) sale

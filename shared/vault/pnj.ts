@@ -98,6 +98,9 @@ export async function loadPnj(dir: VaultDir | null, prefix = PNJ_DIR): Promise<P
     return {
       id: str(fm.id).trim() || note.slug,
       name: note.title,
+      // `alias: Soldado ahogado` — the name the table is given instead of the
+      // title. Absent from almost every note, and that is the default.
+      alias: str(fm.alias).trim() || null,
       tag: typeof fm.tag === 'string' ? fm.tag : null,
       ac: num(fm.ac, 10),
       hpMax: nullableNum(fm.hpMax),

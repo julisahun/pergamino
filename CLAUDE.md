@@ -97,6 +97,14 @@ inside it — no stat blocks, no DM notes, no positions for tokens that are not
 on screen. `project.vault.test.ts` asserts this against the real vault, down to
 `JSON.stringify(view)` not containing the hidden id.
 
+One thing crosses it *changed* rather than absent: a PNJ whose note gives an
+`alias` is projected under that name — `tableNames` in the same file — so the
+console can go on calling him Tulio while the television says "Soldado ahogado
+2". Whoever is not masked keeps their real name, so a number means the same
+creature on both screens; the mask itself is live state (`field.reveal[ref]
+.name`), because taking it off is something that happens at the table. The log
+never reaches the television, so it keeps real names.
+
 The television window has no directory handle, so it cannot read a campaign
 even in principle. Keep it that way: it receives a `TableView` and blobs it
 asked for by key, over `app/src/transport/`. Nothing else.

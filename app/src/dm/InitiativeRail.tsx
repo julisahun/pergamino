@@ -6,6 +6,7 @@
 import { useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Ref, RevealState } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
+import { tableNames } from '../../../shared/session/project.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -14,8 +15,8 @@ import { CombatantDetail } from './CombatantDetail.tsx'
 import { CombatSetup } from './CombatSetup.tsx'
 import { artIndex, combatants, isDead, isDown, orderByInit, type Combatant } from './combat.ts'
 
-const PC_DEFAULT: RevealState = { on: true, hp: 'exact' }
-const NPC_DEFAULT: RevealState = { on: false, hp: 'none' }
+const PC_DEFAULT: RevealState = { on: true, hp: 'exact', name: 'alias' }
+const NPC_DEFAULT: RevealState = { on: false, hp: 'none', name: 'alias' }
 const HP_CYCLE = ['none', 'bar', 'exact'] as const
 const HP_LABEL: Record<string, string> = { none: '—', bar: '▤', exact: '#' }
 
@@ -28,6 +29,7 @@ const stop = (fn: () => void) => (e: ReactMouseEvent) => {
 function RailRow({
   c,
   reveal,
+  tableName,
   init,
   active,
   inEncounter,
@@ -37,6 +39,8 @@ function RailRow({
 }: {
   c: Combatant
   reveal: RevealState
+  /** The name the television is using for this one, mask included. */
+  tableName: string | null
   init: number | undefined
   active: boolean
   inEncounter: boolean
@@ -146,6 +150,27 @@ function RailRow({
           >
             {HP_LABEL[reveal.hp]}
           </button>
+          {/* Only whoever has a name to keep: `A` de alias, `N` de nombre. */}
+          {c.npc?.alias && (
+            <button
+              className="mini eye"
+              aria-pressed={reveal.name === 'real'}
+              title={
+                reveal.name === 'real'
+                  ? `${es.nombreALaVista} · ${es.taparNombre}`
+                  : `${es.laMesaVe}: ${tableName ?? c.npc.alias} · ${es.revelarNombre}`
+              }
+              onClick={stop(() =>
+                dispatch({
+                  type: 'reveal/set',
+                  ref: c.ref,
+                  name: reveal.name === 'real' ? 'alias' : 'real',
+                }),
+              )}
+            >
+              {reveal.name === 'real' ? 'N' : 'A'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -172,6 +197,9 @@ export function InitiativeRail() {
   )
 
   const everyone = useMemo(() => (state ? combatants(state, pcs, art) : []), [state, pcs, art])
+  // The same map the television is built from, so the console can say exactly
+  // what the players are reading — number and all.
+  const labels = useMemo(() => (state ? tableNames(state) : new Map()), [state])
   // The rail *is* the table: whoever has a ficha. Somebody present but hidden
   // from the players is the reveal toggle's job (◉/○), not an absence here.
   const all = useMemo(
@@ -219,6 +247,7 @@ export function InitiativeRail() {
       key={c.ref}
       c={c}
       reveal={state.field.reveal[c.ref] ?? (c.npc ? NPC_DEFAULT : PC_DEFAULT)}
+      tableName={(c.npc && labels.get(c.npc.id)) || null}
       init={encounter.init[c.ref]}
       active={encounter.activeRef === c.ref}
       inEncounter={inEncounter}

@@ -6,6 +6,7 @@
  * blocks, DM notes and base64 portraits never cross this boundary.
  */
 import type {
+  Npc,
   Pnj,
   Ref,
   RevealState,
@@ -16,6 +17,7 @@ import type {
 } from '../types.ts'
 import { makeRef } from '../types.ts'
 import { resolveNpcPortrait } from './portraits.ts'
+import { nextName } from './reducer.ts'
 
 /**
  * Vault-relative asset reference → the key the view names it by.
@@ -29,8 +31,8 @@ import { resolveNpcPortrait } from './portraits.ts'
 export const assetUrl = (src: string | null | undefined): string | null =>
   src ? `/vault/${src.replace(/^\/+/, '')}` : null
 
-const PC_DEFAULT: RevealState = { on: true, hp: 'exact' }
-const NPC_DEFAULT: RevealState = { on: false, hp: 'none' }
+const PC_DEFAULT: RevealState = { on: true, hp: 'exact', name: 'alias' }
+const NPC_DEFAULT: RevealState = { on: false, hp: 'none', name: 'alias' }
 
 export const revealFor = (state: SessionState, ref: Ref): RevealState =>
   state.field.reveal[ref] ?? (ref.startsWith('pc:') ? PC_DEFAULT : NPC_DEFAULT)
@@ -53,6 +55,43 @@ export interface ProjectContext {
   pnjs: Map<string, Pnj>
 }
 
+/**
+ * What the table calls each NPC, keyed by its runtime id.
+ *
+ * A mask is only any good if it is indistinguishable from the faces around it,
+ * which is exactly what makes the names collide: Tulio's `Soldado ahogado`
+ * lands on top of the actual soldado ahogado standing next to him. Real names
+ * win that collision — whoever is not masked keeps precisely what the console
+ * calls them, so "el soldado ahogado 1" means the same creature on both
+ * screens — and the masked ones take the next free number the way `nextName`
+ * numbers copies.
+ *
+ * The reservation runs over *every* NPC in the session, revealed or not, so a
+ * label is settled when the creature is seated and does not shift under the
+ * players as the rest of an ambush walks on. What that costs is a faint count:
+ * a `Soldado ahogado 2` alone on screen says two others exist. What it never
+ * costs is a name, which is the thing this boundary is here to keep.
+ */
+export function tableNames(state: SessionState): Map<string, string> {
+  const out = new Map<string, string>()
+  const taken = new Set<string>()
+  const masked: Npc[] = []
+  for (const npc of state.npcs) {
+    if (npc.alias && revealFor(state, makeRef('npc', npc.id)).name === 'alias') {
+      masked.push(npc)
+      continue
+    }
+    out.set(npc.id, npc.name)
+    taken.add(npc.name)
+  }
+  for (const npc of masked) {
+    const name = nextName(taken, npc.alias!)
+    taken.add(name)
+    out.set(npc.id, name)
+  }
+  return out
+}
+
 interface CombatantSource {
   ref: Ref
   name: string
@@ -65,6 +104,7 @@ interface CombatantSource {
 
 function sources(state: SessionState, ctx: ProjectContext): CombatantSource[] {
   const out: CombatantSource[] = []
+  const labels = tableNames(state)
   for (const [pcId, live] of Object.entries(state.play)) {
     const info = ctx.pcs.get(pcId)
     out.push({
@@ -82,7 +122,8 @@ function sources(state: SessionState, ctx: ProjectContext): CombatantSource[] {
   for (const npc of state.npcs) {
     out.push({
       ref: makeRef('npc', npc.id),
-      name: npc.name,
+      // The mask, when there is one. `npc.name` stops here.
+      name: labels.get(npc.id) ?? npc.name,
       hp: npc.hp,
       hpMax: npc.hpMax,
       temp: npc.temp,

@@ -53,8 +53,10 @@ function setReveal(state: SessionState, on: Ref[], hp: HpReveal = 'none'): void 
   // Cleared rather than merged: PCs are revealed by default, so this leaves
   // the party visible and puts every NPC behind an explicit decision.
   state.field.reveal = {}
-  for (const npc of state.npcs) state.field.reveal[`npc:${npc.id}`] = { on: false, hp: 'none' }
-  for (const ref of on) state.field.reveal[ref] = { on: true, hp }
+  for (const npc of state.npcs) {
+    state.field.reveal[`npc:${npc.id}`] = { on: false, hp: 'none', name: 'alias' }
+  }
+  for (const ref of on) state.field.reveal[ref] = { on: true, hp, name: 'alias' }
 }
 
 /** A state with one NPC hidden and placed on the board. */
@@ -67,6 +69,23 @@ function withHidden(): { state: SessionState; hidden: Ref } {
 }
 
 describe('projectTable — what reaches the TV', () => {
+  it('masks a name the note says to mask, and numbers the copies', () => {
+    const state = last()
+    // The campaign's own aliases are prep, and prep changes; what has to hold
+    // is that an alias on a seated PNJ never reaches the payload as a name.
+    for (const npc of state.npcs) npc.alias = 'Encapuchado'
+    setReveal(state, state.npcs.map((n) => `npc:${n.id}` as Ref))
+    const view = projectTable(state, ctx())
+    expect(JSON.stringify(view)).not.toContain('Bandido')
+    expect(view.combatants.filter((c) => c.ref.startsWith('npc:')).map((c) => c.name)).toEqual([
+      'Encapuchado',
+      'Encapuchado 1',
+      'Encapuchado 2',
+    ])
+    // And the console still knows who they are.
+    expect(projectDm(state).npcs[0]!.name).toBe('Bandido')
+  })
+
   it('drops an unrevealed NPC entirely rather than hiding it', () => {
     const { state, hidden } = withHidden()
     const view = projectTable(state, ctx())

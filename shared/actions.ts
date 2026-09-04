@@ -1,5 +1,5 @@
 /** Every mutation a client can ask the server to perform. */
-import type { AudioState, FieldMode, Handout, HpReveal, Ref } from './types.ts'
+import type { AudioState, FieldMode, Handout, HpReveal, NameReveal, Ref } from './types.ts'
 
 export type Action =
   // --- Escena -------------------------------------------------------------
@@ -13,7 +13,7 @@ export type Action =
   | { type: 'audio/playing'; playing: boolean }
   | { type: 'handout/show'; handout: Handout | null }
   // --- Revelado -----------------------------------------------------------
-  | { type: 'reveal/set'; ref: Ref; on?: boolean; hp?: HpReveal }
+  | { type: 'reveal/set'; ref: Ref; on?: boolean; hp?: HpReveal; name?: NameReveal }
   | { type: 'reveal/all'; on: boolean }
   // --- PNJ en la sesión ---------------------------------------------------
   | { type: 'npc/add'; pnjId: string; count: number }

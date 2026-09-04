@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import type { Ref } from '../../../shared/types.ts'
 import { CONDITIONS } from '../../../shared/conditions.ts'
+import { revealFor, tableNames } from '../../../shared/session/project.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -18,6 +19,10 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
   // `file` is that note's path — so there is nothing to look up by slug.
   const prep = c.npc ? pnjs.find((m) => m.file === c.npc!.file || m.id === c.npc!.id) : undefined
   const carried = objects.filter((o) => c.live.objects.includes(o.id))
+  // A masked PNJ is the one place the console's name and the television's part
+  // ways, so the ficha says which one the players are hearing.
+  const masked = c.npc?.alias && state ? revealFor(state, c.ref).name === 'alias' : false
+  const tableName = c.npc && state ? tableNames(state).get(c.npc.id) : undefined
   const lootable = c.npc !== null && (carried.length > 0 || c.live.gold > 0)
   const party = Object.keys(state?.play ?? {})
 
@@ -27,6 +32,11 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
         <Face src={c.portrait} name={c.name} className="crow-face" />
         <div style={{ flex: 1 }}>
           <h2>{c.name}</h2>
+          {c.npc?.alias && (
+            <div className="mask-line">
+              {masked ? `${es.laMesaVe}: ${tableName ?? c.npc.alias}` : es.nombreALaVista}
+            </div>
+          )}
           <div className="sub">
             {[
               c.tag,
