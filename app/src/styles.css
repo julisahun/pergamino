@@ -552,6 +552,51 @@ textarea {
 .stat-mod { font: 600 15px/1.15 var(--font-ui); color: var(--accent); }
 .stat-score { font: 400 10px/1 var(--font-ui); color: var(--ink-dim); }
 
+/* The card's compact strip: the modifier you add, and nothing else. The
+   score, the rolls and the skills are all in the ficha behind the ⓘ. */
+.mod-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 8px;
+}
+.mod {
+  display: flex; align-items: baseline; justify-content: center; gap: 4px;
+  padding: 3px 2px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.mod-label {
+  font: 600 9px/1 var(--font-ui);
+  letter-spacing: 0.08em; color: var(--ink-faint);
+}
+.mod b { font: 600 13px/1.15 var(--font-ui); color: var(--accent); }
+
+/* All eighteen skills. A row the sheet quoted is the sheet's own number and
+   is shown as such; the rest are the bare ability modifier and stay muted, so
+   the two can sit in one list without being mistaken for each other. */
+.skill-note { margin: 4px 0 8px; font-size: 11.5px; }
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px 14px;
+  margin-top: 6px;
+}
+.skill {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line);
+}
+.skill-name { flex: 1; font: 400 12px/1.5 var(--font-ui); color: var(--ink-faint); }
+.skill-ability {
+  font: 600 8.5px/1 var(--font-ui);
+  letter-spacing: 0.08em; color: var(--ink-dim);
+}
+.skill-mod { font: 400 12px/1.5 var(--font-ui); color: var(--ink-dim); min-width: 24px; text-align: right; }
+.skill.stated .skill-name { color: var(--ink); }
+.skill.stated .skill-mod { font-weight: 600; color: var(--accent); }
+
 .rolls { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .roll { font: 400 11.5px/1.4 var(--font-ui); color: var(--ink-faint); white-space: nowrap; }
 .roll b { font-weight: 600; color: var(--ink); }

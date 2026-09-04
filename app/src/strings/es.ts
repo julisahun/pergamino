@@ -166,6 +166,15 @@ export const es = {
   conjurosPor: 'Conjuros por',
   habilidades: 'Habilidades',
   tiradasSalvacion: 'Salvaciones',
+  verFicha: 'Ver la ficha entera',
+  fichaDe: 'Ficha de',
+  puntuaciones: 'Características',
+  segunLaFicha: 'según la ficha',
+  soloCaracteristica: 'sólo característica',
+  habilidadesSinDeclarar:
+    'La ficha no declara habilidades, así que estas son sólo el modificador de ' +
+    'característica: a quien tenga competencia o experticia le falta el bono. ' +
+    'Para verlas exactas, que la ficha escriba una línea «Habilidades: …».',
 
   oro: 'Oro',
   equipo: 'Equipo',

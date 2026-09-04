@@ -12,12 +12,13 @@
 import { useMemo, useState } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
-import { abilityMod, formatMod, type Abilities, type SheetStats, type StatedMod } from '../../../shared/vault/sheet.ts'
+import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import { Charges } from './Charges.tsx'
 import { ObjectDetail } from './ObjectDetail.tsx'
+import { PcSheet } from './PcSheet.tsx'
 import { Popover } from './Popover.tsx'
 import { artIndex, combatants, isDown, type Combatant } from './combat.ts'
 
@@ -25,6 +26,7 @@ export function PartyPanel() {
   const { state, characters, pnjs, objects, sheets, dispatch } = useDm()
   const [confirmLong, setConfirmLong] = useState(false)
   const [detail, setDetail] = useState<string | null>(null)
+  const [ficha, setFicha] = useState<string | null>(null)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
   const pcs = useMemo(
@@ -47,6 +49,7 @@ export function PartyPanel() {
   const holderOf = (id: string) => all.find((c) => c.live.objects.includes(id))
 
   const detailObject = objects.find((o) => o.id === detail)
+  const fichaOf = ficha ? (party.find((p) => p.ref === `pc:${ficha}`) ?? null) : null
 
   return (
     <div className="fichas">
@@ -82,9 +85,19 @@ export function PartyPanel() {
             everyone={all}
             usesOf={(id) => state.objects[id]}
             onDetail={setDetail}
+            onSheet={() => setFicha(c.ref.slice(3))}
           />
         ))}
       </div>
+
+      {fichaOf && (
+        <PcSheet
+          c={fichaOf}
+          sheet={sheets[ficha!]}
+          noteFile={characters.find((ch) => ch.id === ficha)?.file ?? null}
+          onClose={() => setFicha(null)}
+        />
+      )}
 
       {detailObject && (
         <ObjectDetail
@@ -117,6 +130,7 @@ function PcCard({
   everyone,
   usesOf,
   onDetail,
+  onSheet,
 }: {
   c: Combatant
   sheet: SheetStats | undefined
@@ -124,6 +138,7 @@ function PcCard({
   everyone: Combatant[]
   usesOf: (id: string) => { uses: number; spent: boolean } | undefined
   onDetail: (id: string) => void
+  onSheet: () => void
 }) {
   const dispatch = useDm((s) => s.dispatch)
   const slots = sheet?.slots ?? {}
@@ -131,29 +146,6 @@ function PcCard({
   const acBonus = carried.reduce((sum, o) => sum + (o.mods.ac ?? 0), 0)
   // Shown side by side rather than added up: the sheet's AC is the sheet's,
   // and whether a second source of AC stacks is not this app's ruling to make.
-  const rolls = [
-    sheet?.initMod !== null && sheet?.initMod !== undefined
-      ? [es.iniciativaLarga, formatMod(sheet.initMod)]
-      : null,
-    sheet?.proficiency != null ? [es.competencia, formatMod(sheet.proficiency)] : null,
-    sheet?.passivePerception != null
-      ? [es.percepcionPasiva, String(sheet.passivePerception)]
-      : null,
-    // The casting line, for whoever has one. A rogue's sheet has none, so
-    // these fall away rather than showing a dash.
-    sheet?.spellDc != null ? [es.cdConjuros, String(sheet.spellDc)] : null,
-    sheet?.spellAttack != null ? [es.ataqueConjuros, formatMod(sheet.spellAttack)] : null,
-    sheet?.spellAbility ? [es.conjurosPor, sheet.spellAbility] : null,
-  ].filter(Boolean) as [string, string][]
-
-  /**
-   * Skills and saves, only where the sheet quotes them. Nothing is derived:
-   * see `statedMods` in `sheet.ts` for why a guess is worse than a blank.
-   */
-  const stated: [string, StatedMod[]][] = [
-    [es.habilidades, sheet?.skills ?? []],
-    [es.tiradasSalvacion, sheet?.saves ?? []],
-  ].filter(([, mods]) => (mods as StatedMod[]).length > 0) as [string, StatedMod[]][]
   const givable = objects.filter((o) => !c.live.objects.includes(o.id) && !usesOf(o.id)?.spent)
 
   return (
@@ -170,48 +162,27 @@ function PcCard({
             {acBonus > 0 && ` (+${acBonus} ${es.porObjetos})`}
           </div>
         </div>
+        <button className="mini" title={es.verFicha} onClick={onSheet}>
+          &#9432;
+        </button>
         <button className="mini" onClick={() => dispatch({ type: 'hp/full', ref: c.ref })}>
           {es.alMaximo}
         </button>
       </div>
 
       {sheet?.abilities && (
-        <div className="stats">
+        // Modifiers only: the score itself is reference, and an ability call
+        // at the table wants the number you add. Both are in the ficha.
+        <div className="mod-strip">
           {SCORES.map(({ key, label }) => (
-            <div className="stat" key={key} title={`${label} ${sheet.abilities![key]}`}>
-              <span className="stat-label">{label}</span>
-              <span className="stat-mod">{formatMod(abilityMod(sheet.abilities![key]))}</span>
-              <span className="stat-score">{sheet.abilities![key]}</span>
+            <div className="mod" key={key} title={`${label} ${sheet.abilities![key]}`}>
+              <span className="mod-label">{label}</span>
+              <b>{formatMod(abilityMod(sheet.abilities![key]))}</b>
             </div>
           ))}
         </div>
       )}
 
-      {rolls.length > 0 && (
-        <div className="pc-field">
-          <span>{es.tiradas}</span>
-          <div className="rolls">
-            {rolls.map(([label, value]) => (
-              <span className="roll" key={label}>
-                {label} <b>{value}</b>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {stated.map(([label, mods]) => (
-        <div className="pc-field" key={label}>
-          <span>{label}</span>
-          <div className="rolls">
-            {mods.map((m) => (
-              <span className="roll" key={m.name}>
-                {m.name} <b>{formatMod(m.mod)}</b>
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
 
       {c.live.conditions.length > 0 && (
         <div className="chips" style={{ marginBottom: 4 }}>
