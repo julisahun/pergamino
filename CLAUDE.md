@@ -107,6 +107,15 @@ creature on both screens; the mask itself is live state (`field.reveal[ref]
 .name`), because taking it off is something that happens at the table. The log
 never reaches the television, so it keeps real names.
 
+Being at the table is having a ficha, and the projection draws that line too:
+`projectTable` lists whoever has a token *and* is revealed. «Quitar de la
+mesa» is `token/remove`, which leaves the ficha and its reveal in the session
+so `+ Añadir` can seat the same creature again with its hit points — and for a
+while the television went on showing a bandit the rail (which lists by token)
+could no longer reach. `token/remove` also takes the seat out of
+`encounter.members`, and `advance` skips a member with no token, because a run
+saved before that pruning can still carry one.
+
 The television window has no directory handle, so it cannot read a campaign
 even in principle. Keep it that way: it receives a `TableView` and blobs it
 asked for by key, over `app/src/transport/`. Nothing else.

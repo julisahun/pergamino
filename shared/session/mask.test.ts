@@ -43,7 +43,12 @@ function state(): SessionState {
     npc('b', 'Soldado ahogado'),
     npc('c', 'Soldado ahogado 1'),
   ]
-  for (const n of s.npcs) s.field.reveal[makeRef('npc', n.id)] = { on: true, hp: 'none', name: 'alias' }
+  s.npcs.forEach((n, i) => {
+    const ref = makeRef('npc', n.id)
+    s.field.reveal[ref] = { on: true, hp: 'none', name: 'alias' }
+    // Seated: the television only lists whoever has a ficha.
+    s.field.tokens[ref] = { x: i, y: 0 }
+  })
   return s
 }
 

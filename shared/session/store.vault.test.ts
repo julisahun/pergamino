@@ -33,7 +33,10 @@ describe('sync pause', () => {
   })
 
   const sceneOf = () => store.tableView().scene?.id ?? null
-  const anNpc = () => `npc:${store.state.npcs[0]!.id}` as `npc:${string}`
+  // One of the three added above — the last, never the first: the DM's live
+  // run may open with NPCs already in it, and whatever state they are in is
+  // theirs, not this test's.
+  const anNpc = () => `npc:${store.state.npcs.at(-1)!.id}` as `npc:${string}`
 
   it('holds the frame the table had when it was paused', () => {
     expect(sceneOf()).toBe(START)

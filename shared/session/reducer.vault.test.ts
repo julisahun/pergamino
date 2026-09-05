@@ -317,9 +317,12 @@ describe('initiative order', () => {
 })
 
 describe('turn advance', () => {
+  // Seated first: the turn only visits whoever has a ficha on the board.
   const seed = (): SessionState =>
     run(
       last(),
+      { type: 'token/place', ref: A },
+      { type: 'token/place', ref: B },
       { type: 'encounter/members', members: [A, B] },
       { type: 'encounter/init', ref: A, value: 18 },
       { type: 'encounter/init', ref: B, value: 5 },
@@ -438,6 +441,49 @@ describe('tablero', () => {
     // Nor does removing someone who is not.
     const gone = run(placed, { type: 'token/remove', ref: A })
     expect(run(gone, { type: 'token/remove', ref: A })).toBe(gone)
+  })
+
+  it('takes a member out of the fight along with the ficha', () => {
+    const before = run(
+      clearBoard(),
+      { type: 'token/place', ref: A },
+      { type: 'token/place', ref: B },
+      { type: 'encounter/start', members: [A, B], init: { [A]: 15, [B]: 9 } },
+      { type: 'encounter/advance', delta: 1 },
+    )
+    expect(before.encounter.activeRef).toBe(A)
+
+    // Off the table is out of the turn order — and off the active spot, so
+    // «Siguiente turno» cannot land on somebody neither screen can show.
+    const state = run(before, { type: 'token/remove', ref: A })
+    expect(state.encounter.members).toEqual([B])
+    expect(state.encounter.activeRef).toBeNull()
+    // The ficha and its roll stay, so seating them again is not starting over.
+    expect(state.play[PC1]).toBeDefined()
+    expect(state.encounter.init[A]).toBe(15)
+
+    // Somebody who was only watching leaves nothing behind in the encounter.
+    const watcher = run(before, { type: 'token/place', ref: C })
+    expect(run(watcher, { type: 'token/remove', ref: C }).encounter).toBe(watcher.encounter)
+  })
+
+  it('never gives the turn to a member whose ficha is gone', () => {
+    // A run saved before `token/remove` pruned the list: B is a member and
+    // has no token. The turn goes A → C → A, and B is never up.
+    const state = run(
+      clearBoard(),
+      { type: 'token/place', ref: A },
+      { type: 'token/place', ref: C },
+      { type: 'encounter/start', members: [A, B, C], init: { [A]: 20, [B]: 15, [C]: 10 } },
+    )
+    const turns: (string | null)[] = []
+    let s = state
+    for (let i = 0; i < 4; i++) {
+      s = run(s, { type: 'encounter/advance', delta: 1 })
+      turns.push(s.encounter.activeRef)
+    }
+    expect(turns).toEqual([A, C, A, C])
+    expect(s.encounter.round).toBe(2)
   })
 
   it('honours an explicit square, and leaves a placed token where it is', () => {

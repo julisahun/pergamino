@@ -122,7 +122,9 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
   quien está en el tablero, ni más ni menos. `+ Añadir` abre una lista con la
   party, los PNJ que ya están y los de la campaña — quien entra ahí sale en
   las dos — y el `⊗` junto a la cara saca a esa persona de la barra, del
-  tablero y del combate de una vez. Para que los jugadores no vean a alguien
+  tablero, del combate y de la tele de una vez: la pantalla de mesa lista a
+  quien tiene ficha y está revelado, no a quien está en la sesión. La ficha
+  se queda, con sus PG, para volver a sentarla. Para que los jugadores no vean a alguien
   que sí está, está el revelado de siempre (◉ / ○); no hace falta un tercer
   estado de «presente pero sin ficha», que es lo que había.
 - **Iniciar combate pregunta.** Antes metía a todo el mundo y tiraba d20 por

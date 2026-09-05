@@ -9,12 +9,13 @@
  */
 import { open } from './_browser.mjs'
 
-const { dm, shot, finish } = await open()
+const { dm, table, shot, finish } = await open({ table: true })
 await dm.waitForSelector('.mesa-bar')
 await dm.locator('.mesa-bar').getByRole('button', { name: 'Tablero', exact: true }).click()
 
 const tokens = () => dm.locator('.board .token').count()
 const rows = () => dm.locator('.rail-body .irow').count()
+const tvNames = () => table.locator('.hud-name').allTextContents()
 const fail = (msg) => {
   console.log(`  FAIL — ${msg}`)
   process.exitCode = 1
@@ -38,13 +39,23 @@ if ((await rows()) !== 3 || (await tokens()) !== 3) {
   fail('the party member and both rats should be in the rail and on the board')
 }
 
+// Revealed, so the television lists them too — that is what the removal
+// below has to reach: the rat's ficha and its reveal outlive its token, and
+// for a while the HUD went on showing somebody the rail could no longer see.
+await dm.locator('.rail-foot').getByTitle('Revelar todos').click()
+await dm.waitForTimeout(500)
+console.log(`  la mesa ve: ${(await tvNames()).join(' · ')}`)
+if ((await tvNames()).length !== 3) fail('the TV should list the party member and both rats')
+
 console.log('quitar de la mesa:')
 await dm.locator('.irow', { hasText: 'Sewer Cheese-Rat' }).last().getByTitle('Quitar de la mesa').click()
-await dm.waitForTimeout(400)
+await dm.waitForTimeout(500)
 console.log(`  on the rail: ${await rows()} · fichas: ${await tokens()}`)
 if ((await rows()) !== 2 || (await tokens()) !== 2) {
   fail('removing must take them out of the rail and off the board at once')
 }
+console.log(`  la mesa ve: ${(await tvNames()).join(' · ')}`)
+if ((await tvNames()).length !== 2) fail('the TV must drop whoever left the table')
 
 console.log('iniciar combate:')
 await dm.locator('.rail-head').getByRole('button', { name: 'Iniciar combate' }).click()

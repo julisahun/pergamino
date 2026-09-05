@@ -164,9 +164,15 @@ export function projectTable(state: SessionState, ctx: ProjectContext): TableVie
   const { field } = state
   const scene = field.sceneId ? ctx.scenes.get(field.sceneId) : undefined
 
+  // Being at the table is having a ficha — the rail lists exactly whoever
+  // has a token, and «Quitar de la mesa» is `token/remove`. The projection has
+  // to draw the same line, or a bandit the DM took off the board stays on the
+  // television's HUD (his ficha and his reveal outlive the token) while no
+  // row in the console can reach him any more. So: seated *and* revealed.
   const combatants: TableCombatant[] = []
   const visible = new Set<string>()
   for (const src of sources(state, ctx)) {
+    if (!field.tokens[src.ref]) continue
     const reveal = revealFor(state, src.ref)
     if (!reveal.on) continue
     visible.add(src.ref)

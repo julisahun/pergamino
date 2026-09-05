@@ -215,15 +215,43 @@ describe('projectTable — what reaches the TV', () => {
     expect(projectTable(state, ctx()).grid).toBeNull()
   })
 
-  it('shows PCs by default, with exact HP', () => {
+  it('shows a seated PC by default, with exact HP', () => {
     const state = last()
     const pcId = playingPcs(run)[0]!
     const info = pcsOf(run).get(pcId)!
     state.play[pcId]!.hp = 7
+    state.field.tokens[`pc:${pcId}`] = { x: 0, y: 0 }
     const c = projectTable(state, ctx()).combatants.find((c) => c.ref === `pc:${pcId}`)!
     expect(c.name).toBe(info.name)
     expect(c.hp).toBe(7)
     expect(c.hpMax).toBe(info.hpMax)
+  })
+
+  // Being at the table is having a ficha, on both screens. `seated()` puts
+  // the party in `state.play` and nobody on the board, which is what the
+  // console shows on opening a run: an empty rail. The television has to be
+  // as empty, or the party is on the HUD before the DM has seated anyone.
+  it('leaves a PC who is not on the table off the television', () => {
+    const state = last()
+    const pcId = playingPcs(run)[0]!
+    expect(state.field.tokens[`pc:${pcId}`]).toBeUndefined()
+    expect(projectTable(state, ctx()).combatants.some((c) => c.ref === `pc:${pcId}`)).toBe(false)
+  })
+
+  // The bug this pins: «Quitar de la mesa» is `token/remove`, and the ficha
+  // and its reveal outlive the token. The rail lists by token, so the DM lost
+  // sight of the bandit while the HUD went on showing him.
+  it('drops a revealed NPC the moment his ficha leaves the board', () => {
+    const state = last()
+    const ref = npcRef(state)
+    setReveal(state, [ref], 'exact')
+    expect(projectTable(state, ctx()).combatants.some((c) => c.ref === ref)).toBe(true)
+
+    const { state: gone } = reduce(state, { type: 'token/remove', ref }, 2_000)
+    const view = projectTable(gone, ctx())
+    expect(view.combatants.some((c) => c.ref === ref)).toBe(false)
+    expect(view.tokens[ref]).toBeUndefined()
+    expect(JSON.stringify(view)).not.toContain(ref.slice('npc:'.length))
   })
 })
 

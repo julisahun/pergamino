@@ -238,7 +238,11 @@ function advance(
   delta: 1 | -1,
   opts: ReduceOpts,
 ): { encounter: Encounter; wrapped: boolean } {
-  const order = orderMembers(state, state.encounter.members, opts)
+  // Only whoever is seated. `token/remove` takes a member out of the list
+  // itself now, but a run saved before it did can still carry someone whose
+  // ficha left the board, and a turn on them is a turn neither screen shows.
+  const seated = state.encounter.members.filter((ref) => state.field.tokens[ref])
+  const order = orderMembers(state, seated, opts)
   if (order.length === 0) return { encounter: state.encounter, wrapped: false }
   const current = state.encounter.activeRef
   const at = current ? order.indexOf(current) : -1
@@ -725,7 +729,19 @@ export function reduce(
       if (!field.tokens[action.ref]) return { state, log }
       const { [action.ref]: _drop, ...tokens } = field.tokens
       field.tokens = tokens
-      next = { ...state, field }
+      // Off the table is out of the fight: a member with no ficha is a turn
+      // that neither screen can show, and «Siguiente turno» would land on it.
+      // The ficha itself stays, so `+ Añadir` can seat them again with their
+      // hit points intact; the initiative stays with it for the same reason.
+      const { members, activeRef } = state.encounter
+      const encounter = members.includes(action.ref)
+        ? {
+            ...state.encounter,
+            members: members.filter((m) => m !== action.ref),
+            activeRef: activeRef === action.ref ? null : activeRef,
+          }
+        : state.encounter
+      next = { ...state, field, encounter }
       break
     }
     case 'token/place': {
