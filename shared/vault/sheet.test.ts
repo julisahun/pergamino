@@ -3,7 +3,7 @@
  * no vault, so this is the half of the sheet coverage that runs on CI.
  */
 import { describe, expect, it } from 'vitest'
-import { abilityMod, formatMod, parseSheet, sheetNameFor } from './sheet.ts'
+import { abilityMod, formatMod, isFc5Sheet, parseSheet } from './sheet.ts'
 
 /** Tolmo, trimmed: a level 1 fighter with *Alerta*, so DEX 10 but Iniciativa +2. */
 const TOLMO = `<?xml version='1.0' encoding='UTF-8'?>
@@ -70,6 +70,12 @@ describe('parseSheet', () => {
   it('survives an empty document', () => {
     const none = parseSheet('')
     expect(none).toEqual({
+      name: null,
+      race: null,
+      className: null,
+      background: null,
+      speed: null,
+      money: null,
       hpMax: null,
       initMod: null,
       level: null,
@@ -86,6 +92,9 @@ describe('parseSheet', () => {
       summary: null,
       weapons: [],
       spells: [],
+      feats: [],
+      items: [],
+      proficient: { saves: [], skills: [], expertise: [] },
     })
   })
 
@@ -178,6 +187,133 @@ describe('stated skills and saves', () => {
   })
 })
 
+/**
+ * The rest of a sheet, in the shape the real ones have: feats inside their
+ * section, a `<mod>` inside a feat, proficiency ids, equipped and loose items,
+ * a ritual and a spell with materials.
+ */
+const RASTRO = `<?xml version='1.0' encoding='UTF-8'?>
+<pc version="5">
+ <character>
+  <name>Rastro</name>
+  <race>
+   <name>Mediano</name>
+   <speed>30</speed>
+   <feat><name>Suerte</name><text>Repite los 1.</text></feat>
+  </race>
+  <class>
+   <name>Pícaro</name>
+   <level>1</level>
+   <proficiency>1</proficiency>
+   <proficiency>3</proficiency>
+   <proficiency>111</proficiency>
+   <proficiency>116</proficiency>
+   <proficiency>116</proficiency>
+   <feat>
+    <name>Experticia</name>
+    <text>Dobla dos.</text>
+    <mod><name>Experticia: sigilo</name><category>4</category><type>16</type></mod>
+   </feat>
+  </class>
+  <background><name>Criminal</name></background>
+  <money>24.0</money>
+  <feat><name>Alerta</name><text>Sumas competencia a la iniciativa.</text></feat>
+  <item><name>Armadura de cuero</name><type>1</type><slot>5</slot><ac>11</ac><weight>11.0</weight></item>
+  <item>
+   <name>Daga</name><type>5</type><slot>3</slot><quantity>2</quantity><weight>1.1</weight>
+   <damage1H>1d4</damage1H><text>Ataque +5, daño 1d4 +3 perforante.</text>
+  </item>
+  <item><name>Cuerda</name><weight>4.5</weight></item>
+  <spell>
+   <name>Detectar Magia</name><level>1</level><school>3</school>
+   <time>Acción</time><range>Personal</range><duration>10 minutos</duration>
+   <v>1</v><s>1</s><ritual>1</ritual>
+   <text>Notas la magia a 9 m.</text>
+   <sclass>Bardo</sclass><sclass>Mago</sclass>
+  </spell>
+  <spell>
+   <name>Encontrar Familiar</name><level>1</level><school>2</school>
+   <v>1</v><s>1</s><m>1</m><materials>10 po de carbón</materials>
+   <text>Un espíritu toma forma de animal.</text>
+  </spell>
+  <note>
+   <text>Mediano pícaro de nivel 1 (Criminal).
+
+CA 14 · PG 10 · Iniciativa +5 · Percepción pasiva 15 · Competencia +2
+Habilidades: Sigilo +7</text>
+  </note>
+  <abilities>10,17,12,10,14,12,</abilities>
+  <hpMax>10</hpMax>
+ </character>
+</pc>`
+
+describe('the rest of the sheet', () => {
+  const sheet = parseSheet(RASTRO)
+
+  it('reads who the character is', () => {
+    expect(sheet.name).toBe('Rastro')
+    expect(sheet.race).toBe('Mediano')
+    expect(sheet.className).toBe('Pícaro')
+    expect(sheet.background).toBe('Criminal')
+    expect(sheet.speed).toBe(30)
+    expect(sheet.money).toBe(24)
+  })
+
+  it('attributes each feat to the section it sits in, mods cut out', () => {
+    expect(sheet.feats).toEqual([
+      { name: 'Suerte', text: 'Repite los 1.', source: 'race' },
+      // The `<mod>` inside carries its own `<name>`; the feat keeps its own.
+      { name: 'Experticia', text: 'Dobla dos.', source: 'class' },
+      { name: 'Alerta', text: 'Sumas competencia a la iniciativa.', source: 'feat' },
+    ])
+  })
+
+  it('lists every item, and still only arms the ones with a die', () => {
+    expect(sheet.items).toEqual([
+      { name: 'Armadura de cuero', kind: 'light', equipped: 'armor', quantity: 1, weight: 11, ac: 11, damage: null, text: '' },
+      { name: 'Daga', kind: 'melee', equipped: 'weapon', quantity: 2, weight: 1.1, ac: null, damage: '1d4', text: 'Ataque +5, daño 1d4 +3 perforante.' },
+      { name: 'Cuerda', kind: null, equipped: null, quantity: 1, weight: 4.5, ac: null, damage: null, text: '' },
+    ])
+    expect(sheet.weapons.map((w) => w.name)).toEqual(['Daga'])
+  })
+
+  it('decodes proficiency ids once each, expertise from the mod', () => {
+    // 1 and 3 are DES and INT; 111 is Percepción, 116 Sigilo (stated twice).
+    expect(sheet.proficient).toEqual({
+      saves: ['dex', 'int'],
+      skills: ['Percepción', 'Sigilo'],
+      expertise: ['Sigilo'],
+    })
+  })
+
+  it('reads a spell\'s school, components and ritual tag', () => {
+    const [detectar, familiar] = sheet.spells
+    expect(detectar).toMatchObject({
+      school: 'Divinación',
+      time: 'Acción',
+      range: 'Personal',
+      duration: '10 minutos',
+      components: 'V, S',
+      ritual: true,
+      classes: ['Bardo', 'Mago'],
+    })
+    expect(familiar).toMatchObject({
+      school: 'Conjuración',
+      components: 'V, S, M (10 po de carbón)',
+      ritual: false,
+      classes: [],
+      time: null,
+    })
+  })
+
+  it('knows a Fight Club character from anything else', () => {
+    expect(isFc5Sheet(RASTRO)).toBe(true)
+    expect(isFc5Sheet(TOLMO)).toBe(true)
+    expect(isFc5Sheet('')).toBe(false)
+    expect(isFc5Sheet('<html><body>404</body></html>')).toBe(false)
+  })
+})
+
 describe('modifiers', () => {
   it('rounds down, including below ten', () => {
     expect([8, 9, 10, 11, 12, 17].map(abilityMod)).toEqual([-1, -1, 0, 0, 1, 3])
@@ -185,18 +321,5 @@ describe('modifiers', () => {
 
   it('writes a modifier the way a sheet does', () => {
     expect([formatMod(-1), formatMod(0), formatMod(3)]).toEqual(['-1', '+0', '+3'])
-  })
-})
-
-describe('sheetNameFor', () => {
-  it('pairs the note with the xml beside it', () => {
-    expect(sheetNameFor('el-cantor.md')).toBe('el-cantor-fc5.xml')
-  })
-
-  it("keeps the PJ's folder, so the xml stays inside it", () => {
-    // A PJ is a folder, and the loader enumerates `<pj>/<pj>.md`. Only the
-    // last segment is the note name; rewriting the whole path would look for
-    // the sheet one level up, where nothing is.
-    expect(sheetNameFor('toribio/toribio.md')).toBe('toribio/toribio-fc5.xml')
   })
 })

@@ -1,9 +1,17 @@
 /**
  * DM console state.
  *
- * This window *is* the server now. It holds the directory handle, owns the
- * `SessionStore`, builds the notes index, reads every asset, and publishes the
- * table projection over the transport. Nothing here talks to a network.
+ * This window holds the directory handle: it reads prep, builds the notes
+ * index, reads every asset, and publishes the table projection over the
+ * transport. What it no longer holds is the session. Live state and the party
+ * live on the campaign server, which runs the reducer; `dispatch` here is a
+ * message, and the state the panels render is whatever the server sent back.
+ *
+ * Bringing the console up is therefore two halves. The folder half is what it
+ * always was — pick, open, read. The server half comes after: is it there, is
+ * the token good, is this campaign registered (`.pergamino/campaign.json`),
+ * publish the statblocks the reducer needs, connect. Each question the server
+ * half cannot answer is a `Phase` the welcome screen knows how to ask.
  */
 import { create } from 'zustand'
 import type { Action, FrozenSummary } from '../../../shared/actions.ts'
@@ -15,7 +23,6 @@ import type {
   Scene,
   SessionState,
 } from '../../../shared/types.ts'
-import { SessionStore } from '../../../shared/session/store.ts'
 import { projectDm } from '../../../shared/session/project.ts'
 import { pnjIndex } from '../../../shared/session/portraits.ts'
 import type { CampaignVault, AssetIndex } from '../../../shared/vault/binding.ts'
@@ -46,18 +53,29 @@ import {
   remembered,
   UnsupportedBrowserError,
 } from '../vault/open.ts'
+import { es } from '../strings/es.ts'
+import { api, ApiError } from '../net/api.ts'
+import { rememberToken, savedToken } from './auth.ts'
+import { publishPrep } from './publish.ts'
+import { RemoteSessionStore, type Connection } from './remoteStore.ts'
 
 export type { SheetStats }
 
 export type Tab = 'mesa' | 'party' | 'pnj' | 'objetos' | 'notas' | 'sesion' | 'preparacion'
 
-/** Where the console is in the business of having a folder open. */
+/** Where the console is in the business of having a folder open, then a server. */
 export type Phase =
   /** No folder yet — the picker is the whole screen. */
   | 'sin-carpeta'
   /** A remembered handle is there, but the grant needs a click. */
   | 'reabrir'
   | 'abriendo'
+  /** The folder is open; the server did not answer. */
+  | 'sin-servidor'
+  /** The folder is open; there is no token, or the server refused it. */
+  | 'sin-token'
+  /** The folder is open and has no `.pergamino/campaign.json` yet. */
+  | 'sin-registrar'
   | 'lista'
   | 'sin-soporte'
   | 'error'
@@ -90,13 +108,25 @@ export interface CloseDraft {
 /** The one asset cache the DM window uses, shared by every panel. */
 export const dmAssets = new AssetCache()
 
-const store = new SessionStore()
+/** The dev fixture registers under one id, wiped and rebuilt on every boot. */
+const FIXTURE_ID = 'fixture-example'
+
+const store = new RemoteSessionStore()
 let vault: CampaignVault | null = null
 let notes: NotesIndex | null = null
 let transport: TableTransport | null = null
 let unsubscribe: (() => void) | null = null
 /** The DM side of the asset channel — also what answers the table's requests. */
 let assetSource: VaultAssetSource | null = null
+/** Set under `?fixture=`: the sheets the demo party uploads to the dev server. */
+let fixtureSheets: (() => Promise<{ player: string; xml: string }[]>) | null = null
+/**
+ * `start` runs once. StrictMode mounts an effect twice in development, and a
+ * second boot racing the first used to be harmless — two in-memory vaults —
+ * but against a server it registers the campaign twice and seats the demo
+ * party twice.
+ */
+let started = false
 
 interface DmStore {
   phase: Phase
@@ -105,6 +135,7 @@ interface DmStore {
   campaign: string
   campaigns: string[]
   tab: Tab
+  /** The run folder bitácora and estado.md are written into. */
   mesa: string
   runs: string[]
   scenes: Scene[]
@@ -116,8 +147,14 @@ interface DmStore {
   state: SessionState | null
   /** Non-null while the table screen is holding an older frame. */
   frozen: FrozenSummary | null
-  /** Set when a save failed — Obsidian holding the file, a revoked grant. */
-  persistError: string | null
+  connection: Connection
+  hasToken: boolean
+  /** The server's id for this campaign, once registered. */
+  campaignId: string | null
+  /** The players' link, ready to hand out. */
+  link: string | null
+  /** The last thing the server refused, for the topbar. */
+  serverError: string | null
   error: string | null
   /** Set when another panel asks the Notas tab to open a specific note. */
   pendingNote: string | null
@@ -133,6 +170,17 @@ interface DmStore {
   openRun: (mesa: string) => Promise<void>
   openCampaign: (id: string) => Promise<void>
   reload: () => Promise<void>
+
+  // --- the server ---
+  setToken: (token: string) => Promise<void>
+  changeToken: () => void
+  retryServer: () => Promise<void>
+  register: () => Promise<void>
+  rotateLink: () => Promise<void>
+  addCharacter: (file: File, player: string) => Promise<void>
+  replaceSheet: (pcId: string, file: File) => Promise<void>
+  removeCharacter: (pcId: string) => Promise<void>
+  resetSession: () => Promise<void>
 
   noteList: () => { notes: NoteRef[]; tags: { tag: string; count: number }[] }
   readNote: (path: string) => NoteDoc | null
@@ -166,7 +214,11 @@ export const useDm = create<DmStore>((set, get) => ({
   assets: { images: [], pdfs: [], audio: [] },
   state: null,
   frozen: null,
-  persistError: null,
+  connection: 'inactiva',
+  hasToken: savedToken() !== null,
+  campaignId: null,
+  link: null,
+  serverError: null,
   error: null,
   pendingNote: null,
 
@@ -184,13 +236,16 @@ export const useDm = create<DmStore>((set, get) => ({
 
   /** Decide, without touching anything, what the console should offer. */
   start: () => {
+    if (started) return
+    started = true
     // `?fixture=example` mounts the bundled example campaign in memory. The
     // native directory picker cannot be driven from a script, so this is how
     // the Playwright runs get a campaign — and it is dev-only, so the
     // production bundle does not carry 370 kB of cheese.
     if (import.meta.env.DEV && new URLSearchParams(location.search).get('fixture')) {
-      void import('../fixtures/index.ts').then(async ({ openFixture }) => {
+      void import('../fixtures/index.ts').then(async ({ openFixture, fixtureSheets: sheets }) => {
         const { vault: memoryVault } = await openFixture()
+        fixtureSheets = () => sheets(memoryVault)
         await bringUp(memoryVault, set, 'example (fixture)')
       })
       return
@@ -230,7 +285,6 @@ export const useDm = create<DmStore>((set, get) => ({
   },
 
   close: async () => {
-    await store.flush()
     await forget()
     detach()
     set({
@@ -248,19 +302,18 @@ export const useDm = create<DmStore>((set, get) => ({
       characters: [],
       sheets: {},
       assets: { images: [], pdfs: [], audio: [] },
+      connection: 'inactiva',
+      campaignId: null,
+      link: null,
+      serverError: null,
     })
   },
 
+  /** The mesa only says where bitácora and estado.md are written now. */
   openRun: async (mesa) => {
     if (!vault || mesa === get().mesa) return
-    try {
-      await store.open(mesa)
-      rememberMesa(vault.campaignId, mesa)
-      syncFromStore(set)
-      publish()
-    } catch (err) {
-      set({ error: (err as Error).message })
-    }
+    rememberMesa(vault.campaignId, mesa)
+    set({ mesa })
   },
 
   openCampaign: async (id) => {
@@ -271,11 +324,114 @@ export const useDm = create<DmStore>((set, get) => ({
 
   reload: async () => {
     if (!vault) return
-    await store.reloadCampaign()
+    const campaign = await vault.loadCampaign()
+    store.setPrep(vault.title, campaign)
     notes = await vault.buildNotesIndex()
     set({ assets: await vault.listAssets() })
+    const token = savedToken()
+    const campaignId = get().campaignId
+    if (token && campaignId) {
+      try {
+        await publishPrep(token, campaignId, vault, campaign)
+      } catch (err) {
+        set({ serverError: (err as Error).message })
+      }
+    }
     syncFromStore(set)
     publish()
+  },
+
+  // --- the server ------------------------------------------------------------
+
+  setToken: async (token) => {
+    rememberToken(token.trim() || null)
+    set({ hasToken: Boolean(token.trim()), serverError: null })
+    if (vault) await connectServer(set)
+  },
+
+  /** Back to the token screen; the folder stays open behind it. */
+  changeToken: () => {
+    store.close()
+    set({ phase: 'sin-token', ready: false, connection: 'inactiva' })
+  },
+
+  retryServer: async () => {
+    if (vault) await connectServer(set)
+  },
+
+  register: async () => {
+    const token = savedToken()
+    if (!vault || !token) return
+    set({ phase: 'abriendo', error: null })
+    try {
+      const reg = await api.register(token, vault.title)
+      await vault.writeIdentity({
+        id: reg.id,
+        server: location.origin,
+        registered: new Date().toISOString().slice(0, 10),
+      })
+      await connectServer(set)
+    } catch (err) {
+      set({ phase: 'sin-registrar', error: (err as Error).message })
+    }
+  },
+
+  rotateLink: async () => {
+    const token = savedToken()
+    const id = get().campaignId
+    if (!token || !id) return
+    try {
+      const { url } = await api.rotateLink(token, id)
+      set({ link: url })
+    } catch (err) {
+      set({ serverError: (err as Error).message })
+    }
+  },
+
+  addCharacter: async (file, player) => {
+    const token = savedToken()
+    const id = get().campaignId
+    if (!token || !id) return
+    try {
+      await api.addCharacter(token, id, await file.text(), player)
+      set({ serverError: null })
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
+  },
+
+  replaceSheet: async (pcId, file) => {
+    const token = savedToken()
+    const id = get().campaignId
+    if (!token || !id) return
+    try {
+      await api.replaceSheet(token, id, pcId, await file.text())
+      set({ serverError: null })
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
+  },
+
+  removeCharacter: async (pcId) => {
+    const token = savedToken()
+    const id = get().campaignId
+    if (!token || !id) return
+    try {
+      await api.removeCharacter(token, id, pcId)
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
+  },
+
+  resetSession: async () => {
+    const token = savedToken()
+    const id = get().campaignId
+    if (!token || !id) return
+    try {
+      await api.reset(token, id)
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
   },
 
   // --- notes ---------------------------------------------------------------
@@ -317,8 +473,8 @@ export const useDm = create<DmStore>((set, get) => ({
   // --- Preparación ---------------------------------------------------------
 
   /**
-   * The one place the app writes prep. Refused while a run is live, so it can
-   * never be a *session* editing preparation — see `runs/README.md`.
+   * The one place the app writes a scene. Refused while a run is live, so it
+   * can never be a *session* editing preparation — see `runs/README.md`.
    */
   saveRoster: async (sceneId, roster) => {
     const state = get().state
@@ -412,6 +568,12 @@ export const useDm = create<DmStore>((set, get) => ({
 
 type Setter = (partial: Partial<DmStore>) => void
 
+/** What the server said, or what went wrong on the way there. */
+const describe = (err: unknown): string =>
+  err instanceof ApiError && err.code === 'bad-sheet'
+    ? es.fichaNoValida
+    : (err as Error).message
+
 /** Open a granted handle and bring the console up on it. */
 async function attach(
   handle: FileSystemDirectoryHandle,
@@ -430,15 +592,15 @@ async function attach(
 }
 
 /**
- * Everything that happens once there *is* a vault, whatever it is backed by:
- * a directory handle in normal use, an in-memory tree under `?fixture=`.
+ * The folder half: everything that happens once there *is* a vault, whatever
+ * it is backed by — a directory handle in normal use, an in-memory tree under
+ * `?fixture=`. Ends by asking the server half to take over.
  */
 async function bringUp(opened: CampaignVault, set: Setter, name: string): Promise<void> {
   set({ phase: 'abriendo', error: null, vaultName: name })
   detach()
   try {
     vault = opened
-    store.bind(vault)
 
     const runs = await vault.listRuns()
     if (runs.length === 0) {
@@ -450,9 +612,9 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
     }
     const wanted = lastMesa(vault.campaignId)
     const mesa = wanted && runs.includes(wanted) ? wanted : runs[0]!
-    await store.open(mesa)
     rememberMesa(vault.campaignId, mesa)
 
+    store.setPrep(vault.title, await vault.loadCampaign())
     notes = await vault.buildNotesIndex()
 
     // The DM window is the only one that can read the folder, so it is the
@@ -475,20 +637,102 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
     })
 
     set({
-      phase: 'lista',
-      ready: true,
       campaign: vault.campaignId,
       campaigns: await vault.listCampaigns(),
       runs,
+      mesa,
       assets: await vault.listAssets(),
       error: null,
     })
     syncFromStore(set)
-    publish()
+    await connectServer(set)
   } catch (err) {
     detach()
     set({ phase: 'error', ready: false, error: (err as Error).message })
   }
+}
+
+/**
+ * The server half. Each early return is a question for the welcome screen;
+ * the end is `lista`. Safe to call again after the DM answers one.
+ */
+async function connectServer(set: Setter): Promise<void> {
+  if (!vault) return
+  set({ phase: 'abriendo', ready: false, error: null })
+
+  try {
+    await api.ping()
+  } catch {
+    set({ phase: 'sin-servidor' })
+    return
+  }
+
+  const token = savedToken()
+  if (!token) {
+    set({ phase: 'sin-token', hasToken: false })
+    return
+  }
+  try {
+    await api.whoami(token)
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      set({ phase: 'sin-token', hasToken: true, serverError: es.sinAutorizar })
+    } else {
+      set({ phase: 'sin-servidor', serverError: (err as Error).message })
+    }
+    return
+  }
+
+  try {
+    let id: string
+    if (fixtureSheets) {
+      id = await fixtureIdentity(token, vault.title)
+    } else {
+      const identity = await vault.readIdentity()
+      if (!identity) {
+        set({ phase: 'sin-registrar' })
+        return
+      }
+      id = identity.id
+      // A wiped database still recognises the id the folder holds.
+      const known = await api.campaign(token, id)
+      if (!known.exists) await api.reregister(token, id, vault.title)
+    }
+
+    await publishPrep(token, id, vault, store.campaign)
+    await store.connect(id, token)
+    const summary = await api.campaign(token, id)
+
+    set({
+      phase: 'lista',
+      ready: true,
+      campaignId: id,
+      link: summary.exists ? summary.url : null,
+      serverError: null,
+    })
+    syncFromStore(set)
+    publish()
+  } catch (err) {
+    if ((err as Error).message === 'sin-autorizar') {
+      set({ phase: 'sin-token', serverError: es.sinAutorizar })
+    } else {
+      set({ phase: 'error', error: (err as Error).message })
+    }
+  }
+}
+
+/**
+ * The fixture's campaign on the dev server: torn down and rebuilt on every
+ * boot, so each driver starts from the same party and an empty table — the
+ * isolation a fresh `MemoryVault` used to give for free.
+ */
+async function fixtureIdentity(token: string, title: string): Promise<string> {
+  await api.remove(token, FIXTURE_ID).catch(() => undefined)
+  await api.reregister(token, FIXTURE_ID, title)
+  for (const { player, xml } of await fixtureSheets!()) {
+    await api.addCharacter(token, FIXTURE_ID, xml, player)
+  }
+  return FIXTURE_ID
 }
 
 function detach(): void {
@@ -496,6 +740,7 @@ function detach(): void {
   unsubscribe = null
   transport?.close()
   transport = null
+  store.close()
   dmAssets.setSource(null)
   assetSource = null
   notes = null
@@ -505,7 +750,6 @@ function detach(): void {
 /** Copy the store's view of the world into the React state. */
 function syncFromStore(set: Setter): void {
   set({
-    mesa: store.mesa,
     scenes: store.campaign.scenes,
     // Stat blocks stay here; the inline base64 does not travel with them.
     pnjs: store.campaign.pnjs.map((m) => ({
@@ -516,9 +760,10 @@ function syncFromStore(set: Setter): void {
     objects: store.campaign.objects,
     characters: store.characters,
     sheets: Object.fromEntries(store.sheets),
-    state: projectDm(store.state),
+    state: store.synced ? projectDm(store.state) : null,
     frozen: store.frozenSummary(),
-    persistError: store.persistError,
+    connection: store.connection,
+    serverError: store.lastReject,
   })
 }
 

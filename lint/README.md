@@ -42,7 +42,7 @@ under a name that says what it is, rather than in `shared/`.
 ## If you change these
 
 The only consumer is `check-campaign.js`. Nothing here is bundled, typechecked
-or shipped: the deploy sends `dist/` and `server.py` and nothing else. Run
+or shipped: the deploy sends `dist/` and the bundled server and nothing else. Run
 
 ```bash
 node check-campaign.js campaigns/example

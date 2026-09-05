@@ -15,27 +15,21 @@
 import { describe, expect, it } from 'vitest'
 import { openMemoryVault } from '../../test/memory.ts'
 import { PLANTILLA } from '../../test/memory.ts'
-import { emptySession } from './session.ts'
 import { VaultWriteError } from './source.ts'
 
 const CAMPAIGN = 'campaigns/marea-chica'
 const RUN = `${CAMPAIGN}/runs/guils`
 
 /** Every prep folder that a live session must never be able to write. */
-const PREP = ['story', 'pnjs', 'objects', 'assets', 'pregenerados']
+const PREP = ['story', 'pnjs', 'objects', 'assets', 'pregenerados', 'players']
 
 describe('what a session can write', () => {
   it('lands every write inside runs/<mesa>/', async () => {
     const { vault, memory } = await openMemoryVault()
-    await vault.saveSession('guils', emptySession(), {})
     await vault.writeBitacora('guils', '01-2026-08-27.md', '# Sesión 1\n')
     await vault.writeEstado('guils', '# Estado\n')
 
-    expect(memory.writes).toEqual([
-      `${RUN}/session.json`,
-      `${RUN}/bitacora/01-2026-08-27.md`,
-      `${RUN}/estado.md`,
-    ])
+    expect(memory.writes).toEqual([`${RUN}/bitacora/01-2026-08-27.md`, `${RUN}/estado.md`])
     for (const path of memory.writes) expect(path.startsWith(`${RUN}/`)).toBe(true)
   })
 
@@ -43,15 +37,15 @@ describe('what a session can write', () => {
     const { vault, memory } = await openMemoryVault()
     // Everything a session does, in one go.
     await vault.loadCampaign()
-    await vault.loadRun('guils')
     await vault.listRuns()
     await vault.listAssets()
     await vault.buildNotesIndex()
+    await vault.readIdentity()
     await vault.readEstado('guils')
     await vault.readTemplate('guils')
     await vault.nextSessionNumber('guils')
     await vault.asset('assets/faro.jpg')
-    await vault.saveSession('guils', emptySession(), {})
+    await vault.writeEstado('guils', '# Estado\n')
 
     for (const opened of memory.openedWritable) {
       for (const prep of PREP) {
@@ -71,6 +65,19 @@ describe('what a session can write', () => {
 
     await scenarios.write('faro.json', '{}')
     expect(memory.writes).toEqual([`${CAMPAIGN}/scenarios/faro.json`])
+  })
+
+  it('writes the campaign id through its own door, and nowhere else', async () => {
+    const { vault, memory } = await openMemoryVault()
+    expect(await vault.readIdentity()).toBeNull()
+    const identity = { id: 'c-1', server: null, registered: '2026-09-05' }
+    await vault.writeIdentity(identity)
+    expect(memory.writes).toEqual([`${CAMPAIGN}/.pergamino/campaign.json`])
+    expect(memory.openedWritable).toContain(`${CAMPAIGN}/.pergamino`)
+    expect(await vault.readIdentity()).toEqual(identity)
+    // A dotdir: the notes walk does not list it.
+    const index = await vault.buildNotesIndex()
+    expect([...index.notes.keys()].some((p) => p.includes('.pergamino'))).toBe(false)
   })
 
   it('hands the loaders a directory that has no write to reach for', async () => {

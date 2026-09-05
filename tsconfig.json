@@ -22,6 +22,7 @@
     "app/src/**/*.tsx",
     "app/src/**/*.d.ts",
     "shared/**/*.ts",
+    "server/src/**/*.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
     "vite.config.ts",

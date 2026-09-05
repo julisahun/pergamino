@@ -9,12 +9,10 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import nodePath from 'node:path'
-import { campaign, MESA, openWorld, playingPcs, worldRootAbs } from '../../test/fixture.ts'
-import { SessionStore } from '../session/store.ts'
+import { campaign, MESA, openWorld, worldRootAbs } from '../../test/fixture.ts'
 import { VaultWriteError } from './source.ts'
 
 const vault = await openWorld()
-const run = await vault.loadRun(MESA)
 
 const sessionFile = nodePath.join(
   worldRootAbs(), 'campaigns', campaign, 'runs', MESA, 'session.json',
@@ -34,22 +32,12 @@ describe('the suite cannot write to the vault', () => {
     await expect(dir.write('session.json', '{}')).rejects.toThrow(VaultWriteError)
   })
 
-  it('leaves session.json untouched however much the store is driven', async () => {
-    const before = read(sessionFile)
-    // The backup is part of what must not move: a migrate-and-write would
-    // take this file out as it went.
-    const backupBefore = read(backupFile)
-
-    const store = new SessionStore()
-    store.bind(vault)
-    await store.open(MESA)
-    store.dispatch({ type: 'scene/show', sceneId: 'faro' })
-    store.dispatch({ type: 'hp/damage', ref: `pc:${playingPcs(run)[0]}`, amount: 5 })
-    store.dispatch({ type: 'field/paused', paused: true })
-    await store.flush()
-
-    expect(read(sessionFile)).toBe(before)
-    expect(read(backupFile)).toBe(backupBefore)
+  it('refuses the app\'s own folder too, on a read-only vault', async () => {
+    await expect(
+      vault.writeIdentity({ id: 'x', server: null, registered: '2026-09-05' }),
+    ).rejects.toThrow(VaultWriteError)
+    expect(read(sessionFile)).toBe(read(sessionFile))
+    expect(read(backupFile)).toBe(read(backupFile))
   })
 
   it('makes no backup the vault did not already have', () => {

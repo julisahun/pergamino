@@ -1,18 +1,24 @@
 # Pantalla de DM
 
-Consola de dirección para campañas de D&D. Dos ventanas en la misma máquina:
-la **consola** en el portátil del DM y la **pantalla de mesa** en la tele.
+Consola de dirección para campañas de D&D. La **consola** en el portátil del
+DM, la **pantalla de mesa** en la tele, la **ficha** de cada jugador en su
+móvil, y un servidor pequeño que guarda la party y el estado de la mesa.
 
-| Ventana | Ruta | Qué ve |
+| Pantalla | Ruta | Qué ve |
 |---|---|---|
 | Consola | `/` | Todo: fichas de PNJ, notas secretas, PNJ ocultos, preparación |
 | Mesa | `/tv` | Sólo lo revelado: arte de escena, tablero, marcador, documentos |
+| Ficha | `/pj#<enlace>` | Un PJ: su hoja entera y su estado, y de los demás lo mismo que ve la tele |
 
-**Los ficheros no salen de tu ordenador.** La consola abre tu carpeta con la
-File System Access API y la lee y la escribe desde el navegador. El servidor
-sólo sirve las dos páginas: no hay ninguna ruta que lea ni escriba un fichero
-de campaña, y ninguna que reciba uno. Por eso se puede alojar en público sin
-publicar la campaña de nadie.
+**La preparación no sale de tu ordenador.** La consola abre tu carpeta con la
+File System Access API y la lee desde el navegador: notas, escenas, arte,
+PNJ. Al servidor sólo llega lo que el reductor necesita — los bloques de
+estadísticas, las reglas de los objetos, los repartos de las escenas — y
+nunca la prosa. Lo que sí vive en el servidor son **los personajes** (la ficha
+`-fc5.xml` que sube cada jugador desde el enlace) y **el estado vivo** de la
+mesa: puntos de golpe, espacios, oro, quién lleva qué. Así un número existe en
+un sitio, y no en la carpeta del DM, en el móvil del jugador y en un
+`session.json` a la vez.
 
 Eso tiene un precio: **hace falta Chrome, Edge u otro navegador Chromium.**
 Firefox y Safari no implementan esa API todavía, y la app lo dice en vez de
@@ -22,20 +28,25 @@ fallar de forma rara.
 
 ```bash
 npm install
-npm run dev          # http://127.0.0.1:5173
+npm run dev          # el servidor (token `dev`, data/dev.sqlite) y Vite en :5173
 ```
 
 Abre la consola, pulsa **Abrir carpeta de campaña** y elige tu mundo
-(`talasia/`) o una campaña suelta (`marea-baja/`). Desde ahí, **Abrir
-pantalla de mesa** para la segunda ventana; arrástrala a la tele.
+(`talasia/`) o una campaña suelta (`marea-baja/`). La primera vez la consola
+pide el **token del DM** (el `DM_TOKEN` del servidor; en desarrollo, `dev`) y
+ofrece **Registrar la campaña**: el servidor le da un identificador, que se
+guarda en `.pergamino/campaign.json` dentro de la carpeta. Desde ahí, **Abrir
+pantalla de mesa** para la segunda ventana, y en **Party** el enlace que se
+reparte a los jugadores.
 
 El navegador recuerda la carpeta entre recargas, pero el permiso caduca: al
 volver, la consola ofrece **Reabrir** y basta un clic para recuperarlo.
 
-En producción son ficheros estáticos servidos por `server.py`:
+En producción es un solo proceso de Node — las páginas y la API — con su
+configuración en un `.env` (ver `deploy/env.example`):
 
 ```bash
-npm run build
+npm run build        # las páginas en dist/ y el servidor en server/dist/index.mjs
 npm start            # http://127.0.0.1:8085  ($DM_PORT)
 ```
 
@@ -59,10 +70,12 @@ Antes eso era una comparación de rutas (`assertWritable`). Ahora es la **forma
 de los tipos**. Los cargadores reciben un `VaultDir`, que no tiene `write`, y
 un handle no puede nombrar a su padre — así que escribir fuera de una partida
 no es algo que se rechace en tiempo de ejecución: es un error de compilación.
-Sólo dos descensos resuelven un `WritableVaultDir`:
+Sólo tres descensos resuelven un `WritableVaultDir`:
 
-- `runs/<mesa>/` mientras se juega
+- `runs/<mesa>/` — la bitácora y el `estado.md` al cerrar sesión
 - `scenarios/` desde **Preparación**, cerrada mientras haya partida en marcha
+- `.pergamino/` — la carpeta propia de la app, con el identificador de la
+  campaña; se escribe una vez al registrarla
 
 `shared/vault/scope.test.ts` lo comprueba sobre un vault en memoria que anota
 qué handles se pidieron con permiso de escritura y dónde cayó cada escritura.
@@ -70,10 +83,28 @@ qué handles se pidieron con permiso de escritura y dónde cayó cada escritura.
 Y como esa regla sólo cubre *dónde* se escribe, no *en qué vault*, las pruebas
 abren el vault real de sólo lectura (`test/fixture.ts`): el handle lanza antes
 de tocar un byte, en vez de que una comprobación lo atrape.
-`shared/vault/readonly.vault.test.ts` conduce el store a propósito y comprueba que
-`session.json` no cambia.
 
-## Las dos ventanas
+## El servidor
+
+`server/` es Node con SQLite, y corre **el mismo reductor** que la consola
+corría antes en la pestaña y que las pruebas siguen conduciendo. Es el dueño
+de dos cosas: los personajes — la ficha que subió cada jugador y su estado
+vivo — y la sesión, con un número de revisión que crece con cada acción. La
+consola y los móviles le mandan acciones por WebSocket y reciben el estado
+entero de vuelta, cada uno en la forma que le toca: a la consola todo, a un
+móvil la proyección de su personaje.
+
+Dos credenciales y ninguna cuenta: el **token del DM** (`DM_TOKEN` en el
+`.env`; sin él el servidor no arranca) para todo lo que hay bajo `/api/dm/`, y
+el **enlace de la campaña**, que da acceso al selector de personajes y a la
+ficha propia, y permite crear o sustituir un personaje a quien lo tenga. Se
+puede regenerar desde la consola.
+
+Lo que **no** llega al servidor: `story/`, las notas, la prosa de un PNJ, la
+descripción de un objeto, la nota de lectura de una escena, ninguna carpeta.
+`app/src/state/publish.ts` es donde se recorta antes de que salga un byte.
+
+## Las pantallas
 
 La pantalla de mesa **no tiene handle de carpeta**. No puede leer el vault ni
 en principio — una garantía más fuerte que la del servidor anterior, que al
@@ -90,6 +121,15 @@ Lo que cruza el `BroadcastChannel` es:
 `app/src/transport/` define la interfaz; `BroadcastChannelTransport` es la
 única implementación hoy. Un relé para una tele en otra habitación rellenaría
 los mismos cuatro métodos sin tocar ningún panel.
+
+La **ficha** (`/pj#<enlace>`) es la segunda frontera, con la misma disciplina.
+`projectPlayer` da a un móvil su personaje entero — hoja, estado, objetos que
+lleva — y de los demás exactamente la lista de combatientes de la tele,
+partida en `party` y `foes`: los PG de otro PJ siguen la regla de revelado de la
+pantalla de la sala, y un PNJ sin revelar no está. La nota del DM sobre el
+personaje no cruza. Lo que un jugador puede *hacer* es la lista de
+`shared/session/allow.ts`: su propia vida — PG, temporales, estados, espacios,
+oro, inventario, cargas de lo que lleva — y nada de la mesa.
 
 ## Qué hace
 
@@ -162,6 +202,10 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
 
 **Party** — la party y lo que lleva encima.
 
+- El **enlace para los jugadores**, con «Copiar» y «Nuevo enlace», y «Añadir
+  personaje» para subir una ficha `-fc5.xml` en nombre de alguien. Cada
+  tarjeta puede **sustituir la ficha** (una subida de nivel: el estado vivo se
+  conserva) o **quitar al personaje de la campaña**.
 - PG, CA, oro, espacios de conjuro, equipo y descansos.
 - Las seis características con su modificador, y las tiradas que dependen de
   la hoja: iniciativa, competencia y percepción pasiva. Todo sale del
@@ -221,11 +265,14 @@ existen:
 | `scenarios/*.json` | escena, arte, rejilla, nota de lectura, reparto |
 | `pnj/*.md` | CA, PG, iniciativa, rasgos, retrato y `alias` en el front matter; la nota, debajo. Un rasgo que escriba daño («+3 al ataque, 1d6+1 de daño») sale además como acción |
 | `objects/*.md` | `mods.ac`, `usos` y efectos en el front matter; la nota, debajo |
-| `players/*.md` | la party compartida de la campaña: nombre, retrato y quién es |
-| `runs/<mesa>/players/*.md` | la party de esa mesa, que **tapa** la anterior por id |
-| `players/*-fc5.xml` | PG máximos, iniciativa y espacios **calculados**, más las armas y los conjuros con números |
 | `story/**.md`, `mundo/**.md` | las notas |
-| `runs/<mesa>/session.json` | el estado vivo |
+| `.pergamino/campaign.json` | el identificador con que el servidor conoce la campaña |
+
+Los personajes **no** se leen de la carpeta: son filas del servidor, hechas de
+la ficha `-fc5.xml` que sube cada jugador — PG máximos, iniciativa, espacios,
+armas, conjuros, rasgos, equipo y competencias, todo **calculado** por quien la
+generó. Una carpeta `players/` que siga ahí es material (trasfondos, guías, el
+json del creador), alcanzable como notas y nunca leído como party.
 
 Un PNJ y un objeto son **notas de Obsidian**: la ficha va en el front matter y
 la prosa debajo, en un solo fichero. Antes eran dos — `monsters/galo.json` y
@@ -255,37 +302,20 @@ pantallas exactamente igual — y los tapados cogen el siguiente número libre:
 *Soldado ahogado*, *Soldado ahogado 1* y Tulio como *Soldado ahogado 2*. La
 bitácora es de la consola, así que ahí sigue apuntando lo que hizo Tulio.
 
-Los PG de los PJ salen del `-fc5.xml` que genera `pregenerados/fightclub.py`, no
-de recalcular las reglas: así la Dureza Enana de El yunque (11 PG, no 10) sale
-bien sola.
+Los PG de los PJ salen del `-fc5.xml` que sube el jugador — el que genera
+`pregenerados/fightclub.py`, o el que exporta Fight Club 5 —, no de recalcular
+las reglas: así la Dureza Enana de El yunque (11 PG, no 10) sale bien sola. Lo
+único que la app suma es una habilidad que la hoja marca como competente pero
+no cita con número: característica más el bonificador de competencia que la
+propia hoja declara, y la fila lo dice (`derived`). La línea de la hoja, cuando
+la hay, manda.
 
-Las dos capas de `players/`: la campaña comparte una party y cada mesa puede
-tener la suya, que tapa la de arriba por id. El vault de Juli usa sólo la capa
-de mesa; la campaña de demostración usaba sólo la de campaña, que es como se
-descubrió que faltaba.
+### Ya no hay `session.json`
 
-### `session.json`: v2/v3/v4 → v5
-
-Se adopta el esquema del vault tal cual y se amplía. Al abrir una mesa se migra
-en memoria y, la primera vez que se reescribe, se deja el original al lado como
-`session.json.bak`.
-
-`field.paused` cambia de significado: en el esquema viejo bajaba un telón; aquí
-congela la sincronización y la pantalla de mesa mantiene su último fotograma.
-
-Lo que añade v4:
-
-- `field.handout` — documento en pantalla
-- `objects` — cargas por objeto, no por portador
-- `log` — el registro que alimenta la bitácora
-- `field.reveal` pasa a indexarse por `Ref` (`npc:<id>`), como `field.tokens`
-
-Y v5: cada PNJ sentado apuntaba a `monsters/<id>.json`; ahora apunta a su nota,
-`pnj/<id>.md`, que es la misma ruta con la que esa nota está en el índice.
-
-`field.fog` y `field.templates` eran de v4 y ya no se leen: las herramientas
-que los escribían no están. Un fichero viejo los conserva hasta la siguiente
-escritura, y el `.bak` conserva el original de todas formas.
+El estado vivo está en el servidor, con un número de revisión por acción, y
+la carpeta de la mesa no guarda ninguno. `runs/<mesa>/` conserva la bitácora,
+el `estado.md` y la plantilla; un `session.json` viejo se puede borrar. «Nueva
+sesión» archiva el estado en el servidor y vuelve a sentar a la party.
 
 ## Dos cosas que el esquema del vault mezclaba
 
@@ -301,16 +331,17 @@ escritura, y el `.bak` conserva el original de todas formas.
 ## Desarrollo
 
 ```bash
-npm test             # 172 aquí, 41 donde no está el vault de Juli
+npm test             # 324 aquí, 192 donde no está el vault de Juli
 npm run typecheck
 npm run build
 ```
 
 Las pruebas se parten según lo que tenga la máquina:
 
-- Lo que se apoya en **`MemoryVault`** (`test/memory.ts`) corre en cualquier
-  sitio: el guardián del alcance de escritura y las trece funciones asíncronas.
-  Eso es lo que corre en CI.
+- Lo que se apoya en **`MemoryVault`** (`test/memory.ts`) o en una SQLite en
+  memoria (`server/src/*.test.ts`) corre en cualquier sitio: el guardián del
+  alcance de escritura, las funciones asíncronas, y el servidor entero —
+  sesión, rutas y socket. Eso es lo que corre en CI.
 - **El vault real de Juli** (`../dnd/talasia`), abierto de sólo lectura. Es lo
   que comprueba que mover los módulos puros a `shared/` no cambió nada, y es
   privado: no está en ningún runner. Por eso esas pruebas se llaman
@@ -334,11 +365,15 @@ node scripts/e2e-catalogo.mjs     # los catálogos de PNJ y de objetos
 node scripts/e2e-notas.mjs        # índice, enlaces muertos, búsqueda
 node scripts/e2e-congelar.mjs     # la mesa congelada frente a la consola
 node scripts/e2e-preparacion.mjs  # el reparto de una escena, y el bloqueo
+node scripts/e2e-pj.mjs           # un móvil y la consola sobre la misma campaña
 ```
 
 Abren la app con `?fixture=example`, que monta `app/src/fixtures/example.json`
 en memoria: el selector nativo de carpetas no se puede conducir desde un
-script, y así no hay ningún vault que proteger. Ese fixture es **sólo de
+script, y así no hay ningún vault que proteger. La campaña de demostración se
+registra en el servidor de desarrollo con un identificador fijo, que se borra y
+se vuelve a crear en cada arranque — y `e2e.mjs` levanta un servidor en memoria
+si no hay ninguno escuchando. Ese fixture es **sólo de
 desarrollo** — el `build` de producción no lo lleva. Es además la única copia
 de la campaña de demostración que queda en el repo, así que trátalo como
 contenido y no como salida de build. Se regenera apuntándolo a una carpeta:
@@ -386,10 +421,14 @@ shared/                  todo el núcleo: lo comparten el navegador y las prueba
     render.ts            markdown → HTML con wikilinks navegables
     writeback.ts         bitácora y estado.md
   session/
-    store.ts             estado autoritativo, difusión y persistencia
-    reducer.ts           transiciones puras
+    reducer.ts           transiciones puras — corren en el servidor
     project.ts           estado → vista del DM / vista de la mesa
+    player.ts            estado → la vista de un jugador
+    allow.ts             lo que un jugador puede hacer
+    projection.ts        el contexto de una proyección y el fotograma congelado
+    seat.ts              sentar a la party
     portraits.ts         retratos por fichero de monstruo
+  protocol.ts            todo lo que cruza el cable
 
 app/
   index.html             la consola          →  /
@@ -397,6 +436,9 @@ app/
   src/
     vault/fsa.ts         VaultDir sobre FileSystemDirectoryHandle
     vault/open.ts        selector, permisos, handle en IndexedDB
+    net/                 el cliente REST y el socket que se reconecta
+    state/remoteStore.ts el estado tal como lo manda el servidor
+    state/publish.ts     lo que la carpeta publica, y lo que recorta
     transport/           la interfaz y BroadcastChannelTransport
     assets/              key → objectURL, y las dos fuentes de bytes
     dm/                  Mesa · Party · PNJ · Objetos · Notas
@@ -406,9 +448,14 @@ app/
     fixtures/            la campaña de demostración (sólo desarrollo)
     strings/es.ts        todos los textos
 
-server.py                host estático: dos páginas, assets, /api/ping
+server/                  Node + SQLite: personajes, estado vivo, las páginas
+  src/campaign.ts        una campaña viva: reduce, guarda, difunde
+  src/http.ts, ws.ts     la API y el socket
+  src/static.ts          el host estático que era server.py
+  build.mjs              esbuild → server/dist/index.mjs, un fichero para la Pi
+deploy/                  la unidad de systemd y el .env de ejemplo
 test/                    fixtures de las pruebas
-scripts/                 los drivers de Playwright
+scripts/                 los drivers de Playwright y dev.mjs
 
 scripts/migrate-pnj.mjs  fusiona el formato viejo (json + nota aparte) en éste
 check-campaign.js        linter del formato anterior — ver lint/README.md
@@ -421,5 +468,5 @@ elige al abrir la app.
 Los textos visibles están en castellano y en un solo fichero; el código, los
 identificadores y los nombres de fichero, en inglés.
 
-`engines.node` es sólo para desarrollo: la Pi no ejecuta Node, sólo
-`server.py`.
+La Pi ejecuta Node: un solo fichero, `server/dist/index.mjs`, sin
+`node_modules`, bajo `dm-app.service`.

@@ -85,14 +85,16 @@ combatant — never decide it yourself.
   pnj/<id>.md            people and creatures — statblock in front matter
   objects/<id>.md        items
   scenarios/<id>.json    scenes: art, grid, roster, reading note
-  players/<pj>/          one folder per PJ
-    <pj>.md              the note that *is* the character
-    <pj>-fc5.xml         every number on the card
   story/**.md            free notes, any depth
   assets/                art, handouts, ambience
-  runs/<mesa>/           one folder per table — the only writable place
+  runs/<mesa>/           one folder per table — bitácora and estado.md
+  .pergamino/            the app's own folder; it writes it, you never do
   README.md              optional, for a human
 ```
+
+**There is no `players/` to write.** The party lives on the server: each
+player uploads a `-fc5.xml` through the campaign's link, and the app never
+reads a character out of the folder. See §7.
 
 **Shape detection.** The DM picks a folder and the app decides what it is:
 
@@ -106,8 +108,8 @@ combatant — never decide it yourself.
 A campaign with no `scenarios/` and no `story/` therefore cannot be opened on
 its own. Write at least one of them.
 
-**Enumeration rules that apply everywhere.** `pnj/`, `objects/`,
-`scenarios/` and `players/` are read **one level deep, not recursively**. A
+**Enumeration rules that apply everywhere.** `pnj/`, `objects/` and
+`scenarios/` are read **one level deep, not recursively**. A
 file starting with `.` is skipped. `*.md` matches case-insensitively;
 `*.json` does not. `story/` is walked recursively, skipping dotfiles and
 `.obsidian`, `.git`, `.venv`, `node_modules`, `__pycache__`.
@@ -309,47 +311,28 @@ produces an entry that can never be seated.
 
 ---
 
-## 7. `players/<pj>/` — the party
+## 7. The party — not in the folder
 
-**A PJ is a folder.** `players/toribio/toribio.md` is the character; the note
-whose name matches the folder (case-insensitively) is the only one that counts.
-Everything else in there — `toribio-trasfondo.md`, a guía, the creator's json,
-pdfs — is *that character's* material, reachable as an ordinary note, and is
-never mistaken for a second member of the party.
+Characters are **rows on the server**, not files. A player opens the
+campaign's link on their phone, chooses «Crear personaje» and uploads a
+`-fc5.xml`; the server seats the character at full hit points and from then on
+the phone tracks its own live layer. Replacing the xml later (a level-up) keeps
+that live layer.
 
-A loose `players/x.md` at the top level is **not a character at all** and will
-not load. The folder is mandatory.
-
-```markdown
----
-id: toribio
-ficha: Toribio Pardo
-jugador: Ana
-portrait: assets/pj/toribio.jpg
----
-
-# Toribio Pardo
-
-Segundo hijo de un armador arruinado. Se enroló para no tener que explicarlo.
-```
-
-| Key | Type | Required | Default / note |
-|---|---|---|---|
-| `id` | string | no | File name without `.md`. It is the key the run layer overrides by (§8), so write it explicitly. |
-| `ficha` | string | no | **The displayed name**, taking precedence over the `# Heading`. Either is fine; do not let them disagree. |
-| `jugador` | string | no | `""`. The person at the table. `player` is accepted as an alias for this key. |
-| `portrait` | string | no | `null`. Campaign-relative. |
-| anything else | — | — | Ignored. |
-
-Every **number** comes from the xml beside it. Nothing in this note is
-mechanical.
+So there is nothing for you to write here. If the source material comes with
+pregenerated characters, produce their `-fc5.xml` files (§8) and hand them to
+the DM as files to upload — from the Party tab's «Añadir personaje», or by the
+players themselves. Prose about a character — a trasfondo, a guía — is an
+ordinary note under `story/`, linked like any other; nothing in it is
+mechanical, and the app never reads it as a member of the party.
 
 ---
 
 ## 8. `<pj>-fc5.xml` — the sheet, and the one place to be careful
 
-The file name is the note's name with `.md` replaced by `-fc5.xml`:
-`toribio/toribio.md` → `toribio/toribio-fc5.xml`, inside the PJ's folder.
+The sheet is what a player uploads, and it is the only mechanical source the
+app has for a character. It is a Fight Club 5 character file — what the DM's
+`pregenerados/fightclub.py` writes, and what Fight Club 5 itself exports.
 
 This app reads derived numbers out of this file **precisely so that it never
 re-derives hit points from class, CON and species traits and gets them subtly
@@ -363,8 +346,7 @@ instead. So:
 > infer AC from armour, do not add a proficiency bonus to anything.
 
 If the DM has `pregenerados/fightclub.py` or an equivalent generator, ask
-whether to leave the xml out entirely and let them generate it. A missing xml
-is handled cleanly: every number is simply absent from the card.
+whether to leave the xml out entirely and let them generate it.
 
 ### What is actually read
 
@@ -376,12 +358,19 @@ and, above all, the prose inside `<note><text>`.
 <pc version="5">
  <character>
   <name>Toribio Pardo</name>
-  <race><name>Humano</name><speed>30</speed></race>
-  <class><name>Guerrero</name><level>1</level></class>
+  <race><name>Humano</name><speed>30</speed>
+   <feat><name>Versátil</name><text>…</text></feat>
+  </race>
+  <class><name>Guerrero</name><level>1</level>
+   <proficiency>0</proficiency><proficiency>2</proficiency>
+   <proficiency>103</proficiency><proficiency>111</proficiency>
+  </class>
+  <background><name>Guardia</name></background>
+  <money>15.0</money>
   <slots>0,0,0,0,0,0,0,0,0,0,</slots>
-  <item><name>Cota de malla</name><ac>16</ac></item>
+  <item><name>Cota de malla</name><type>3</type><slot>5</slot><ac>16</ac></item>
   <item>
-    <name>Lanza</name>
+    <name>Lanza</name><type>5</type><slot>3</slot>
     <damage1H>1d6</damage1H>
     <text>Ataque +5, daño 1d6 +3 perforante.</text>
   </item>
@@ -404,43 +393,19 @@ Si algún número de la app no coincide con los de arriba, mandan los de arriba.
 
 | Source | Feeds | Required | Note |
 |---|---|---|---|
+| `<pc version="5">` … `<character>` | the upload is accepted at all | **yes** | Anything else is refused as «no es una ficha de Fight Club 5». |
+| `<name>` | the character's name | **effectively yes** | The first `<name>` in the document. It is what the picker shows. |
 | `<hpMax>` | max hit points | no | Falls back to `PG <n>` in the note text. One of the two must exist or the character has no HP. |
 | `<level>` | level | no | — |
 | `<abilities>` | the six scores | no | **Comma-separated, in order FUE, DES, CON, INT, SAB, CAR**, post-boost. Fewer than six values and all six are dropped. Modifiers are arithmetic on these; that is the one calculation the app does. |
 | `<slots>` | spell slots | no | Comma-separated. **Index 0 is cantrips**; indexes 1–9 are slot levels. Zeros are omitted from the result. Empty for non-casters. |
-| `<item>` with `<name>` **and** `<damage1H>` | a weapon | no | `<damage1H>` is what makes an item a weapon — structural, not prose. `<text>` is the line shown. An item without `<damage1H>` is not a weapon (that is how «Bastón (foco arcano)» stays off the list). |
-| `<spell>` with `<name>` | a spell | no | `<level>` absent = cantrip (`0`). `<roll>` and `<text>` are optional to *read*, but a spell without both is never offered as an action — see below. |
-| `<item><ac>` | **nothing** | — | **Not read.** It is the armour's base value; the app wants the final number, which only the note line has. |
-| `<race><speed>` | **nothing** | — | Not read. |
-
-### Which weapons and spells become actions
-
-The same action bar §4.1 describes is built for the party out of this file. A
-weapon with `<damage1H>` is always one. A spell becomes one only if it has a
-`<roll>` **and** its `<text>` says which of three shapes it is — the app reads
-the prose, in Spanish, because that is where the shape actually lives:
-
-| The text says | Shape | Keyed to |
-|---|---|---|
-| `Ataque de conjuro …` | attack roll | the `ataque +n` on the `Conjuros:` line |
-| `… salvación de <Habilidad> …` | a save the target makes | the `CD n` on the same line |
-| `Curas 2d8 + tu modificador …` | healing | that modifier, worked out as `ataque − competencia` |
-
-`la mitad si acierta` (or `la mitad de daño si acierta`) is what makes a made
-save still take half. Without it a made save takes nothing.
-
-**A spell with no `<roll>` is deliberately not an action, and that is a
-feature.** Grasa and Fuego Feérico say «salvación de Destreza» and roll nothing;
-Misil Mágico says «no fallan nunca» and its single `<roll>` describes neither
-the three darts nor the `+1`. None of them is offered, because a menu entry
-that half-works is worse than the DM reading the note. Do not add a `<roll>` to
-a spell to "make it work" — you would be inventing a mechanic. Write the spell
-as the source states it and let it stay prose.
-
-Watch the inverse too: `<roll>1d4</roll>` on Bendición or Guía is a bonus to
-somebody else's roll, not damage. Those are safely skipped only because their
-text names none of the three shapes — so never describe a buff with the word
-`salvación de` or `ataque de conjuro`.
+| `<race>`, `<class>`, `<background>` `<name>` | who they are | no | Shown on the sheet. `<race><speed>` is shown as stated. |
+| `<feat>` blocks | traits with their text | no | Attributed to the section they sit in (`race`, `class`, `background`) or to the character when they sit at the top level. A `<mod>` inside a feat is cut before its `<name>` is read. |
+| `<proficiency>` ids | proficient saves and skills | no | `0..5` a save by ability index; `100+i` a skill, `i` in **English alphabetical** order (Acrobatics 0 … Survival 17). Expertise is `<mod><category>4</category><type>i</type></mod>`. Decoded through a table — a lookup, not a rule. |
+| every `<item>` | equipment | no | `<type>` (1-3 armour light/medium/heavy, 4 shield, 5 melee, 6 ranged, 7 ammo), `<slot>` (3 in hand, 4 shield, 5 worn), `<quantity>`, `<weight>`, `<ac>` (the armour's base — never the character's AC), `<text>`. |
+| `<item>` with `<damage1H>` | a weapon, an *action* | no | `<damage1H>` is what makes an item a weapon — structural, not prose. `<text>` is the line the action is read from. |
+| `<spell>` with `<name>` | a spell | no | `<level>` absent = cantrip. `<school>` 1..8, `<time>`, `<range>`, `<duration>`, `<v>/<s>/<m>` + `<materials>`, `<ritual>`, `<sclass>`; `<roll>` and `<text>` feed the action. |
+| `<money>` | gold pieces | no | Shown; the live gold is tracked separately at the table. |
 
 ### The note line
 
@@ -454,9 +419,9 @@ Spanish and matched literally:
 | `PG <n>` | max HP, when `<hpMax>` is absent |
 | `Iniciativa +<n>` | initiative — **wins over DEX**, which is why a character with *Alerta* comes out right. Falls back to the DEX modifier when the line is missing. |
 | `Percepción pasiva <n>` | passive perception |
-| `Competencia +<n>` | proficiency bonus |
+| `Competencia +<n>` | proficiency bonus — also what a proficient skill the line does not quote is added up from |
 | `Conjuros: <Habilidad> · CD <n> · ataque +<n>` | casting ability, save DC, spell attack. Scoped to that one line. |
-| `Habilidades: Sigilo +7 · Percepción +5` | the stated skill modifiers, in order. Separator `·` or `,`. |
+| `Habilidades: Sigilo +7 · Percepción +5` | the stated skill modifiers, in order. Separator `·` or `,`. **A stated skill always wins** over the derived one. |
 | `Salvaciones: Fuerza +5 · Constitución +4` | the stated saves |
 | the first line of the text | the card's summary |
 
@@ -475,11 +440,12 @@ prep. You are writing prep. Keep out of the way.
 | Path | Write it? | Note |
 |---|---|---|
 | `runs/<mesa>/` | **yes**, if the DM named a mesa | The folder must exist or opening that mesa throws. Empty is fine — a mesa with no session is *sin empezar*. |
-| `runs/<mesa>/session.json` | **never** | Live state, written by the app, migrated from older schemas, backed up as `session.json.bak` on first rewrite. Authoring one by hand is how you corrupt a table. |
+| `runs/<mesa>/session.json` | **never** | There is none any more: live state lives on the server. An old one is dead weight the DM can delete. |
 | `runs/<mesa>/estado.md` | optional | Free markdown with `## ` headings. Closing a session appends bullets under headings that already exist. A short `# Estado` plus a paragraph is a good seed. |
 | `runs/<mesa>/bitacora/00-plantilla.md` | optional | The template a session note is drafted from. Give it `## Qué pasó` and `## Cambios de mundo` — those two headings are the ones the draft appends facts under. |
 | `runs/<mesa>/bitacora/NN-*.md` | no | Session notes, written on close. Numbering comes from the highest `NN` prefix present. |
-| `runs/<mesa>/players/<pj>/<pj>.md` | only if asked | A per-table party that **shadows the campaign's `players/` by `id`**. Same format as §7, xml included. Use the campaign layer unless the DM says this mesa has its own people. |
+| `runs/<mesa>/players/` | **no** | Not read. The party is on the server (§7). Material a DM keeps there stays material. |
+| `.pergamino/` | **never** | The app's own folder — the campaign's id, written by the console on registration. Not yours. |
 | `runs/<mesa>/<mesa>.md` | optional | A note about the table, for Obsidian. **Not read by the app.** |
 | `runs/<mesa>/pnj/`, `objects/`, `scenarios/` | **no** | `runs/README.md` in some vaults says a run can override these. **The app does not read them.** Writing them creates files that look meaningful and do nothing. |
 
@@ -553,9 +519,10 @@ exactly what this format was built to remove.
 - Anything inside a campaign folder that already existed before you started.
 - `session.json`, or any `.bak`.
 - `x`/`y` on a roster entry, or any token position.
-- `monsters/*.json`, `story/gente/*`, `players/*.md` at the top level, inline
-  base64 portraits, a `note:` field on a statblock. All of these are the
-  pre-merge format. They do not load.
+- `monsters/*.json`, `story/gente/*`, `players/**` as a party, inline base64
+  portraits, a `note:` field on a statblock, `session.json`. All of these are
+  earlier formats. They do not load.
+- Anything under `.pergamino/`.
 - A number you calculated rather than read.
 - An `id` that does not match its file name, unless the DM asked for it.
 - Front matter keys that "document" mechanics the app does not read, presented
@@ -585,8 +552,9 @@ dropped — so nothing here is optional.
       wrote, or appears in the list of assets the DM has to supply.
 - [ ] Every asset the DM picks from a menu is flat in `assets/`.
 - [ ] Every wikilink resolves, or is listed as deliberately dangling.
-- [ ] Every PJ is a folder whose note matches the folder name; the xml beside
-      it is named `<pj>-fc5.xml`.
+- [ ] Every pregenerated `-fc5.xml` opens with `<pc version="5">`, has a
+      `<name>`, and is handed to the DM as a file to upload — not written into
+      the campaign folder as a party.
 - [ ] Every number in every xml can be traced to a line in the source or to an
       answer the DM gave. List them if asked.
 - [ ] Speeds are metres. Grid squares are 1.5 m.

@@ -4,9 +4,11 @@
  * It is the successor to `paths.ts`, and it does the same job by a different
  * means. There are no path strings to compare and no `assertWritable`: the
  * campaign, the world and every prep folder are handed out as `VaultDir`,
- * which has no `write`, and exactly two descents resolve a `WritableVaultDir`
- * — `runs/<mesa>/` while playing, and `scenarios/` from Preparación. Writing
- * anywhere else is not refused at runtime; there is nothing to write it with.
+ * which has no `write`, and exactly three descents resolve a
+ * `WritableVaultDir` — `runs/<mesa>/` while playing, `scenarios/` from
+ * Preparación, and `.pergamino/`, the app's own folder, which holds the
+ * campaign's id and nothing a human edits. Writing anywhere else is not
+ * refused at runtime; there is nothing to write it with.
  *
  * The picked folder is shape-detected, so both layouts the format allows are
  * readable:
@@ -16,23 +18,13 @@
  *                                    lore is reachable from a campaign note
  *   contains `scenarios/`/`story/`   a flat campaign (`campaigns/<name>/`)
  */
-import * as path from '../pathish.ts'
-import type { Character, SessionState } from '../types.ts'
-import type { RunData, StoreVault } from '../session/store.ts'
-import { titleCase } from '../session/store.ts'
-import {
-  loadCampaign,
-  loadCharacters,
-  PLAYERS_DIR,
-  SCENARIOS_DIR,
-  type CampaignData,
-} from './campaign.ts'
+import { titleCase } from '../text.ts'
+import { loadCampaign, SCENARIOS_DIR, type CampaignData } from './campaign.ts'
 import { buildIndex, type NotesIndex } from './notes.ts'
-import { loadSession, saveSession } from './session.ts'
-import { readSheet, type SheetStats } from './sheet.ts'
 import {
   exists,
   fileAt,
+  readJson,
   VaultError,
   type VaultDir,
   type VaultFile,
@@ -51,9 +43,25 @@ export type VaultShape = 'world' | 'campaign'
 export const CAMPAIGNS_DIR = 'campaigns'
 export const RUNS_DIR = 'runs'
 export const ASSETS_DIR = 'assets'
+/** The app's own folder inside a campaign. Skipped by every note walk, being a dotdir. */
+export const PERGAMINO_DIR = '.pergamino'
+export const IDENTITY_FILE = 'campaign.json'
 // The prep folders are named where they are loaded from.
 export { OBJECTS_DIR, PNJ_DIR } from './pnj.ts'
-export { PLAYERS_DIR, SCENARIOS_DIR } from './campaign.ts'
+export { SCENARIOS_DIR } from './campaign.ts'
+
+/**
+ * What `.pergamino/campaign.json` holds: the id the server knows the campaign
+ * by. Minted by the server on registration and written here once; renaming
+ * the folder changes nothing, and two campaigns are told apart by it alone.
+ */
+export interface CampaignIdentity {
+  id: string
+  /** The server it was registered with, for the DM's information. */
+  server: string | null
+  /** ISO date. */
+  registered: string
+}
 
 const AUDIO_EXT = new Set(['.mp3', '.ogg', '.m4a', '.wav'])
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg'])
@@ -86,7 +94,7 @@ export async function detectShape(root: VaultDir): Promise<VaultShapeInfo> {
   )
 }
 
-export class CampaignVault implements StoreVault {
+export class CampaignVault {
   private constructor(
     /** The picked folder, writable. Only the two scoped descents use it. */
     private readonly rootWritable: WritableVaultDir,
@@ -155,54 +163,25 @@ export class CampaignVault implements StoreVault {
     return loadCampaign(this.campaignDir, this.prefix)
   }
 
-  /**
-   * Everything one run contributes: session, characters and their sheets.
-   *
-   * The party can live in two places. `importing.md` §6b says a run holds
-   * "that table's own party … which **shadow the campaign's by id**", so the
-   * campaign's `players/` is the shared party and `runs/<mesa>/players/`
-   * overrides it per character. The DM's own vault only uses the run layer;
-   * the demo campaign only used the campaign layer, which is how the
-   * discrepancy surfaced.
-   */
-  async loadRun(mesa: string): Promise<RunData> {
-    const run = await this.runRead(mesa)
-    if (!run) {
-      throw new VaultError(`No existe la mesa ${mesa} en ${RUNS_DIR}/`)
-    }
-    const [{ state, fromVersion }, shared, own] = await Promise.all([
-      loadSession(run, this.prefix),
-      loadCharacters(this.campaignDir, this.prefix),
-      loadCharacters(run, path.join(this.prefix, RUNS_DIR, mesa)),
-    ])
-    const sharedPlayers = await this.campaignDir.dir(PLAYERS_DIR)
-    const ownPlayers = await run.dir(PLAYERS_DIR)
+  // --- identity -------------------------------------------------------------
 
-    const characters: Character[] = []
-    const sheets = new Map<string, SheetStats>()
-    const playerFiles: Record<string, string> = {}
-    const layers: [typeof shared, VaultDir | null, string][] = [
-      [shared, sharedPlayers, `${PLAYERS_DIR}/`],
-      [own, ownPlayers, `${RUNS_DIR}/${mesa}/${PLAYERS_DIR}/`],
-    ]
-    for (const [loaded, dir, prefix] of layers) {
-      for (const { character, file } of loaded) {
-        const at = characters.findIndex((c) => c.id === character.id)
-        if (at === -1) characters.push(character)
-        else characters[at] = character
-        if (dir) sheets.set(character.id, await readSheet(dir, file))
-        playerFiles[character.id] = `${prefix}${file}`
-      }
+  /** The id the server knows this campaign by, or null before registration. */
+  async readIdentity(): Promise<CampaignIdentity | null> {
+    const dir = await this.campaignDir.dir(PERGAMINO_DIR)
+    if (!dir || !(await exists(dir, IDENTITY_FILE))) return null
+    const raw = (await readJson(dir, IDENTITY_FILE)) as Partial<CampaignIdentity> | null
+    if (!raw || typeof raw.id !== 'string' || !raw.id) return null
+    return {
+      id: raw.id,
+      server: typeof raw.server === 'string' ? raw.server : null,
+      registered: typeof raw.registered === 'string' ? raw.registered : '',
     }
-    return { state, fromVersion, characters, sheets, playerFiles }
   }
 
-  async saveSession(
-    mesa: string,
-    state: SessionState,
-    opts: { backup?: boolean } = {},
-  ): Promise<void> {
-    await saveSession(await this.run(mesa), state, opts)
+  /** Written once, on registration — the only prep write that is not a scene. */
+  async writeIdentity(identity: CampaignIdentity): Promise<void> {
+    const dir = await this.pergamino()
+    await dir.write(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`)
   }
 
   // --- the notes graph ------------------------------------------------------
@@ -267,7 +246,7 @@ export class CampaignVault implements StoreVault {
     return `${RUNS_DIR}/${mesa}/${written}`
   }
 
-  // --- the two writable descents -------------------------------------------
+  // --- the three writable descents -----------------------------------------
 
   /**
    * `runs/<mesa>/` — the only place a live session may write.
@@ -288,6 +267,14 @@ export class CampaignVault implements StoreVault {
    */
   scenarios(): Promise<WritableVaultDir> {
     return this.campaignWritable.createDir(SCENARIOS_DIR)
+  }
+
+  /**
+   * `.pergamino/` — the app's own folder, for the campaign's id. A dotdir,
+   * so no note walk ever lists it and Obsidian's graph never shows it.
+   */
+  pergamino(): Promise<WritableVaultDir> {
+    return this.campaignWritable.createDir(PERGAMINO_DIR)
   }
 
   /** A read-only handle on a run, for everything that only reads one. */

@@ -10,14 +10,14 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Ref, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
+import { loadParty, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
 import { nextName, orderMembers, reduce, liveOf, type ReduceOpts } from './reducer.ts'
 
 const vault = await openWorld()
 const { pnjs, objects } = await vault.loadCampaign()
 const byId = new Map(pnjs.map((m) => [m.id, m]))
 const objById = new Map(objects.map((o) => [o.id, o]))
-const runData = await vault.loadRun(MESA)
+const runData = await loadParty(vault)
 const pcs = pcsOf(runData)
 
 /** The PCs the mesa has live state for — whoever they are this campaign. */

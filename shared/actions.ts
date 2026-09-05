@@ -137,26 +137,8 @@ export type Action =
 
 export type ActionType = Action['type']
 
-/** Messages the server pushes to a window. */
 /** What the table screen is holding while sync is paused. */
 export interface FrozenSummary {
   scene: string | null
   handout: boolean
 }
-
-export type ServerMessage =
-  | { type: 'hello'; audience: Audience; mesa: string }
-  | {
-      type: 'dm'
-      state: import('./types.ts').SessionState
-      frozen: FrozenSummary | null
-    }
-  | { type: 'table'; view: import('./types.ts').TableView }
-  | { type: 'error'; message: string }
-
-export type Audience = 'dm' | 'table'
-
-/** Messages a window sends to the server. */
-export type ClientMessage =
-  | { type: 'action'; action: Action }
-  | { type: 'subscribe'; audience: Audience }

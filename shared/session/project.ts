@@ -40,6 +40,8 @@ export const revealFor = (state: SessionState, ref: Ref): RevealState =>
 /** What the server knows about a PC from its sheet, not from live state. */
 export interface PcInfo {
   name: string
+  /** The person at the table. Free text off the note; nothing routes on it. */
+  player: string
   /** All three derived from the `-fc5.xml` sheet; null when it is missing. */
   hpMax: number | null
   initMod: number | null
@@ -57,8 +59,12 @@ export interface ProjectContext {
   title: string
   pcs: Map<string, PcInfo>
   scenes: Map<string, Scene>
-  /** PNJ keyed by both `file` and `id`, for portrait fallback. */
-  pnjs: Map<string, Pnj>
+  /**
+   * PNJ keyed by both `file` and `id`, for portrait fallback. Without `lead`,
+   * because the server builds one of these from the published statblocks and
+   * the prose never gets that far.
+   */
+  pnjs: Map<string, Omit<Pnj, 'lead'>>
 }
 
 /**

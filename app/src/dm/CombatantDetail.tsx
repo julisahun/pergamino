@@ -4,12 +4,20 @@ import type { Ref } from '../../../shared/types.ts'
 import { CONDITIONS } from '../../../shared/conditions.ts'
 import { revealFor, tableNames } from '../../../shared/session/project.ts'
 import { es } from '../strings/es.ts'
+import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import { isDead, isDown, type Combatant } from './combat.ts'
 
 export function CombatantDetail({ c }: { c: Combatant | null }) {
   const { dispatch, pnjs, objects, openNote, state, characters } = useDm()
+  // Hooks run before the early return below, so they tolerate no selection.
+  const temp = useDraft(c?.live.temp || '', (t) => {
+    if (c) dispatch({ type: 'hp/temp', ref: c.ref, temp: Number(t || 0) })
+  })
+  const { onKeyDown: _ignoreEnter, ...noteProps } = useDraft(c?.live.note ?? '', (t) => {
+    if (c) dispatch({ type: 'live/note', ref: c.ref, note: t })
+  })
   const pcNameOf = (pcId: string) =>
     characters.find((ch) => ch.id === pcId)?.name || pcId
 
@@ -59,15 +67,7 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
           </button>
           <label className="row" style={{ gap: 6 }}>
             <span className="muted">{es.temporales}</span>
-            <input
-              className="hp-input"
-              value={c.live.temp || ''}
-              placeholder="0"
-              inputMode="numeric"
-              onChange={(e) =>
-                dispatch({ type: 'hp/temp', ref: c.ref, temp: Number(e.target.value || 0) })
-              }
-            />
+            <input className="hp-input" placeholder="0" inputMode="numeric" {...temp} />
           </label>
         </div>
         <div className="row">
@@ -192,10 +192,7 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
 
       <section className="card">
         <h3>{es.notaDm}</h3>
-        <textarea
-          value={c.live.note}
-          onChange={(e) => dispatch({ type: 'live/note', ref: c.ref, note: e.target.value })}
-        />
+        <textarea {...noteProps} />
         {c.npc && (
           <div className="row" style={{ marginTop: 8 }}>
             <button onClick={() => dispatch({ type: 'npc/remove', id: c.npc!.id })}>

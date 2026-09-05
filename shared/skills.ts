@@ -3,12 +3,13 @@
  * vocabulary table as `conditions.ts`, and no more of a rules engine than that
  * one is. Which ability a skill keys off is a name, not a derivation.
  *
- * What is *not* here is which skills a character is proficient in. That is the
- * one number this app will not compute: proficiency and expertise on top of an
- * ability is a build being re-derived, and `-fc5.xml` states skill proficiency
- * as opaque numeric ids (`<proficiency>104</proficiency>`) with no table
- * anywhere saying which skill each id is. So the sheet says the number or the
- * app shows the bare ability modifier and says that is what it is showing.
+ * Which skills a character is proficient in comes off the sheet: `-fc5.xml`
+ * states it as numeric ids (`<proficiency>104</proficiency>`) that
+ * `vault/fc5.ts` decodes — the same table the DM's generator writes with. What
+ * the sheet does not quote a number for, `skillRows` adds up from stated
+ * numbers and says so (`derived`): the ability's modifier plus the sheet's
+ * proficiency bonus, doubled for an expertise. The sheet's own line, when it
+ * has one, always wins.
  */
 import type { Abilities, SheetStats } from './vault/sheet.ts'
 import { abilityMod } from './vault/sheet.ts'
@@ -64,25 +65,42 @@ export interface SkillRow extends Skill {
   /**
    * True when the sheet quoted this one by name, which makes the number the
    * sheet's own — proficiency, expertise and anything else the build adds.
-   * False means it is the bare ability modifier and nothing more.
    */
   stated: boolean
+  /**
+   * True when the number is the ability's modifier plus the sheet's stated
+   * proficiency bonus (doubled for an expertise) — arithmetic on numbers the
+   * sheet gives, done here because the sheet did not quote this skill.
+   */
+  derived: boolean
+  proficient: boolean
+  expertise: boolean
 }
 
 /**
  * Every skill, with the sheet's number where the sheet gives one.
  *
- * A `Habilidades:` line quotes the skills that are *not* just their ability,
- * so whatever is missing from it is the ability modifier — which is why the
- * two can be merged into one honest list. Until a sheet writes that line,
- * every row comes back `stated: false` and the caller has to say so.
+ * A `Habilidades:` line quotes the skills that are *not* just their ability;
+ * a proficient skill it leaves out is added up from the sheet's proficiency
+ * bonus and marked `derived`; everything else is the bare ability modifier.
+ * With no sheet at all every row is null.
  */
 export function skillRows(sheet: SheetStats | undefined): SkillRow[] {
   const quoted = new Map((sheet?.skills ?? []).map((s) => [norm(s.name), s.mod]))
+  const proficient = new Set((sheet?.proficient.skills ?? []).map(norm))
+  const expertise = new Set((sheet?.proficient.expertise ?? []).map(norm))
   return SKILLS.map((skill) => {
-    const stated = quoted.get(norm(skill.name))
-    if (stated !== undefined) return { ...skill, mod: stated, stated: true }
+    const key = norm(skill.name)
+    const flags = { proficient: proficient.has(key) || expertise.has(key), expertise: expertise.has(key) }
+    const stated = quoted.get(key)
+    if (stated !== undefined) return { ...skill, ...flags, mod: stated, stated: true, derived: false }
     const score = sheet?.abilities?.[skill.ability]
-    return { ...skill, mod: score === undefined ? null : abilityMod(score), stated: false }
+    if (score === undefined) return { ...skill, ...flags, mod: null, stated: false, derived: false }
+    const bonus = sheet?.proficiency
+    if (flags.proficient && bonus !== null && bonus !== undefined) {
+      const mod = abilityMod(score) + bonus * (flags.expertise ? 2 : 1)
+      return { ...skill, ...flags, mod, stated: false, derived: true }
+    }
+    return { ...skill, ...flags, mod: abilityMod(score), stated: false, derived: false }
   })
 }

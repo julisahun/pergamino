@@ -29,7 +29,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['shared/**/*.test.ts'],
+    include: ['shared/**/*.test.ts', 'server/**/*.test.ts'],
     exclude: vault ? [] : ['shared/**/*.vault.test.ts'],
     // The real vault stays a fixture by construction rather than by flag:
     // `test/fixture.ts` opens it read-only, so a handle refuses the write

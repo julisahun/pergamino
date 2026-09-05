@@ -12,7 +12,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Ref, Scene } from '../../../shared/types.ts'
 import { assetUrl } from '../../../shared/session/project.ts'
-import { titleCase } from '../../../shared/session/store.ts'
+import { titleCase } from '../../../shared/text.ts'
 import { Art } from '../assets/context.tsx'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'

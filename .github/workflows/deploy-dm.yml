@@ -1,9 +1,18 @@
 # Ships the app to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
 #
-# Vite emits two pages into dist/, and that plus server.py is the entire
-# runtime set. No source, no node_modules and no Node reach the Pi — it runs
-# `python3 server.py` and nothing else, which is why dm-app.service needs no
-# change.
+# Vite emits the pages into dist/ and esbuild bundles the server into one file,
+# server/dist/index.mjs — `ws` and everything under shared/ inlined. That pair
+# plus deploy/dm-app.service, is the entire runtime set: no source, no
+# node_modules reach the Pi. It runs `node server/dist/index.mjs` under
+# dm-app.service — the unit on the box is a `systemctl link` to the shipped
+# file, so a change to it deploys like any other and takes effect on the
+# `daemon-reload` before the restart — with DM_TOKEN, DM_DB and PUBLIC_URL in
+# /opt/dm-app/.env.
+#
+# Two things on the Pi are never touched by this workflow: `.env`, and `data/`,
+# where the SQLite database and its backups live. Both are excluded from the
+# rsync — without that, `--delete` would take the database out with the
+# previous build.
 name: Deploy to Pi
 
 on:
@@ -35,13 +44,13 @@ jobs:
         run: npm ci
 
       # The DM's own vault is private and is not here, so `*.vault.test.ts` is
-      # skipped and vitest says so. What remains is the half that needs no
-      # filesystem: the write-scope guard and the async shells, both against an
-      # in-memory vault.
+      # skipped and vitest says so. What remains needs no filesystem: the pure
+      # core, the write-scope guard, the async shells against an in-memory
+      # vault, and the server against an in-memory database.
       - name: Tests
         run: npm test
 
-      # `npm run build` runs tsc --noEmit first, so this is types + bundle.
+      # `npm run build` runs tsc --noEmit first, so this is types + both bundles.
       - name: Build
         run: npm run build
 
@@ -53,43 +62,43 @@ jobs:
           tags: tag:ci
 
       # Staged first, then mirrored with --delete, so the deployed tree is
-      # *exactly* the runtime set: the two pages, their hashed assets, and the
-      # host. That also clears out the previous app, whose index.html, src/ and
-      # vendor/ are still sitting in $PI_DIR from the last deploy — inert under
-      # the new server.py, which serves nothing but dist/, but no reason to
-      # leave them there.
-      # `--delay-updates` holds every transferred file aside and renames the
-      # whole set into place at the end, and `--delete-after` waits until that
-      # has happened before removing what the last build left. Without the
-      # pair, the live server spends the transfer serving a half-swapped tree:
-      # a fresh index.html naming hashed assets that have not landed, or whose
-      # predecessors are already gone. That is a 404 on every asset, and it is
-      # what a reload during a deploy actually hit.
+      # *exactly* the runtime set. `--delay-updates` holds every transferred
+      # file aside and renames the whole set into place at the end, and
+      # `--delete-after` waits until that has happened before removing what
+      # the last build left — without the pair, the live server spends the
+      # transfer serving a half-swapped tree. `--exclude` keeps the database
+      # and the secrets out of the mirror's reach.
       - name: Ship the build to the Pi
         run: |
-          rm -rf /tmp/stage && mkdir -p /tmp/stage
+          rm -rf /tmp/stage && mkdir -p /tmp/stage/server/dist
           cp -R dist /tmp/stage/dist
-          cp server.py /tmp/stage/server.py
+          cp server/dist/index.mjs /tmp/stage/server/dist/index.mjs
+          cp -R deploy /tmp/stage/deploy
+          cp package.json /tmp/stage/package.json
           rsync -a --delete --delete-after --delay-updates \
+            --exclude 'data/' --exclude '.env' \
             -e "ssh -o StrictHostKeyChecking=accept-new" \
             /tmp/stage/ "$PI_USER@$PI_HOST:$PI_DIR/"
 
-      # Both pages *and everything they name*. Curling / and /tv only proves
-      # the html is there — it is a literal file on disk and answers 200 with
-      # or without a single asset beside it, which is exactly how a build with
-      # no reachable css shipped green.
+      # The pages *and everything they name*; the cache headers that once cost
+      # four hours of blank page; and the properties that make public hosting
+      # safe, re-asserted on the box: no route serves a campaign file, nothing
+      # under /api/dm/ answers without the token, an unknown link is a 404,
+      # and the database survived the deploy.
       - name: Restart & smoke test
         run: |
           ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
             'set -e
+             node --version
+             sudo systemctl daemon-reload
              sudo systemctl restart dm-app
-             for i in $(seq 1 10); do
+             for i in $(seq 1 15); do
                curl -sf http://localhost:8085/api/ping >/dev/null && break
                sleep 1
              done
-             curl -sf -o /dev/null http://localhost:8085/api/ping || {
+             curl -sf http://localhost:8085/api/ping || {
                echo "dm-app: never came back up" >&2; exit 1; }
-             for path in / /tv; do
+             for path in / /tv /pj; do
                html=$(curl -sf "http://localhost:8085$path") || {
                  echo "dm-app: $path did not answer" >&2; exit 1; }
                assets=$(printf %s "$html" | grep -oE "/assets/[A-Za-z0-9._-]+" | sort -u)
@@ -102,15 +111,17 @@ jobs:
                done
                echo "$path -> $(printf %s "$assets" | wc -w | tr -d " ") assets ok"
              done
-             # A cacheable 404 is what turned one bad deploy into four hours of
-             # blank page: the browser was told to keep the miss and stopped
-             # asking. Errors must stay unstorable.
              curl -sI http://localhost:8085/assets/nope.css | grep -qi "cache-control: no-store" || {
                echo "dm-app: a 404 is cacheable again" >&2; exit 1; }
-             # The property that makes public hosting safe, re-asserted on the
-             # box: no route serves a campaign file, and POST does not exist.
              curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/vault/x | grep -qx 404 || {
                echo "dm-app: /vault/ answered something" >&2; exit 1; }
-             curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/ | grep -qx 501 || {
-               echo "dm-app: POST is implemented" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/ | grep -qx 404 || {
+               echo "dm-app: POST / answered something" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -X POST -d "{}" http://localhost:8085/api/dm/campaigns | grep -qx 401 || {
+               echo "dm-app: the DM surface answers without a token" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/api/pj/nope | grep -qx 404 || {
+               echo "dm-app: an unknown link answered" >&2; exit 1; }
+             test -f /opt/dm-app/data/dm.sqlite || {
+               echo "dm-app: no database after the deploy" >&2; exit 1; }
+             ls -la /opt/dm-app/data
              echo ok'

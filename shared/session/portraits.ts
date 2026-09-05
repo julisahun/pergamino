@@ -5,8 +5,8 @@
  */
 import type { Pnj, Npc, Portrait } from '../types.ts'
 
-export const pnjIndex = (pnjs: Pnj[]): Map<string, Pnj> => {
-  const byFile = new Map<string, Pnj>()
+export const pnjIndex = <T extends Pick<Pnj, 'id' | 'file'>>(pnjs: T[]): Map<string, T> => {
+  const byFile = new Map<string, T>()
   for (const m of pnjs) {
     if (m.file) byFile.set(m.file, m)
     byFile.set(m.id, m)
@@ -19,7 +19,7 @@ export const hasArt = (p: Portrait | null | undefined): boolean =>
 
 export function resolveNpcPortrait(
   npc: Pick<Npc, 'portrait' | 'file' | 'id'>,
-  byFile: Map<string, Pnj>,
+  byFile: Map<string, Pick<Pnj, 'portrait'>>,
 ): Portrait | null {
   if (hasArt(npc.portrait)) return npc.portrait
   const pnj = (npc.file && byFile.get(npc.file)) || byFile.get(npc.id)

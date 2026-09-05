@@ -73,6 +73,16 @@ export async function open({ table = false, width = 1600, height = 1000 } = {}) 
   fs.mkdirSync(OUT, { recursive: true })
   const browser = await chromium.launch({ executablePath: findChromium() })
   const ctx = await browser.newContext({ viewport: { width, height } })
+  // The console needs the DM's token to reach the campaign server. It is set
+  // the way the DM sets it — in the tab's storage — not through any door the
+  // app itself opens for tests.
+  await ctx.addInitScript((token) => {
+    try {
+      localStorage.setItem('pantalla-dm.token', token)
+    } catch {
+      /* storage off */
+    }
+  }, process.env.DM_TOKEN ?? 'dev')
   const problems = []
   const watch = (page, name) => {
     page.on('pageerror', (e) => problems.push(`[${name}] ${e.message}`))

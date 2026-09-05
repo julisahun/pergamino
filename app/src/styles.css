@@ -1,52 +1,4 @@
-:root {
-  --ink: #e8e3d8;
-  --ink-dim: #a49c8c;
-  --ink-faint: #6b6558;
-  --bg: #14120f;
-  --bg-panel: #1c1915;
-  --bg-raised: #262119;
-  --line: #352f26;
-  --accent: #c9973f;
-  --accent-dim: #7a5c26;
-  --danger: #b4462f;
-  --ok: #5f8a4a;
-  --font-ui: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --font-read: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-}
-
-* { box-sizing: border-box; }
-
-html, body, #root { height: 100%; margin: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
-}
-
-button {
-  font: inherit;
-  color: var(--ink);
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 11px;
-  cursor: pointer;
-}
-button:hover:not(:disabled) { border-color: var(--accent-dim); background: #2f2820; }
-button:disabled { opacity: 0.4; cursor: default; }
-button[aria-pressed="true"] { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
-
-select, input[type="text"] {
-  font: inherit;
-  color: var(--ink);
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 9px;
-}
+@import './tokens.css';
 
 /* ----------------------------------------------------------- abrir carpeta */
 
@@ -1160,3 +1112,28 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 .act-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .act-foot select { font-size: 11px; padding: 3px 5px; max-width: 46%; }
 .act-foot > button:last-child { margin-left: auto; }
+
+/* --- the party on the server ------------------------------------------------ */
+.link-url {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.button-like {
+  display: inline-block;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.button-like:hover { border-color: var(--accent-dim); background: #2f2820; }

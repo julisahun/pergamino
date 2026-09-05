@@ -63,7 +63,11 @@ await dm.waitForSelector('.add-list')
 await dm.locator('.add-row', { hasText: 'Sewer Cheese-Rat' }).getByRole('button', { name: 'Añadir' }).click()
 await dm.getByRole('button', { name: 'Listo' }).click()
 await bar('Tablero').click()
-await dm.locator('.mesa-bar').getByRole('button', { name: 'Tablero' }).last().click()
+// The mode switch is a round trip to the server now; the board's own popover
+// appears when the state comes back, and clicking before that would hit the
+// mode button again.
+await dm.locator('.mesa-bar').getByRole('button', { name: 'Tablero ▾' }).waitFor()
+await dm.locator('.mesa-bar').getByRole('button', { name: 'Tablero ▾' }).click()
 await dm.getByRole('button', { name: 'Colocar fichas' }).click()
 await dm.keyboard.press('Escape')
 await dm.waitForSelector('.board .token')

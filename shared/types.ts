@@ -90,25 +90,24 @@ export interface Scene {
 }
 
 /**
- * `runs/<mesa>/players/*.md` — who the character is.
+ * A member of the party: a row on the server, created from the `-fc5.xml` its
+ * player uploaded through the campaign's link.
  *
- * Every number on the card comes from the `-fc5.xml` beside it (see
- * `sheet.ts`), which is the file that says so itself: *"Si algún número de la
- * app no coincide con los de arriba, mandan los de arriba"*. The character
- * creator's `dnd-creator-character` json used to sit here too, carrying a
- * build recipe this app never read a field of; it is gone.
+ * Every number on the card comes from that sheet (see `sheet.ts`), which is
+ * the file that says so itself: *"Si algún número de la app no coincide con
+ * los de arriba, mandan los de arriba"*. The vault keeps only prose about the
+ * character, as ordinary notes; nothing in it is read as a member of the party.
  */
 export interface Character {
   id: string
   name: string
+  /** The person at the table, as they typed it. */
   player: string
   portrait: Portrait | null
-  /** Vault-relative path of the note — also its key in `NotesIndex`. */
-  file: string
 }
 
 // ---------------------------------------------------------------------------
-// Live state — `runs/<mesa>/session.json` v5
+// Live state — held by the server, one per campaign
 // ---------------------------------------------------------------------------
 
 export const SESSION_VERSION = 5
@@ -249,7 +248,6 @@ export interface SessionState {
   play: Record<string, LiveState>
   /** Keyed by the id in `objects/*.md`. */
   objects: Record<string, ObjectState>
-  playerFiles: Record<string, string>
   npcs: Npc[]
   encounter: Encounter
   field: Field

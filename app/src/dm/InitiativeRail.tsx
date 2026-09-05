@@ -8,6 +8,7 @@ import type { Ref, RevealState } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { tableNames } from '../../../shared/session/project.ts'
 import { es } from '../strings/es.ts'
+import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import { ActionBar } from './ActionBar.tsx'
@@ -53,6 +54,10 @@ function RailRow({
   bar?: React.ReactNode
 }) {
   const dispatch = useDm((s) => s.dispatch)
+  const initDraft = useDraft(init ?? '', (t) => {
+    const v = Number(t)
+    if (t === '' || Number.isFinite(v)) dispatch({ type: 'encounter/init', ref: c.ref, value: v })
+  })
   const [amount, setAmount] = useState('')
 
   const apply = (sign: 1 | -1) => {
@@ -80,16 +85,10 @@ function RailRow({
       {showInit && (
         <input
           className="irow-init"
-          value={init ?? ''}
           placeholder="–"
           onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const v = Number(e.target.value)
-            if (e.target.value === '' || Number.isFinite(v)) {
-              dispatch({ type: 'encounter/init', ref: c.ref, value: v })
-            }
-          }}
           title={es.iniciativa}
+          {...initDraft}
         />
       )}
 

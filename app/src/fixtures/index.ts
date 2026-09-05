@@ -7,6 +7,7 @@
  */
 import { CampaignVault } from '../../../shared/vault/binding.ts'
 import { MemoryVault, type MemoryTree } from '../../../shared/vault/memory.ts'
+import { dirAt, fileAt } from '../../../shared/vault/source.ts'
 import snapshot from './example.json'
 
 interface Snapshot {
@@ -50,4 +51,24 @@ export async function openFixture(): Promise<Fixture> {
   const root = await memory.writableRoot().createDir(data.name)
   const vault = await CampaignVault.open(root)
   return { vault, memory }
+}
+
+/**
+ * The demo party's sheets, to be uploaded to the dev server on boot.
+ *
+ * The app no longer reads `players/` as a party — a character is a row on the
+ * server — but the snapshot keeps `players/<pj>/<pj>-fc5.xml` as *material*,
+ * which is exactly what a player would upload. The fixture boot does that
+ * upload, so every driver starts with the same party the way the DM's own
+ * campaign starts with the one the players created.
+ */
+export async function fixtureSheets(vault: CampaignVault): Promise<{ player: string; xml: string }[]> {
+  const players = await dirAt(vault.campaignDir, 'players')
+  if (!players) return []
+  const out: { player: string; xml: string }[] = []
+  for (const sub of (await players.list()).dirs.sort()) {
+    const file = await fileAt(players, `${sub}/${sub}-fc5.xml`)
+    if (file) out.push({ player: 'Demo', xml: await file.text() })
+  }
+  return out
 }

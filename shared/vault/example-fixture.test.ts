@@ -3,32 +3,35 @@
  *
  * `app/src/fixtures/example.json` is *content*, not build output — it is the
  * only copy of the demo campaign left, and the Playwright drivers are the only
- * thing that mounts it, on a machine with a cached Chromium. So a format change
- * in `shared/vault/` can quietly empty it and nothing fails until someone runs
- * the drivers: making a PJ a folder did exactly that, leaving the demo with a
- * `players/pip-nosewick.md` the loader no longer counts as a character.
+ * thing that mounts it. So a format change in `shared/vault/` can quietly
+ * empty it and nothing fails until someone runs the drivers.
  *
  * This runs everywhere — no vault, no browser — and imports the same
  * `openFixture` the app does, so it exercises the real path rather than a
  * reimplementation of it.
  */
 import { expect, it } from 'vitest'
-import { openFixture } from '../../app/src/fixtures/index.ts'
-import { PLAYERS_DIR } from './campaign.ts'
+import { fixtureSheets, openFixture } from '../../app/src/fixtures/index.ts'
+import { isFc5Sheet, parseSheet } from './sheet.ts'
 
-it('the bundled demo campaign still has a party the loader can read', async () => {
+it('the bundled demo campaign still loads, and has a run to write into', async () => {
   const { vault } = await openFixture()
   const [mesa] = await vault.listRuns()
   expect(mesa, 'the demo campaign needs a mesa').toBeDefined()
+  const campaign = await vault.loadCampaign()
+  expect(campaign.pnjs.length).toBeGreaterThan(0)
+  expect(campaign.scenes.length).toBeGreaterThan(0)
+  expect(await vault.readIdentity()).toBeNull()
+})
 
-  const run = await vault.loadRun(mesa!)
-  expect(run.characters.length).toBeGreaterThan(0)
-
-  for (const character of run.characters) {
-    // One folder per PJ: `players/<pj>/<pj>.md`, and the note is the identity.
-    expect(run.playerFiles[character.id]).toMatch(
-      new RegExp(`(^|/)${PLAYERS_DIR}/([^/]+)/\\2\\.md$`),
-    )
-    expect(character.name).not.toBe('')
+it('carries at least one sheet for the dev server to seat', async () => {
+  const { vault } = await openFixture()
+  const sheets = await fixtureSheets(vault)
+  expect(sheets.length).toBeGreaterThan(0)
+  for (const { xml } of sheets) {
+    expect(isFc5Sheet(xml)).toBe(true)
+    const sheet = parseSheet(xml)
+    expect(sheet.name).not.toBeNull()
+    expect(sheet.hpMax).not.toBeNull()
   }
 })

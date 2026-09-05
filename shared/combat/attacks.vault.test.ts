@@ -8,7 +8,7 @@
  * this is what says so, rather than an empty menu at the table.
  */
 import { describe, expect, it } from 'vitest'
-import { MESA, openWorld } from '../../test/fixture.ts'
+import { loadParty, openWorld } from '../../test/fixture.ts'
 import { isCombatant } from '../vault/pnj.ts'
 import { attacksOfPnj, attacksOfSheet } from './attacks.ts'
 import { formatDice } from './dice.ts'
@@ -44,7 +44,7 @@ describe('every pnj the app can seat', () => {
 
 describe('the party', () => {
   it('gets a weapon and, where the sheet casts, its spells', async () => {
-    const { characters, sheets } = await (await openWorld()).loadRun(MESA)
+    const { characters, sheets } = await loadParty(await openWorld())
     expect(characters.length).toBeGreaterThan(0)
 
     for (const character of characters) {
@@ -60,7 +60,7 @@ describe('the party', () => {
   })
 
   it('offers no spell it only half understands', async () => {
-    const { sheets } = await (await openWorld()).loadRun(MESA)
+    const { sheets } = await loadParty(await openWorld())
     const offered = new Set(
       [...sheets.values()].flatMap((s) => attacksOfSheet(s).map((a) => a.name)),
     )

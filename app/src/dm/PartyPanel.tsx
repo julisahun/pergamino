@@ -11,9 +11,11 @@
  */
 import { useMemo, useState } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
+import { refId } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
+import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import { Charges } from './Charges.tsx'
@@ -21,6 +23,99 @@ import { ObjectDetail } from './ObjectDetail.tsx'
 import { PcSheet } from './PcSheet.tsx'
 import { Popover } from './Popover.tsx'
 import { artIndex, combatants, isDown, pcSheets, type Combatant } from './combat.ts'
+
+/**
+ * The party lives on the server, and this is where it is tended: the link the
+ * players open to create their character, and a way for the DM to upload a
+ * sheet on someone's behalf.
+ */
+function PartyLink() {
+  const { link, rotateLink, addCharacter, characters } = useDm()
+  const [copied, setCopied] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [player, setPlayer] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const copy = async () => {
+    if (!link) return
+    try {
+      if (window.isSecureContext && navigator.clipboard) await navigator.clipboard.writeText(link)
+      else {
+        const input = document.getElementById('party-link') as HTMLInputElement | null
+        input?.select()
+        document.execCommand('copy')
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* the field is there to select by hand */
+    }
+  }
+
+  const submit = async () => {
+    if (!file) return
+    setBusy(true)
+    await addCharacter(file, player)
+    setBusy(false)
+    setAdding(false)
+    setFile(null)
+    setPlayer('')
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <span className="muted">{es.enlaceJugadores}</span>
+        <input
+          id="party-link"
+          className="link-url"
+          readOnly
+          value={link ?? ''}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+        <button className="mini" onClick={() => void copy()} disabled={!link}>
+          {copied ? es.enlaceCopiado : es.copiarEnlace}
+        </button>
+        <button className="mini" title={es.regenerarEnlaceAviso} onClick={() => void rotateLink()}>
+          {es.regenerarEnlace}
+        </button>
+        <span className="spacer" />
+        <button className="mini" aria-pressed={adding} onClick={() => setAdding((v) => !v)}>
+          {es.anadirPersonaje}
+        </button>
+      </div>
+      <p className="muted small" style={{ margin: '6px 0 0' }}>
+        {characters.length === 0 ? es.sinPersonajes : es.enlaceJugadoresAyuda}
+      </p>
+      {adding && (
+        <form
+          className="row"
+          style={{ marginTop: 8 }}
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submit()
+          }}
+        >
+          <input
+            type="text"
+            placeholder={es.nombreJugador}
+            value={player}
+            onChange={(e) => setPlayer(e.target.value)}
+          />
+          <input
+            type="file"
+            accept=".xml,application/xml,text/xml"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <button className="primary" type="submit" disabled={!file || busy}>
+            {busy ? es.subiendo : es.subir}
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
 
 export function PartyPanel() {
   const { state, characters, pnjs, objects, sheets, dispatch } = useDm()
@@ -43,6 +138,7 @@ export function PartyPanel() {
 
   return (
     <div className="fichas">
+      <PartyLink />
       <div className="row" style={{ marginBottom: 14 }}>
         <button onClick={() => dispatch({ type: 'rest/short', refs: partyRefs })}>
           {es.descansoCorto}
@@ -84,7 +180,6 @@ export function PartyPanel() {
         <PcSheet
           c={fichaOf}
           sheet={sheets[ficha!]}
-          noteFile={characters.find((ch) => ch.id === ficha)?.file ?? null}
           onClose={() => setFicha(null)}
         />
       )}
@@ -131,6 +226,16 @@ function PcCard({
   onSheet: () => void
 }) {
   const dispatch = useDm((s) => s.dispatch)
+  const replaceSheet = useDm((s) => s.replaceSheet)
+  const removeCharacter = useDm((s) => s.removeCharacter)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const pcId = refId(c.ref)
+  const gold = useDraft(c.live.gold, (t) =>
+    dispatch({ type: 'gold/set', ref: c.ref, gold: Number(t.replace(/\D/g, '')) || 0 }),
+  )
+  const { onKeyDown: _ignoreEnter, ...inventoryProps } = useDraft(c.live.inventory, (t) =>
+    dispatch({ type: 'inventory/set', ref: c.ref, text: t }),
+  )
   const slots = sheet?.slots ?? {}
   const carried = objects.filter((o) => c.live.objects.includes(o.id))
   const acBonus = carried.reduce((sum, o) => sum + (o.mods.ac ?? 0), 0)
@@ -186,14 +291,7 @@ function PcCard({
 
       <div className="pc-field">
         <span>{es.oro}</span>
-        <input
-          className="hp-input"
-          value={c.live.gold}
-          inputMode="numeric"
-          onChange={(e) =>
-            dispatch({ type: 'gold/set', ref: c.ref, gold: Number(e.target.value.replace(/\D/g, '')) || 0 })
-          }
-        />
+        <input className="hp-input" inputMode="numeric" {...gold} />
         <span className="muted">po</span>
       </div>
 
@@ -282,11 +380,39 @@ function PcCard({
 
       <div className="pc-field" style={{ alignItems: 'flex-start' }}>
         <span>{es.equipo}</span>
-        <textarea
-          value={c.live.inventory}
-          placeholder={es.sinObjetos}
-          onChange={(e) => dispatch({ type: 'inventory/set', ref: c.ref, text: e.target.value })}
-        />
+        <textarea placeholder={es.sinObjetos} {...inventoryProps} />
+      </div>
+
+      <div className="row pc-server" style={{ marginTop: 8, gap: 6 }}>
+        <label className="mini button-like" title={es.sustituirFicha}>
+          {es.sustituirFicha}
+          <input
+            type="file"
+            accept=".xml,application/xml,text/xml"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void replaceSheet(pcId, file)
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <span className="spacer" />
+        {confirmRemove ? (
+          <>
+            <span className="muted small">{es.confirmarQuitar}</span>
+            <button className="mini" onClick={() => void removeCharacter(pcId)}>
+              {es.quitarDeLaCampana}
+            </button>
+            <button className="mini" onClick={() => setConfirmRemove(false)}>
+              ✕
+            </button>
+          </>
+        ) : (
+          <button className="mini" onClick={() => setConfirmRemove(true)}>
+            {es.quitarDeLaCampana}
+          </button>
+        )}
       </div>
     </div>
   )

@@ -2,7 +2,9 @@
  * Every driving script, in order, against a dev server.
  *
  * They all open the app on `?fixture=example`, so there is no vault to
- * protect and nothing to configure — start `npm run dev` and run this.
+ * protect and nothing to configure — start `npm run dev` and run this. The
+ * fixture needs the campaign server too: if nothing answers on its port, one
+ * is started here on an in-memory database and stopped at the end.
  *
  * The write-discipline acceptance test that used to live beside these is
  * gone: with no server to script, the equivalent check is `scope.test.ts`
@@ -26,6 +28,7 @@ const SCRIPTS = [
   'e2e-catalogo.mjs',
   'e2e-mascara.mjs',
   'e2e-preparacion.mjs',
+  'e2e-pj.mjs',
 ]
 
 try {
@@ -34,6 +37,31 @@ try {
 } catch {
   console.error(`No dev server at ${BASE}. Run \`npm run dev\` first.`)
   process.exit(1)
+}
+
+const API_PORT = process.env.DM_PORT ?? '8085'
+const ping = async () => {
+  try {
+    const res = await fetch(`http://127.0.0.1:${API_PORT}/api/ping`, { signal: AbortSignal.timeout(1000) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+let server = null
+if (!(await ping())) {
+  server = spawn(process.execPath, ['server/src/index.ts'], {
+    cwd: path.resolve(here, '..'),
+    stdio: 'inherit',
+    env: { ...process.env, DM_TOKEN: process.env.DM_TOKEN ?? 'dev', DM_DB: ':memory:', DM_PORT: API_PORT },
+  })
+  for (let i = 0; i < 50 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 200))
+  if (!(await ping())) {
+    console.error('The campaign server never came up.')
+    server.kill()
+    process.exit(1)
+  }
+  console.log(`campaign server started on :${API_PORT} (in-memory)`)
 }
 
 let failed = 0
@@ -45,6 +73,7 @@ for (const name of SCRIPTS) {
   if (code !== 0) failed++
 }
 
+server?.kill('SIGTERM')
 console.log(
   failed === 0
     ? `\nall ${SCRIPTS.length} scripts passed`

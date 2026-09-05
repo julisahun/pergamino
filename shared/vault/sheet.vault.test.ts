@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { openWorld } from '../../test/fixture.ts'
 import { RUNS_DIR } from './binding.ts'
-import { dirAt } from './source.ts'
-import { abilityMod, emptySheet, readSheet } from './sheet.ts'
+import { dirAt, fileAt, type VaultDir } from './source.ts'
+import { abilityMod, emptySheet, parseSheet, type SheetStats } from './sheet.ts'
 
 const vault = await openWorld()
 
@@ -15,17 +15,28 @@ const playersOf = async (mesa: string) => {
 const last = await playersOf('last')
 
 /**
- * A PJ is a folder, so the note the loader enumerates is `<pj>/<pj>.md` and
- * the sheet it finds is `<pj>/<pj>-fc5.xml` — inside the folder, not beside it.
+ * The DM keeps each PJ's xml at `players/<pj>/<pj>-fc5.xml`. The app no longer
+ * reads that folder — a character is what its player uploaded — but these are
+ * the real sheets of a real party, so they are what the parser is pinned to.
  */
-const pj = (name: string) => `${name}/${name}.md`
+const pj = (name: string) => `${name}/${name}-fc5.xml`
+const readSheet = async (dir: VaultDir, path: string): Promise<SheetStats> => {
+  const file = await fileAt(dir, path)
+  return file ? parseSheet(await file.text()) : emptySheet()
+}
 
-describe('readSheet', () => {
+describe('parseSheet, on the real party', () => {
   it('matches the numbers the character notes quote', async () => {
     // abraxas.md: "CA 12 (15 con Armadura de Mago) · PG 9 · Iniciativa +2 ·
     // Percepción pasiva 12 · Competencia +2 · Conjuros: Inteligencia, CD 13,
     // ataque +5, dos espacios de nivel 1" — the 15 is a spell, not the sheet.
     expect(await readSheet(last, pj('abraxas'))).toEqual({
+      name: 'Abraxas',
+      race: 'Elfo (alto)',
+      className: 'Mago',
+      background: 'Erudito',
+      speed: 30,
+      money: 13,
       hpMax: 9,
       initMod: 2,
       level: 1,
@@ -45,6 +56,14 @@ describe('readSheet', () => {
       // pinned by the two tests below rather than by thirteen spells inline.
       weapons: expect.any(Array),
       spells: expect.any(Array),
+      feats: expect.any(Array),
+      items: expect.any(Array),
+      // 3 and 4 are INT and SAB; the five skill ids decode in the sheet's order.
+      proficient: {
+        saves: ['int', 'wis'],
+        skills: ['Arcanos', 'Historia', 'Investigación', 'Naturaleza', 'Percepción'],
+        expertise: [],
+      },
     })
     // croma.md: "PG 11 · Iniciativa −1" — 11 because dureza enana adds a
     // point a plain d8 + CON 14 calculation would miss.
@@ -142,14 +161,77 @@ describe('readSheet', () => {
 
   it('quotes no skill or save until a sheet states one', async () => {
     // `pregenerados/fichas.py` does not emit `Habilidades:`/`Salvaciones:`
-    // yet. When it does, these light up with no app change — and until then
-    // the app shows nothing rather than deriving a number, because Fight Club
-    // states skill proficiency as opaque ids only.
+    // yet. When it does, these light up with no app change. What the sheet
+    // *does* state is which skills are proficient — as ids, decoded below.
     for (const name of ['abraxas', 'aluci', 'croma', 'toribio']) {
       const sheet = await readSheet(last, pj(name))
       expect(sheet.skills, name).toEqual([])
       expect(sheet.saves, name).toEqual([])
     }
+  })
+
+  it('decodes the proficiency ids, and the expertise Toribio states twice', async () => {
+    const toribio = await readSheet(last, pj('toribio'))
+    expect(toribio.proficient).toEqual({
+      saves: ['dex', 'int'],
+      skills: ['Acrobacias', 'Engaño', 'Investigación', 'Percepción', 'Juego de Manos', 'Sigilo'],
+      // toribio.md: «Sigilo +7, Percepción +5 (experticia)». The xml carries
+      // the Experticia feat twice; each skill is listed once.
+      expertise: ['Percepción', 'Sigilo'],
+    })
+  })
+
+  it('reads who each of the four is', async () => {
+    for (const [name, who] of [
+      ['toribio', { name: 'Toribio Biencalzado', race: 'Mediano', className: 'Pícaro', background: 'Criminal', money: 24 }],
+      ['aluci', { name: 'Aluci', race: 'Humano', className: 'Bardo', background: 'Marinero', money: 39 }],
+      ['croma', { name: 'Croma', race: 'Enano', className: 'Clérigo', background: 'Acólito', money: 15 }],
+    ] as const) {
+      expect(await readSheet(last, pj(name)), name).toMatchObject(who)
+    }
+  })
+
+  it('attributes feats to their section, and the character\'s own to none', async () => {
+    const abraxas = await readSheet(last, pj('abraxas'))
+    expect(abraxas.feats).toContainEqual(
+      expect.objectContaining({ name: 'Recuperación arcana', source: 'class' }),
+    )
+    expect(abraxas.feats).toContainEqual(
+      expect.objectContaining({ name: 'Iniciado en la magia', source: 'feat' }),
+    )
+    // Aluci's two background feats sit at the top level of the xml, so that is
+    // where they are attributed — the format, not this reader, decides.
+    const aluci = await readSheet(last, pj('aluci'))
+    expect(aluci.feats.filter((f) => f.source === 'feat').map((f) => f.name)).toEqual([
+      'Camorrista de taberna',
+      'Músico',
+    ])
+    expect(aluci.feats.every((f) => f.text.length > 0)).toBe(true)
+  })
+
+  it('lists every item with what the sheet says about it', async () => {
+    const toribio = await readSheet(last, pj('toribio'))
+    expect(toribio.items.find((i) => i.name === 'Armadura de cuero')).toMatchObject({
+      kind: 'light',
+      equipped: 'armor',
+      ac: 11,
+    })
+    expect(toribio.items.length).toBeGreaterThan(toribio.weapons.length)
+  })
+
+  it('reads the spells\' school, components and ritual tag', async () => {
+    const { spells } = await readSheet(last, pj('abraxas'))
+    expect(spells.find((s) => s.name === 'Saeta de Fuego')).toMatchObject({
+      school: 'Evocación',
+      components: 'V, S',
+      ritual: false,
+      classes: ['Hechicero', 'Mago'],
+    })
+    expect(spells.find((s) => s.name === 'Detectar Magia')).toMatchObject({ ritual: true })
+    expect(spells.find((s) => s.name === 'Encontrar Familiar')).toMatchObject({
+      ritual: true,
+      components: expect.stringMatching(/^V, S, M \(/),
+    })
   })
 
   it('returns nulls when no XML sits beside the note', async () => {

@@ -1,7 +1,8 @@
 # pergamino — Pantalla de DM
 
-The DM's table: a console window and a television window, both fed from a
-campaign folder the **browser** holds. The repo is the app — there is no
+The DM's table: a console window and a television window fed from a campaign
+folder the **browser** holds, a player page on each phone, and a small server
+that owns the party and the live state. The repo is the app — there is no
 second thing in here.
 
 `README.md` is the user-facing document — what the app does and how to run it.
@@ -10,15 +11,19 @@ This file is the part that matters when editing it.
 ## The shape of the thing
 
 ```
-shared/     the whole core. No DOM, no node — the browser and the tests
-            import the same files.
+shared/     the whole core. No DOM, no node — the browser, the server and the
+            tests import the same files.
 shared/combat/  what a combatant can do, read out of the prose that already
             describes it. Pure: no state, no session, no dice inside `reduce`.
-app/        two pages: index.html (console) and tv.html (television).
-server.py   a static host. Stdlib only.
+shared/protocol.ts  every shape that crosses the wire; both sides import it.
+app/        the pages: index.html (console), tv.html (television),
+            pj.html (a player's phone).
+server/     Node + SQLite. Owns characters and live state, runs the same
+            `reduce`, serves the pages. Bundled to one file for the Pi.
 test/       fixture wiring, node-only.
-scripts/    Playwright drivers, node-only.
-dist/       the build. Gitignored; the only thing deployed.
+scripts/    Playwright drivers and `dev.mjs`, node-only.
+dist/       the build. Gitignored; with server/dist/index.mjs, the only
+            thing deployed.
 
 check-campaign.js lints a campaign folder against the *pre-merge* format —
                   its spec (importing.md) is gone. See lint/README.md.
@@ -33,10 +38,20 @@ DM picks at runtime, and the only one baked in is
 Playwright drivers mount in memory, dev-only and dropped from the production
 build.
 
-The split that matters is **not** client/server — there is no server. It is
-*pure core* (`shared/`) versus *the shells that touch storage*
-(`app/src/vault/fsa.ts`, `shared/vault/node.ts`, `shared/vault/memory.ts`).
-Anything you can write without a directory handle belongs in `shared/`.
+The split that matters is still *pure core* (`shared/`) versus *the shells
+that touch storage*, and there are three shells now: the console's directory
+handle (`app/src/vault/fsa.ts`, and `shared/vault/{node,memory}.ts` for tests
+and the fixture), the server's SQLite (`server/src/`), and a phone, which has
+no storage at all and holds a projection. Anything you can write without a
+directory handle, a database or a socket belongs in `shared/`.
+
+Prep never leaves the machine; live state never touches the folder. The
+console reads pnj, objects, scenes, notes and assets from the folder and
+*publishes* to the server only what `reduce` needs of them — statblocks,
+object rules, scene rosters, never prose (`app/src/state/publish.ts` is where
+the cutting happens). The server owns the party and the session. The folder
+holds `runs/<mesa>/` for bitácora and estado, and `.pergamino/campaign.json`
+with the campaign's id, and no `session.json` any more.
 
 ## The rule this app exists to keep
 
@@ -46,12 +61,14 @@ Anything you can write without a directory handle belongs in `shared/`.
 > Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`.
 
 It is enforced by **types**, not by a check. Loaders take `VaultDir`, which has
-no `write`. A handle cannot address its parent. Exactly two descents in
+no `write`. A handle cannot address its parent. Exactly three descents in
 `shared/vault/binding.ts` resolve a `WritableVaultDir`:
 
-- `CampaignVault.run(mesa)` — `runs/<mesa>/`, while playing
+- `CampaignVault.run(mesa)` — `runs/<mesa>/`, for bitácora and estado.md
 - `CampaignVault.scenarios()` — `scenarios/`, from Preparación, which the UI
   refuses while a run is live
+- `CampaignVault.pergamino()` — `.pergamino/`, the app's own dotdir, written
+  once on registration with the campaign's id and read by no note walk
 
 If you find yourself wanting a writable handle anywhere else, that is the
 design telling you no. `shared/vault/scope.test.ts` will also tell you.
@@ -76,15 +93,14 @@ What falls out of that:
   within a folder. The old format had to ask for one in prose.
 - **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
   ~70 KB data URIs, which is exactly what a note cannot hold.
-- **A PJ is a folder: `players/<pj>/<pj>.md` + `<pj>-fc5.xml`.** The note named
-  like the folder *is* the character; nothing else in there is. A player
-  accumulates a trasfondo, a guía, pdfs and the creator's json beside it, and
-  none of those is another member of the party — which is what a flat
-  `players/*.md` could not say. A loose `players/x.md` is not a character at
-  all, and the extra notes stay reachable through `NotesIndex` like any note.
-  The app still never reads a field of the creator's build recipe, and the xml
-  says so itself — *"si algún número de la app no coincide con los de arriba,
-  mandan los de arriba"*.
+- **A PJ is a row on the server**: the `-fc5.xml` its player uploaded through
+  the campaign's link, plus its live layer. The vault holds no party — a
+  `players/` folder, if there is one, is ordinary material (trasfondos, guías,
+  the creator's json) reachable as notes and never read as characters. Level-up
+  is the player uploading a new xml; the live layer survives it. The app still
+  never reads a field of the creator's build recipe, and the xml says so
+  itself — *"si algún número de la app no coincide con los de arriba, mandan
+  los de arriba"*.
 - **`scenarios/` stays json**, because it is the one prep folder the app writes
   back to. Round-tripping a scene through the markdown renderer would cost the
   DM their formatting every time they moved a token.
@@ -119,6 +135,17 @@ saved before that pruning can still carry one.
 The television window has no directory handle, so it cannot read a campaign
 even in principle. Keep it that way: it receives a `TableView` and blobs it
 asked for by key, over `app/src/transport/`. Nothing else.
+
+The player page is the second projection boundary, with the same discipline.
+`projectPlayer` (`shared/session/player.ts`) gives a phone one character in
+full — sheet, live layer, held objects — and about everyone else exactly
+`projectTable`'s combatant list split into `party` and `foes`, so another PC's
+hit points follow the reveal rule the screen in the room follows and an
+unrevealed NPC is not there. `LiveState.note` is the *DM's* note about the
+character and does not cross; `player.test.ts` asserts the leaks by
+`JSON.stringify`. What a player may *do* is the allowlist in
+`shared/session/allow.ts`, applied on the server before `reduce` and on the
+phone only to grey a control out.
 
 ## Where the dice are
 
@@ -200,39 +227,61 @@ structured field would mean two places that can disagree.
 - **A scene roster reads `pnjId ?? monsterId ?? beastId`.** The spec said
   `beastId` and the loader only ever read `monsterId`, so every roster written
   to spec was silently dropped. Keep the fallback.
-- **The store is async now.** `store.open(mesa)` and `store.flush()` return
-  promises; `dispatch` does not.
-- **Chromium only.** The File System Access API is not in Firefox or Safari.
-  The app says so plainly rather than failing oddly; keep that path working.
+- **`dispatch` is a message, not a call.** `RemoteSessionStore.dispatch` sends
+  the action over the socket and returns; the state arrives later, as a whole,
+  by subscription. Never read state right after dispatching. A typed field
+  goes through `useDraft` (`app/src/dm/useDraft.ts`), or the server's echo
+  fights the keystrokes. And `reduce` mints ids and stamps times, so the
+  console does not apply optimistically — one copy of the state, on the
+  server, and nothing to reconcile.
+- **`start()` runs once.** StrictMode mounts effects twice in development; a
+  second boot racing the first registers the campaign twice.
+- **Chromium only — for the console.** The File System Access API is not in
+  Firefox or Safari. The app says so plainly rather than failing oddly; keep
+  that path working. The player page has no handle and must work everywhere.
+- **Node strips types, but not everything.** The server runs unbundled in
+  development (`node server/src/index.ts`), so no constructor parameter
+  properties, no enums. `node:sqlite` is loaded through
+  `process.getBuiltinModule` because Vite, which runs the tests, would go
+  looking for a package called `sqlite`.
 
 ## Rules that hold across the repo
 
-**The campaign folder is the database.** The console page holds a File System
-Access grant on the folder the DM picked — a world (`talasia/`, with
-`campaigns/` inside) or a flat campaign (`campaigns/<name>/`) — and reads and
-writes it directly. No server reads or writes campaign files, and the
-television window holds no grant at all. The app keeps only device preferences
-locally: the remembered folder handle in IndexedDB, the campaign and mesa in
-`localStorage`.
+**The campaign folder is the prep database; the server is the live one.** The
+console holds a File System Access grant on the folder the DM picked — a world
+(`talasia/`, with `campaigns/` inside) or a flat campaign — and reads it
+directly; the server never sees a directory, a note, `story/` or a scene's
+prose. Characters and live state are the server's, keyed by the id in
+`.pergamino/campaign.json`; renaming a folder changes nothing. The console
+keeps device preferences locally — the folder handle in IndexedDB, the
+campaign, mesa and DM token in `localStorage`.
 
-**`server.py` is Python stdlib only.** Never add a pip dependency. It is a
-static host and nothing else: no endpoint reads, writes or receives a campaign
-file, and there is no `do_POST`. That property is what makes it safe to host at
-`https://dm.sigint-pm.uk` without auth — do not add a route that breaks it.
+**The server's contract** (`server/src/`): it receives the campaign's title,
+the published statblocks (`PrepBody`), a `-fc5.xml` per character, and
+actions. Every write under `/api/dm/` wants the DM's bearer token from `.env`;
+the server refuses to start without one. A link secret (`/pj#<link>`) reveals
+the picker and one character's own view, and lets whoever holds it add or
+replace a character — friend-scale trust, rotatable from the console. No route
+serves a campaign file; `deploy-dm.yml` re-asserts that on the box. Cache
+headers are the ones `server.py` learned the hard way: assets immutable, pages
+`no-cache`, errors `no-store`.
 
 **The build is deliberate.** This repo held "no build, no npm" for years, and
 the rebuilt app broke it: Vite, React and TypeScript, so there is a
 `package.json` and a `node_modules/`. What bought the exception: the browser
-owns every campaign file through the File System Access API, `shared/` is typed
+owns every prep file through the File System Access API, `shared/` is typed
 end to end so the write scope is a compile error rather than a runtime check,
-and the Pi runs *less* than before — `dist/` and `server.py`, no Node at all.
-`engines.node` is for development only.
+and the server runs the *same* reducer the tests do. The Pi now runs Node — one
+bundled file, no `node_modules` — because the alternative was a party that
+lived in four places.
 
 **The app does not implement 5e rules.** It reads the derived numbers out of
-the `-fc5.xml` beside each player file, precisely so it never re-derives hit
-points from class, CON and species traits and gets them subtly wrong at the
-table. The rules code under `lint/` belongs to `check-campaign.js`, not to the
-app.
+the `-fc5.xml` a player uploaded, precisely so it never re-derives hit points
+from class, CON and species traits and gets them subtly wrong at the table.
+The one addition (`shared/skills.ts`) is arithmetic on stated numbers: a skill
+the sheet marks proficient but does not quote shows ability plus the sheet's
+own proficiency bonus, flagged `derived`, and a stated line always wins. The
+rules code under `lint/` belongs to `check-campaign.js`, not to the app.
 
 **Rules content is paraphrased from the SRD 5.2** (CC-BY-4.0, © Wizards of the
 Coast). No text is copied from the Player's Handbook.
@@ -246,9 +295,9 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 283 with the DM's vault present, 136 without
+npm test                 # 324 with the DM's vault present, 192 without
 npm run typecheck
-npm run build
+npm run build            # tsc, the pages, and server/dist/index.mjs
 ```
 
 `check-campaign.js` is not in that list, and no longer matches the format
@@ -259,35 +308,37 @@ exits 2 rather than reporting zero of everything; `--force` runs the old checks
 anyway. Deciding whether to port or drop it is still open — see
 `lint/README.md`.
 
-The vault tests read the DM's live campaign — the prep, the party and the
-sheets, which are files a human edits deliberately. They no longer read
-`runs/<mesa>/session.json`, and must not: the app writes it on the first change
-of a session, rewrites it every few seconds while the console is open, and the
-DM deletes it between sessions, so a mesa marked `sin empezar` has none at all.
-A test that needs someone at the table **builds** the state — `seated()` in
-`test/fixture.ts`, plus `npc/add` from real prep. Twice now, anchoring on that
-file has broken the suite for reasons that had nothing to do with the code.
+The vault tests read the DM's live campaign — the prep, and the four real
+`-fc5.xml` files still kept under `runs/last/players/`, which the app no longer
+reads as a party but which are the real sheets of a real one (`loadParty()` in
+`test/fixture.ts`). Nothing reads live state from the folder; there is none.
+A test that needs someone at the table **builds** the state — `seated()`, plus
+`npc/add` from real prep.
 
 And, for anything on screen, one of the drivers:
 
 ```bash
-npm run dev &
-node scripts/e2e.mjs
+npm run dev &            # the server (data/dev.sqlite, token `dev`) and Vite
+node scripts/e2e.mjs     # starts an in-memory server itself if none answers
 ```
 
 They open the app on `?fixture=example`, which mounts
 `app/src/fixtures/example.json` in memory — the native folder picker cannot be
-driven from a script. That fixture is dev-only; `import.meta.env.DEV` keeps it
-out of the production bundle. It is now the *only* copy of the demo campaign,
-so treat it as content rather than as build output; regenerate it with
-`node scripts/build-fixture.mjs <folder>` if you want a different one.
+driven from a script — and registers it on the dev server under one fixed id,
+wiped and rebuilt on every boot, uploading the sheet the snapshot keeps under
+`players/`. The harness sets the token in `localStorage` the way the DM does;
+there is no test door in the app. The fixture is dev-only; `import.meta.env.DEV`
+keeps it out of the production bundle. It is the *only* copy of the demo
+campaign, so treat it as content rather than as build output; regenerate it
+with `node scripts/build-fixture.mjs <folder>` if you want a different one.
 
 ## Tests, and the vault that is not on CI
 
 The suite splits by what the machine has:
 
-- Everything built on `MemoryVault` (`test/memory.ts`) runs anywhere — the
-  write-scope guard and the async shells. That is what CI runs.
+- Everything built on `MemoryVault` (`test/memory.ts`) and on an in-memory
+  SQLite (`server/src/*.test.ts`) runs anywhere — the write-scope guard, the
+  async shells, the server's session, router and socket. That is what CI runs.
 - The DM's own Obsidian vault is private. Tests that read it are named
   `*.vault.test.ts`, and `vitest.config.ts` leaves them out when it is not
   there — saying so out loud, because they are the check that moving the pure

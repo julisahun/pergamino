@@ -4,10 +4,13 @@
  * Pure: the notes are strings in a `MemoryVault`, so this runs where the DM's
  * private vault is not.
  */
+import { reduce } from '../session/reducer.ts'
+import type { Pnj, SessionState } from '../types.ts'
 import { describe, expect, it } from 'vitest'
 import { MemoryVault } from './memory.ts'
 import { loadPnj } from './pnj.ts'
-import { migrate } from './session.ts'
+import { emptySession } from './session.ts'
+import { revealFor } from '../session/project.ts'
 
 const note = (front: string, title: string) =>
   `---\nac: 12\nhpMax: 16\n${front}---\n\n# ${title}\n\nUn párrafo.\n`
@@ -32,25 +35,24 @@ describe('loadPnj — alias', () => {
   })
 })
 
-describe('session.json — alias', () => {
+describe('la sesión — alias', () => {
+  const TULIO: Pnj = {
+    id: 'tulio', name: 'Tulio', alias: 'Soldado ahogado', tag: null, ac: 15, hpMax: 16,
+    initMod: 1, speed: null, portrait: null, abilities: [], file: 'pnj/tulio.md', lead: '',
+  }
+  const opts = { pnj: (id: string) => (id === 'tulio' ? TULIO : undefined), newId: () => 'x' }
+  const seat = () => reduce(emptySession(), { type: 'npc/add', pnjId: 'tulio', count: 1 }, 0, opts).state
+
   it('sobrevive a la ida y vuelta, con la máscara puesta', () => {
-    const state = migrate({
-      version: 5,
-      npcs: [{ id: 'x', name: 'Tulio', alias: 'Soldado ahogado', hpMax: 16 }],
-      field: { reveal: { 'npc:x': { on: true, hp: 'none' } } },
-    })
+    // The server keeps the state as JSON; what comes back has to say the same.
+    const state = JSON.parse(JSON.stringify(seat())) as SessionState
     expect(state.npcs[0]!.alias).toBe('Soldado ahogado')
-    // A file written before any of this existed says nothing about names, and
-    // saying nothing has to mean "tapado".
-    expect(state.field.reveal['npc:x']!.name).toBe('alias')
+    // Nothing said about the name means "tapado".
+    expect(revealFor(state, 'npc:x').name).toBe('alias')
   })
 
   it('guarda que el DM lo destapó', () => {
-    const state = migrate({
-      version: 5,
-      npcs: [{ id: 'x', name: 'Tulio', alias: 'Soldado ahogado', hpMax: 16 }],
-      field: { reveal: { 'npc:x': { on: true, hp: 'none', name: 'real' } } },
-    })
-    expect(state.field.reveal['npc:x']!.name).toBe('real')
+    const state = reduce(seat(), { type: 'reveal/set', ref: 'npc:x', name: 'real' }, 0, opts).state
+    expect(revealFor(JSON.parse(JSON.stringify(state)) as SessionState, 'npc:x').name).toBe('real')
   })
 })

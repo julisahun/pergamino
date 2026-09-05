@@ -1,124 +1,18 @@
 /**
- * The thirteen functions that grew an async shell, tested against an
- * in-memory vault.
+ * The functions that grew an async shell, tested against an in-memory vault.
  *
- * These are the assertions the `fs` versions made — v3→v4 migration, bitácora
- * drafting and numbering, estado appending — asked of a tree that exists only
- * in this file, so a write can be checked by reading it back rather than by
- * being refused.
+ * These are the assertions the `fs` versions made — bitácora drafting and
+ * numbering, estado appending, the notes graph — asked of a tree that exists
+ * only in this file, so a write can be checked by reading it back rather than
+ * by being refused.
  */
 import { describe, expect, it } from 'vitest'
-import { ESTADO, PLANTILLA, openMemoryVault, V3_SESSION } from '../../test/memory.ts'
-import { SESSION_VERSION } from '../types.ts'
-import { SessionStore } from '../session/store.ts'
+import { ESTADO, PLANTILLA, openMemoryVault } from '../../test/memory.ts'
+import { reduce } from '../session/reducer.ts'
+import { emptySession } from './session.ts'
 import { applyDeviations, draftBitacora, proposeDeviations } from './writeback.ts'
-import { emptySheet } from './sheet.ts'
 
 const RUN = 'campaigns/marea-chica/runs/guils'
-
-describe('loadRun', () => {
-  it('migrates the v3 file and keeps what was live', async () => {
-    const { vault } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-
-    expect(run.fromVersion).toBe(3)
-    expect(run.state.version).toBe(SESSION_VERSION)
-    expect(run.state.npcs).toHaveLength(2)
-    expect(run.state.npcs[0]!.abilities[0]!.name).toBe('Cimitarra')
-    expect(run.state.encounter.round).toBe(2)
-    expect(run.state.field.sceneId).toBe('faro')
-    // v3 keyed reveal by bare id; v4 keys it the way tokens are keyed.
-    expect(Object.keys(run.state.field.reveal).sort()).toEqual(['npc:n1', 'npc:n2'])
-    // The DM had the second bandit hidden; that must survive the migration.
-    expect(run.state.field.reveal['npc:n2']).toEqual({ on: false, hp: 'none', name: 'alias' })
-    // And the v4 fields arrive with safe defaults.
-    expect(run.state.field.handout).toBeNull()
-    expect(run.state.log).toEqual([])
-  })
-
-  it('reads the characters and the sheet beside each one', async () => {
-    const { vault } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-    // No `<note>` in this fixture's xml, so every stated field is absent and
-    // initiative falls back to DEX 16 → +3. `sheet.test.ts` covers both paths.
-    // Spread over `emptySheet()` so a new stated field cannot break this.
-    expect(run.sheets.get('pj-tal')).toEqual({
-      ...emptySheet(),
-      hpMax: 9,
-      initMod: 3,
-      level: 1,
-      slots: { '1': 2 },
-      abilities: { str: 10, dex: 16, con: 12, int: 10, wis: 10, cha: 10 },
-    })
-  })
-
-  it("lets a run's own player file shadow the campaign's", async () => {
-    const { vault } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-    // Nel is only in the campaign; Tal is in both, and the run wins.
-    expect(run.characters.map((c) => c.id).sort()).toEqual(['pj-nel', 'pj-tal'])
-    expect(run.characters.find((c) => c.id === 'pj-tal')!.name).toBe('Tal')
-    expect(run.playerFiles['pj-tal']).toBe('runs/guils/players/tal/tal.md')
-    expect(run.playerFiles['pj-nel']).toBe('players/nel/nel.md')
-  })
-})
-
-describe('saveSession', () => {
-  it('writes the state back where it came from', async () => {
-    const { vault, memory } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-    await vault.saveSession('guils', run.state, {})
-
-    const written = JSON.parse(memory.read(`${RUN}/session.json`)!)
-    expect(written.version).toBe(SESSION_VERSION)
-    expect(written.field.reveal['npc:n1']).toEqual({ on: true, hp: 'bar', name: 'alias' })
-  })
-
-  it('keeps the pre-v4 original as session.json.bak, once', async () => {
-    const { vault, memory } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-    await vault.saveSession('guils', run.state, { backup: true })
-
-    expect(JSON.parse(memory.read(`${RUN}/session.json.bak`)!)).toEqual(V3_SESSION)
-
-    // A second backup would overwrite the original with the migrated file.
-    await vault.saveSession('guils', run.state, { backup: true })
-    expect(JSON.parse(memory.read(`${RUN}/session.json.bak`)!).version).toBe(3)
-  })
-})
-
-describe('the store, driven end to end over a memory vault', () => {
-  it('persists what the DM did, inside the run and nowhere else', async () => {
-    const { vault, memory } = await openMemoryVault()
-    const store = new SessionStore()
-    store.bind(vault)
-    await store.open('guils')
-
-    store.dispatch({ type: 'scene/show', sceneId: 'taberna' })
-    store.dispatch({ type: 'hp/damage', ref: 'npc:n1', amount: 4 })
-    await store.flush()
-
-    const written = JSON.parse(memory.read(`${RUN}/session.json`)!)
-    expect(written.field.sceneId).toBe('taberna')
-    expect(written.npcs[0].hp).toBe(7)
-    expect(memory.writes.every((p) => p.startsWith(`${RUN}/`))).toBe(true)
-  })
-
-  it('backs the v3 file up on the first write and not after', async () => {
-    const { vault, memory } = await openMemoryVault()
-    const store = new SessionStore()
-    store.bind(vault)
-    await store.open('guils')
-
-    store.dispatch({ type: 'hp/damage', ref: 'npc:n1', amount: 1 })
-    await store.flush()
-    expect(memory.writes.filter((p) => p.endsWith('.bak'))).toHaveLength(1)
-
-    store.dispatch({ type: 'hp/damage', ref: 'npc:n1', amount: 1 })
-    await store.flush()
-    expect(memory.writes.filter((p) => p.endsWith('.bak'))).toHaveLength(1)
-  })
-})
 
 describe('closing a session', () => {
   it('numbers the note past the template and no further', async () => {
@@ -130,8 +24,7 @@ describe('closing a session', () => {
 
   it('drafts from the run\'s own template and writes it back', async () => {
     const { vault, memory } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
-    const state = run.state
+    const state = emptySession()
     state.log = [
       { t: 1, kind: 'scene', text: 'faro' },
       { t: 2, kind: 'encounter', text: 'Combate iniciado (2)' },
@@ -163,13 +56,14 @@ describe('closing a session', () => {
 
   it('appends the chosen deviations to estado.md and nothing else', async () => {
     const { vault, memory } = await openMemoryVault()
-    const run = await vault.loadRun('guils')
     const campaign = await vault.loadCampaign()
-    run.state.npcs[0]!.name = 'Ossian'
-    run.state.npcs[0]!.hp = 0
-    run.state.log = [{ t: 1, kind: 'scene', text: 'faro' }]
+    // Ossian seated from the campaign's own pnj note, then brought to zero.
+    const opts = { pnj: (id: string) => campaign.pnjs.find((p) => p.id === id), newId: () => 'n1' }
+    let state = reduce(emptySession(), { type: 'npc/add', pnjId: 'ossian', count: 1 }, 0, opts).state
+    state = reduce(state, { type: 'hp/damage', ref: 'npc:n1', amount: 99 }, 0, opts).state
+    state.log = [{ t: 1, kind: 'scene', text: 'faro' }]
 
-    const deviations = proposeDeviations(run.state, {
+    const deviations = proposeDeviations(state, {
       sessionNumber: 1,
       scenes: new Map(campaign.scenes.map((s) => [s.id, s])),
       objects: campaign.objects,

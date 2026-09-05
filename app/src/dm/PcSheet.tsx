@@ -14,7 +14,6 @@ import { useEffect } from 'react'
 import { ABILITY_LABEL, skillRows } from '../../../shared/skills.ts'
 import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
-import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
 import type { Combatant } from './combat.ts'
 
@@ -23,16 +22,12 @@ const SCORES: (keyof Abilities)[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 export function PcSheet({
   c,
   sheet,
-  noteFile,
   onClose,
 }: {
   c: Combatant
   sheet: SheetStats | undefined
-  noteFile: string | null
   onClose: () => void
 }) {
-  const { openNote } = useDm()
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -73,7 +68,6 @@ export function PcSheet({
                 .join(' · ')}
             </div>
           </div>
-          {noteFile && <button onClick={() => openNote(noteFile)}>{es.verNota}</button>}
           <button onClick={onClose}>{es.cerrar}</button>
         </div>
 

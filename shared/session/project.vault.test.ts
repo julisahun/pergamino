@@ -9,14 +9,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { HpReveal, Ref, Scene, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
+import { loadParty, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
 import { pnjIndex } from './portraits.ts'
 import { projectDm, projectTable, type ProjectContext } from './project.ts'
 import { reduce } from './reducer.ts'
 
 const vault = await openWorld()
 const { pnjs, scenes: sceneList } = await vault.loadCampaign()
-const run = await vault.loadRun(MESA)
+const run = await loadParty(vault)
 
 function ctx(): ProjectContext {
   const scenes = new Map<string, Scene>(sceneList.map((s) => [s.id, s]))

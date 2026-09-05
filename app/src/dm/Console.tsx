@@ -25,7 +25,7 @@ const MENU: { id: Tab; label: string }[] = [
 ]
 
 function MoreMenu() {
-  const { tab, setTab, close } = useDm()
+  const { tab, setTab, close, changeToken } = useDm()
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
 
@@ -68,6 +68,14 @@ function MoreMenu() {
           <button
             onClick={() => {
               setOpen(false)
+              changeToken()
+            }}
+          >
+            {es.cambiarToken}
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false)
               void close()
             }}
           >
@@ -79,6 +87,34 @@ function MoreMenu() {
   )
 }
 
+/** The DM's token, pasted once from the server's `.env`. */
+function TokenForm() {
+  const { setToken, serverError } = useDm()
+  const [token, setTokenText] = useState('')
+  return (
+    <form
+      className="row"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void setToken(token)
+      }}
+    >
+      <input
+        type="password"
+        autoFocus
+        placeholder={es.tokenDm}
+        value={token}
+        onChange={(e) => setTokenText(e.target.value)}
+        style={{ minWidth: 260 }}
+      />
+      <button className="primary" type="submit" disabled={!token.trim()}>
+        {es.guardarToken}
+      </button>
+      {serverError && <span style={{ color: 'var(--danger)' }}>{serverError}</span>}
+    </form>
+  )
+}
+
 /**
  * Everything before a folder is open.
  *
@@ -87,7 +123,7 @@ function MoreMenu() {
  * this that happens on load.
  */
 function Welcome() {
-  const { phase, vaultName, pick, reopen, error } = useDm()
+  const { phase, vaultName, pick, reopen, error, retryServer, register, serverError } = useDm()
   const [format, setFormat] = useState(false)
 
   // What has to be inside the folder is a question you have *before* there is
@@ -106,6 +142,45 @@ function Welcome() {
         <h2>{es.navegadorNoSoportado}</h2>
         <p className="muted">{es.navegadorAyuda}</p>
         <div className="row">{formato}</div>
+      </div>
+    )
+  }
+
+  // The folder is open; what is missing is on the server's side.
+  if (phase === 'sin-servidor') {
+    return (
+      <div className="welcome">
+        <h2>{es.sinServidor}</h2>
+        <p className="muted">{es.sinServidorAyuda}</p>
+        {serverError && <p className="muted small">{serverError}</p>}
+        <div className="row">
+          <button className="primary" onClick={() => void retryServer()}>
+            {es.reintentar}
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (phase === 'sin-token') {
+    return (
+      <div className="welcome">
+        <h2>{es.tokenDm}</h2>
+        <p className="muted">{es.tokenDmAyuda}</p>
+        <TokenForm />
+      </div>
+    )
+  }
+  if (phase === 'sin-registrar') {
+    return (
+      <div className="welcome">
+        <h2>{es.registrarCampana}</h2>
+        <p className="muted">{es.registrarCampanaAyuda}</p>
+        <div className="row">
+          <button className="primary" onClick={() => void register()}>
+            {es.registrarCampana} · {vaultName}
+          </button>
+        </div>
+        {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
       </div>
     )
   }
@@ -156,7 +231,8 @@ export function Console() {
     campaign,
     campaigns,
     openCampaign,
-    persistError,
+    connection,
+    serverError,
     error,
   } = useDm()
 
@@ -204,9 +280,32 @@ export function Console() {
 
         <div className="spacer" />
 
-        {persistError && (
-          <span className="badge warn" title={es.errorEscrituraAyuda}>
-            {es.errorEscritura}
+        <span
+          className="status"
+          title={
+            connection === 'conectada'
+              ? es.conectado
+              : connection === 'conectando'
+                ? es.conectando
+                : connection === 'sin-autorizar'
+                  ? es.sinAutorizar
+                  : es.sinConexion
+          }
+        >
+          <span
+            className={`dot ${
+              connection === 'conectada'
+                ? 'open'
+                : connection === 'conectando'
+                  ? 'connecting'
+                  : 'closed'
+            }`}
+          />
+          {connection === 'sin-conexion' && es.reconectando}
+        </span>
+        {serverError && (
+          <span className="badge warn" title={serverError}>
+            {es.rechazado}
           </span>
         )}
         {error && <span className="badge warn">{error}</span>}

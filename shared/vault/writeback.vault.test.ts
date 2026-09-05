@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Scene, SessionState } from '../types.ts'
-import { MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
+import { loadParty, MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
 import { reduce } from '../session/reducer.ts'
 import {
   applyDeviations,
@@ -15,7 +15,7 @@ const campaign = await vault.loadCampaign()
 const scenes = new Map<string, Scene>(campaign.scenes.map((s) => [s.id, s]))
 const { objects, pnjs } = campaign
 
-const run = await vault.loadRun(MESA)
+const run = await loadParty(vault)
 /**
  * The party seated and one bandit carrying nothing yet, built from the notes:
  * a mesa that has not been played has no `session.json` to read.

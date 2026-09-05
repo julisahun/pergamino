@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Ability } from '../types.ts'
-import { emptySheet, type SheetStats } from '../vault/sheet.ts'
+import { emptySheet, type SheetSpell, type SheetStats } from '../vault/sheet.ts'
 import {
   afterSave,
   attacksOfAbilities,
@@ -18,12 +18,26 @@ import { formatDice } from './dice.ts'
 
 const ability = (name: string, desc: string): Ability => ({ id: name, name, desc })
 
-const sheet = (over: Partial<SheetStats> = {}): SheetStats => ({
+/** The four fields an action is read from; the sheet's other spell fields are noise here. */
+type SpellSeed = Pick<SheetSpell, 'name' | 'level' | 'roll' | 'text'>
+const spell = (seed: SpellSeed): SheetSpell => ({
+  school: null,
+  time: null,
+  range: null,
+  duration: null,
+  components: '',
+  ritual: false,
+  classes: [],
+  ...seed,
+})
+
+const sheet = (over: Partial<Omit<SheetStats, 'spells'>> & { spells?: SpellSeed[] } = {}): SheetStats => ({
   ...emptySheet(),
   spellAttack: 5,
   spellDc: 13,
   proficiency: 2,
   ...over,
+  spells: (over.spells ?? []).map(spell),
 })
 
 describe('a pnj note', () => {

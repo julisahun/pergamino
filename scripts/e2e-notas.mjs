@@ -63,17 +63,20 @@ if (await tag.count()) {
  */
 const notaParam = () => new URL(dm.url()).searchParams.get('nota')
 
-await dm.getByRole('button', { name: 'Party', exact: true }).click()
+// An object's sheet carries the button. A PC's no longer does: a character is
+// a row on the server, and what the vault holds about it is ordinary notes.
+await dm.getByRole('button', { name: 'Objetos', exact: true }).first().click()
+await dm.waitForSelector('.obj-grid')
+await dm.locator('.obj-tile').first().click()
 await dm.waitForTimeout(300)
-await dm.locator('.pc-card .mini').first().click()
-await dm.waitForTimeout(300)
-await dm.locator('.sheet').getByRole('button', { name: 'Ver nota' }).click()
+const file = (await dm.locator('.sheet .reader-path').innerText()).trim()
+await dm.locator('.sheet').getByRole('button', { name: /Ver nota/ }).click()
 await dm.waitForTimeout(500)
 
 const opened = await dm.locator('.reader-path').innerText()
 console.log(`  «Ver nota» opened: ${opened}`)
-if (!opened.includes('pip-nosewick')) {
-  console.log("  FAIL — «Ver nota» did not open the PC's own note")
+if (opened !== file) {
+  console.log(`  FAIL — «Ver nota» did not open the object's own note (${file})`)
   process.exitCode = 1
 }
 if (notaParam() !== opened) {

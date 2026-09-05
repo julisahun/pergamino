@@ -1,0 +1,54 @@
+/**
+ * Design tokens and the base element styles both pages share — the console
+ * and the player page look like one app because they start from this file.
+ * Page-level layout lives in `styles.css` (console) and `pj.css` (player).
+ */
+:root {
+  --ink: #e8e3d8;
+  --ink-dim: #a49c8c;
+  --ink-faint: #6b6558;
+  --bg: #14120f;
+  --bg-panel: #1c1915;
+  --bg-raised: #262119;
+  --line: #352f26;
+  --accent: #c9973f;
+  --accent-dim: #7a5c26;
+  --danger: #b4462f;
+  --ok: #5f8a4a;
+  --font-ui: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-read: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent-dim); background: #2f2820; }
+button:disabled { opacity: 0.4; cursor: default; }
+button[aria-pressed="true"] { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+
+select, input[type="text"] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
