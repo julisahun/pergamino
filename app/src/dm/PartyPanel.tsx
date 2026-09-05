@@ -20,7 +20,7 @@ import { Charges } from './Charges.tsx'
 import { ObjectDetail } from './ObjectDetail.tsx'
 import { PcSheet } from './PcSheet.tsx'
 import { Popover } from './Popover.tsx'
-import { artIndex, combatants, isDown, type Combatant } from './combat.ts'
+import { artIndex, combatants, isDown, pcSheets, type Combatant } from './combat.ts'
 
 export function PartyPanel() {
   const { state, characters, pnjs, objects, sheets, dispatch } = useDm()
@@ -29,17 +29,7 @@ export function PartyPanel() {
   const [ficha, setFicha] = useState<string | null>(null)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
-  const pcs = useMemo(
-    () =>
-      characters.map((c) => ({
-        id: c.id,
-        name: c.name || c.id,
-        hpMax: sheets[c.id]?.hpMax ?? null,
-        initMod: sheets[c.id]?.initMod ?? 0,
-        hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
-      })),
-    [characters, sheets],
-  )
+  const pcs = useMemo(() => pcSheets(characters, sheets), [characters, sheets])
 
   const all = useMemo(() => (state ? combatants(state, pcs, art) : []), [state, pcs, art])
   if (!state) return null

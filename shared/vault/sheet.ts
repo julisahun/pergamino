@@ -26,6 +26,12 @@
  *
  * The scores in `<abilities>` are post-boost and stated, so their modifiers
  * are arithmetic on a given number rather than a rule being re-derived.
+ *
+ * `weapons` and `spells` are the raw blocks, not actions: this file knows the
+ * xml, and `shared/combat/attacks.ts` knows what «Ataque +5, daño 1d6 +3» and
+ * «Salvación de Destreza … la mitad si acierta» mean. An item counts as a
+ * weapon because it has a `<damage1H>`, which is structural — «Bastón (foco
+ * arcano)» and a túnica have none — rather than because its prose was read.
  */
 import { fileAt, type VaultDir } from './source.ts'
 
@@ -49,6 +55,24 @@ export interface Abilities {
 export interface StatedMod {
   name: string
   mod: number
+}
+
+/** One item the sheet arms the character with: `<damage1H>` says it is one. */
+export interface SheetWeapon {
+  name: string
+  /** `<damage1H>` — the bare die, when the generated line is unreadable. */
+  damage: string | null
+  /** `Ataque +5, daño 1d6 +3 perforante.` plus whatever follows it. */
+  text: string
+}
+
+/** One spell as the sheet lists it. `roll` is `<roll>`; no roll, no numbers. */
+export interface SheetSpell {
+  name: string
+  /** `0` for a cantrip — `<level>` is absent on those. */
+  level: number
+  roll: string | null
+  text: string
 }
 
 export interface SheetStats {
@@ -76,6 +100,10 @@ export interface SheetStats {
   saves: StatedMod[]
   /** The sheet's own first line: «Enano guerrero de nivel 1 (Guardia).» */
   summary: string | null
+  /** Items with a damage die, in the order the sheet lists them. */
+  weapons: SheetWeapon[]
+  /** Spells that state a roll, in the order the sheet lists them. */
+  spells: SheetSpell[]
 }
 
 /** The modifier for a stated score. */
@@ -114,6 +142,8 @@ const EMPTY: SheetStats = {
   skills: [],
   saves: [],
   summary: null,
+  weapons: [],
+  spells: [],
 }
 
 export const emptySheet = (): SheetStats => ({
@@ -121,6 +151,8 @@ export const emptySheet = (): SheetStats => ({
   slots: {},
   skills: [],
   saves: [],
+  weapons: [],
+  spells: [],
 })
 
 /** The prose the sheet declares authoritative, or '' when there is none. */
@@ -164,6 +196,54 @@ function statedMods(line: string | null): StatedMod[] {
   for (const part of line.split(/[·,]/)) {
     const m = /^\s*(.+?)\s*([+-]\d+)\s*$/.exec(part)
     if (m) out.push({ name: m[1]!.trim(), mod: Number.parseInt(m[2]!, 10) })
+  }
+  return out
+}
+
+/** Every `<name>…</name>` block of one kind, in document order. */
+function blocks(xml: string, name: string): string[] {
+  const out: string[] = []
+  const re = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'g')
+  for (let m = re.exec(xml); m; m = re.exec(xml)) out.push(m[1]!)
+  return out
+}
+
+/** A child tag's text, scoped to one block rather than to the document. */
+const inner = (block: string, name: string): string | null => {
+  const m = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(block)
+  return m ? m[1]!.trim() : null
+}
+
+/**
+ * The items that are weapons.
+ *
+ * `<damage1H>` is the marker, not the prose: the same character carries a
+ * «Bastón» that has one and a «Bastón (foco arcano)» that does not, and only
+ * the first is something to swing.
+ */
+function weaponsOf(xml: string): SheetWeapon[] {
+  const out: SheetWeapon[] = []
+  for (const block of blocks(xml, 'item')) {
+    const damage = inner(block, 'damage1H')
+    const name = inner(block, 'name')
+    if (!damage || !name) continue
+    out.push({ name, damage, text: inner(block, 'text') ?? '' })
+  }
+  return out
+}
+
+/** The spells, with `<level>` absent standing for a cantrip. */
+function spellsOf(xml: string): SheetSpell[] {
+  const out: SheetSpell[] = []
+  for (const block of blocks(xml, 'spell')) {
+    const name = inner(block, 'name')
+    if (!name) continue
+    out.push({
+      name,
+      level: int(inner(block, 'level')) ?? 0,
+      roll: inner(block, 'roll'),
+      text: inner(block, 'text') ?? '',
+    })
   }
   return out
 }
@@ -220,6 +300,8 @@ export function parseSheet(xml: string): SheetStats {
     skills: statedMods(statedLine(note, 'Habilidades')),
     saves: statedMods(statedLine(note, 'Salvaciones')),
     summary: note.split('\n')[0]?.trim() || null,
+    weapons: weaponsOf(xml),
+    spells: spellsOf(xml),
   }
 }
 

@@ -19,6 +19,7 @@ const SCRIPTS = [
   'tour.mjs',
   'e2e-mesa.mjs',
   'e2e-combate.mjs',
+  'e2e-acciones.mjs',
   'e2e-congelar.mjs',
   'e2e-notas.mjs',
   'e2e-party.mjs',

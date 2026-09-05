@@ -142,6 +142,7 @@ export class SessionStore {
         name: c.name || c.id,
         hpMax: sheet?.hpMax ?? null,
         initMod: sheet?.initMod ?? null,
+        ac: sheet?.ac ?? null,
         hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
       })
     }
@@ -180,6 +181,7 @@ export class SessionStore {
       pcName: (pcId) => this.#ctx.pcs.get(pcId)?.name,
       pcMaxHp: (pcId) => this.#ctx.pcs.get(pcId)?.hpMax ?? null,
       pcInitMod: (pcId) => this.#ctx.pcs.get(pcId)?.initMod ?? null,
+      pcAc: (pcId) => this.#ctx.pcs.get(pcId)?.ac ?? null,
     })
     if (state === this.#state) return
 

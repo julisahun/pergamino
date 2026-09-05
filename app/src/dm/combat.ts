@@ -1,5 +1,7 @@
 /** Shared helpers for the combat views. */
-import type { LiveState, Npc, Ref, SessionState } from '../../../shared/types.ts'
+import { attacksOfPnj, attacksOfSheet, type Attack } from '../../../shared/combat/attacks.ts'
+import type { SheetStats } from '../../../shared/vault/sheet.ts'
+import type { LiveState, Npc, Portrait, Ref, SessionState } from '../../../shared/types.ts'
 import { makeRef, refId, refKind } from '../../../shared/types.ts'
 
 export interface Combatant {
@@ -13,15 +15,47 @@ export interface Combatant {
   live: LiveState
   npc: Npc | null
   portrait: string | null
+  /**
+   * What this one can do on its turn — a pnj's abilities or a player's sheet,
+   * whichever it has. Empty for anyone whose prose states no numbers, which is
+   * the DM's cue that this one is run by hand.
+   */
+  attacks: Attack[]
 }
 
 export interface PcSheet {
   id: string
   name: string
   hpMax: number | null
+  /** The number the sheet's own line quotes, so an attack has something to beat. */
+  ac: number | null
   initMod: number
   hasPortrait: boolean
+  /** What this character can do, parsed from the `-fc5.xml` beside the note. */
+  attacks: Attack[]
 }
+
+/**
+ * The party as `combatants` wants it: the note for who they are, the sheet for
+ * every number.
+ *
+ * Four panels built this by hand and each had to be found again the moment a
+ * field was added — which is how the armour class the sheet has always stated
+ * went four screens without ever reaching a combatant.
+ */
+export const pcSheets = (
+  characters: { id: string; name: string; portrait: Portrait | null }[],
+  sheets: Record<string, SheetStats | undefined>,
+): PcSheet[] =>
+  characters.map((c) => ({
+    id: c.id,
+    name: c.name || c.id,
+    hpMax: sheets[c.id]?.hpMax ?? null,
+    ac: sheets[c.id]?.ac ?? null,
+    initMod: sheets[c.id]?.initMod ?? 0,
+    hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
+    attacks: attacksOfSheet(sheets[c.id]),
+  }))
 
 /** PNJ that actually have art, keyed by `file` and `id`. */
 export type ArtIndex = Set<string>
@@ -51,13 +85,16 @@ export function combatants(
       ref: makeRef('pc', pc.id),
       name: pc.name,
       tag: null,
-      ac: null,
+      // The sheet has always stated this one; the rail simply never carried it
+      // across, so nothing could be swung at a player.
+      ac: pc.ac,
       hpMax: pc.hpMax,
       initMod: pc.initMod,
       speed: null,
       live,
       npc: null,
       portrait: pc.hasPortrait ? `/api/portrait/pc/${encodeURIComponent(pc.id)}` : null,
+      attacks: pc.attacks,
     })
   }
   for (const npc of state.npcs) {
@@ -76,6 +113,7 @@ export function combatants(
         art.has(npc.file) || art.has(npc.id)
           ? `/api/portrait/npc/${encodeURIComponent(npc.id)}`
           : null,
+      attacks: attacksOfPnj(npc),
     })
   }
   return out

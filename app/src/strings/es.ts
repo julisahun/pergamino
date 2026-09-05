@@ -26,6 +26,32 @@ export const es = {
   bienvenidaForma:
     'Vale una carpeta de mundo (la que tiene campaigns/ dentro) o una campaña ' +
     'suelta (la que tiene scenarios/ y story/).',
+
+  // el formato de una campaña
+  formato: 'Cómo se prepara una campaña',
+  formatoTitulo: 'El formato de una campaña',
+  formatoSub: 'Una carpeta de notas de Obsidian, no una base de datos.',
+  formatoQueEs:
+    'Cada PNJ y cada objeto es una nota con su ficha en el front matter y su ' +
+    'prosa debajo; cada escena, un json con su arte, su rejilla y su reparto; ' +
+    'cada PJ, una carpeta con su nota y su hoja.',
+  formatoPnj: 'gente y bichos: CA, PG, iniciativa, rasgos y retrato',
+  formatoObjetos: 'objetos: cargas, efectos y descripción',
+  formatoEscenas: 'escenas: arte, sonido, rejilla, reparto y nota de lectura',
+  formatoPlayers: 'la party: una carpeta por PJ, con su nota y su -fc5.xml',
+  formatoStory: 'las notas de la campaña, con [[enlaces]] y #etiquetas',
+  formatoAssets: 'arte, documentos y ambiente',
+  formatoRuns: 'una carpeta por mesa: lo único que la app escribe',
+  formatoLlm:
+    'instructions.md es el formato entero, escrito para dárselo a un LLM. ' +
+    'Dáselo junto con tu material — una aventura publicada, tus apuntes, una ' +
+    'campaña en otro formato — y te lo convierte en una carpeta que esta ' +
+    'pantalla abre.',
+  formatoReglas:
+    'Le dice que no toque lo que ya tienes (escribe una carpeta nueva) y que ' +
+    'pregunte en vez de inventarse un número.',
+  formatoDescargar: 'Descargar instructions.md',
+
   reabrirAyuda:
     'El navegador recuerda la carpeta, pero necesita que le des permiso otra vez.',
   navegadorNoSoportado: 'Este navegador no puede abrir carpetas',
@@ -118,6 +144,29 @@ export const es = {
   notaPreparacion: 'Nota de preparación',
   rasgos: 'Rasgos',
   anadir: 'Añadir',
+
+  // acciones: elegir qué se hace y contra quién, y ver el resultado antes
+  // de aplicarlo
+  sinAcciones: 'Nada con números en su ficha — se lleva a mano.',
+  objetivos: 'Objetivos',
+  elegirEnTablero: 'Elige en el tablero',
+  elegirObjetivo: 'Elige a quién',
+  tirar: 'Tirar',
+  salvacion: 'Salv',
+  curacion: 'Curación',
+  impacta: 'Impacta',
+  falla: 'Falla',
+  critico: '¡Crítico!',
+  pifia: 'Pifia',
+  salva: 'Salva',
+  noSalva: 'No salva',
+  sinDano: 'sin daño',
+  mitad: 'mitad',
+  aplicar: 'Aplicar',
+  gastar: 'Gastar',
+  espacioNivel: 'espacio de nivel',
+  quedan: 'quedan',
+  sinCa: 'sin CA — decides tú',
 
   // el tablero: quién está y quién entra
   anadirALaMesa: 'Añadir a la mesa',

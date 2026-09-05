@@ -9,7 +9,7 @@
  * scene happens in a bar popover rather than by turning the stage into a
  * picker.
  */
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Ref, Scene } from '../../../shared/types.ts'
 import { assetUrl } from '../../../shared/session/project.ts'
 import { titleCase } from '../../../shared/session/store.ts'
@@ -20,7 +20,7 @@ import { Board, type BoardTool } from '../board/Board.tsx'
 import { SceneLayer } from '../table/SceneLayer.tsx'
 import { InitiativeRail } from './InitiativeRail.tsx'
 import { Popover } from './Popover.tsx'
-import { artIndex, combatants, isDead } from './combat.ts'
+import { artIndex, combatants, isDead, pcSheets } from './combat.ts'
 
 const basename = (p: string) => p.split('/').pop() ?? p
 
@@ -32,19 +32,30 @@ const TOOLS: { id: BoardTool; label: string; title: string }[] = [
 export function MesaPanel() {
   const { scenes, pnjs, characters, sheets, state, frozen, assets, campaign, dispatch } = useDm()
   const [tool, setTool] = useState<BoardTool>('select')
+  /**
+   * Who is caught in the action currently open in the rail — `null` while
+   * none is.
+   *
+   * It lives here because the rail and the board are siblings and this is
+   * their nearest parent. It stays *out* of the session on purpose: half an
+   * aimed fireball is not a fact about the fight, and `session.json` is
+   * written to disk every few seconds.
+   */
+  const [aim, setAim] = useState<Ref[] | null>(null)
+  const disarm = useCallback(() => setAim(null), [])
+  const toggleTarget = useCallback(
+    (ref: string) =>
+      setAim((prev) => {
+        const current = prev ?? []
+        return current.includes(ref as Ref)
+          ? current.filter((r) => r !== ref)
+          : [...current, ref as Ref]
+      }),
+    [],
+  )
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
-  const pcs = useMemo(
-    () =>
-      characters.map((c) => ({
-        id: c.id,
-        name: c.name || c.id,
-        hpMax: sheets[c.id]?.hpMax ?? null,
-        initMod: sheets[c.id]?.initMod ?? 0,
-        hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
-      })),
-    [characters, sheets],
-  )
+  const pcs = useMemo(() => pcSheets(characters, sheets), [characters, sheets])
 
   const pieces = useMemo(() => {
     if (!state) return []
@@ -308,7 +319,11 @@ export function MesaPanel() {
               tokens={field.tokens}
               pieces={pieces}
               interactive
-              tool={tool}
+              // Aiming wins over whatever the toolbar is set to, and gives it
+              // back the moment the action closes.
+              tool={aim ? 'target' : tool}
+              targets={aim ?? undefined}
+              onToggleTarget={toggleTarget}
               onMoveToken={(ref, x, y) => dispatch({ type: 'token/move', ref: ref as Ref, x, y })}
             />
           ) : (
@@ -353,7 +368,7 @@ export function MesaPanel() {
         </div>
       </div>
 
-      <InitiativeRail />
+      <InitiativeRail aim={aim} onArm={setAim} onDisarm={disarm} />
     </div>
   )
 }

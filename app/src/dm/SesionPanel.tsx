@@ -8,6 +8,7 @@ import { useDm, type CloseDraft } from '../state/dmStore.ts'
 
 const KIND_LABEL: Record<string, string> = {
   scene: 'escena',
+  attack: 'ataque',
   damage: 'daño',
   heal: 'curación',
   death: 'muerte',

@@ -84,6 +84,8 @@ describe('parseSheet', () => {
       skills: [],
       saves: [],
       summary: null,
+      weapons: [],
+      spells: [],
     })
   })
 

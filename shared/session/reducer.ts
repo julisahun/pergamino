@@ -5,7 +5,7 @@
  * Anything non-deterministic (ids, dice) is injected through `ReduceOpts` so
  * the reducer stays testable.
  */
-import type { Action } from '../actions.ts'
+import type { Action, AttackTarget } from '../actions.ts'
 import type {
   Encounter,
   GameObject,
@@ -27,6 +27,14 @@ export interface ReduceOpts {
   pcMaxHp?: (pcId: string) => number | null
   /** Initiative modifier of a PC, from its sheet. */
   pcInitMod?: (pcId: string) => number | null
+  /**
+   * Armour class of a PC, from the line its sheet quotes.
+   *
+   * Only the bitácora reads it — the verdict on whether a swing landed is
+   * settled in the console before it gets here, because the DM is the one who
+   * knows about the Escudo that went up in response.
+   */
+  pcAc?: (pcId: string) => number | null
   /** Prep data, for instantiating pnjs into the session. */
   pnj?: (pnjId: string) => Pnj | undefined
   /** Prep data for magic items, so charges start from the right number. */
@@ -245,6 +253,132 @@ function advance(
   }
 }
 
+// --- hit points ------------------------------------------------------------
+
+/**
+ * Hit points off, temporary ones absorbing first.
+ *
+ * Split out of `hp/damage` so `attack/resolve` cannot drift from it. What
+ * comes back is the state, the hit points left, and the *consequences* — a PC
+ * dropped to zero goes Inconsciente and the bitácora says so. The line that
+ * says why the damage happened is the caller's, because a swing and a bare
+ * number are the same event told differently.
+ */
+function takeDamage(
+  state: SessionState,
+  ref: Ref,
+  amount: number,
+  opts: ReduceOpts,
+): { state: SessionState; hp: number; log: Omit<LogEntry, 't'>[] } | null {
+  const live = liveOf(state, ref)
+  if (!live || amount <= 0) return null
+  const absorbed = Math.min(live.temp, amount)
+  const before = live.hp ?? maxHpOf(state, ref, opts) ?? 0
+  const after = Math.max(0, before - (amount - absorbed))
+  let next = withLive(state, ref, (l) => ({ ...l, temp: l.temp - absorbed, hp: after }))
+  const log: Omit<LogEntry, 't'>[] = []
+  if (after === 0 && before > 0) {
+    log.push({ kind: 'death', text: `${nameOf(state, ref, opts)} cae a 0 PG` })
+    if (refKind(ref) === 'pc') {
+      next = withLive(next, ref, (l) => ({
+        ...l,
+        conditions: l.conditions.includes('Inconsciente')
+          ? l.conditions
+          : [...l.conditions, 'Inconsciente'],
+      }))
+    }
+  }
+  return { state: next, hp: after, log }
+}
+
+/** Hit points back on, capped at the maximum. Coming off 0 ends the dying. */
+function giveHealing(
+  state: SessionState,
+  ref: Ref,
+  amount: number,
+  opts: ReduceOpts,
+): { state: SessionState; hp: number; gained: number } | null {
+  const live = liveOf(state, ref)
+  if (!live || amount <= 0) return null
+  const max = maxHpOf(state, ref, opts)
+  const before = live.hp ?? 0
+  const after = max === null ? before + amount : Math.min(max, before + amount)
+  return {
+    state: withLive(state, ref, (l) => ({
+      ...l,
+      hp: after,
+      death: before === 0 ? { ok: 0, fail: 0 } : l.death,
+      conditions: before === 0 ? l.conditions.filter((c) => c !== 'Inconsciente') : l.conditions,
+    })),
+    hp: after,
+    // What actually went on, not what was rolled: a 2d8 into someone one hit
+    // point down heals one.
+    gained: after - before,
+  }
+}
+
+// --- what the bitácora is told about a swing -------------------------------
+
+/** The AC an attack was up against, when anything states one. */
+function acOf(state: SessionState, ref: Ref, opts: ReduceOpts): number | null {
+  if (refKind(ref) === 'npc') return state.npcs.find((n) => n.id === refId(ref))?.ac ?? null
+  return opts.pcAc?.(refId(ref)) ?? null
+}
+
+const signed = (n: number): string => (n < 0 ? `${n}` : `+${n}`)
+
+/**
+ * One line per target, misses included.
+ *
+ * A miss changes no hit points and so would leave no trace at all, which is
+ * exactly why it is written down: read back after the session the bitácora is
+ * the fight, and a fight is mostly people not connecting.
+ */
+function attackLine(
+  state: SessionState,
+  action: Extract<Action, { type: 'attack/resolve' }>,
+  target: AttackTarget,
+  hp: number | null,
+  opts: ReduceOpts,
+): string {
+  const who = nameOf(state, action.ref, opts)
+  const whom = nameOf(state, target.ref, opts)
+  const left = hp === null ? '' : ` (${hp} PG)`
+
+  if (action.kind === 'heal') {
+    return `${who} cura a ${whom} con ${action.name}: ${target.amount}${left}`
+  }
+
+  if (action.kind === 'save') {
+    const roll =
+      target.save === null
+        ? action.dc === null
+          ? ''
+          : `CD ${action.dc}`
+        : `${target.save} vs CD ${action.dc ?? '—'}`
+    // `hit` reads as "the save failed" here: the same field, the same meaning
+    // — the action landed on this one.
+    const verb = target.hit ? 'no salva contra' : 'salva contra'
+    const effect = target.amount > 0 ? ` · ${target.amount}${left}` : ' · sin daño'
+    return `${whom} ${verb} ${action.name}${roll ? `: ${roll}` : ''}${effect}`
+  }
+
+  const ac = acOf(state, target.ref, opts)
+  const versus =
+    target.roll === null
+      ? ''
+      : `${target.roll}${action.mod ? ` ${signed(action.mod)} = ${target.roll + action.mod}` : ''}${
+          ac === null ? '' : ` vs CA ${ac}`
+        }`
+  if (!target.hit) {
+    return `${who} falla contra ${whom} con ${action.name}${versus ? `: ${versus}` : ''}`
+  }
+  const crit = target.crit ? '¡CRÍTICO! ' : ''
+  return `${who} golpea a ${whom} con ${action.name}: ${crit}${versus ? `${versus} · ` : ''}${
+    target.amount
+  }${left}`
+}
+
 // --- the reducer -----------------------------------------------------------
 
 export function reduce(
@@ -389,47 +523,23 @@ export function reduce(
 
     // --- estado vivo -------------------------------------------------------
     case 'hp/damage': {
-      const live = liveOf(state, action.ref)
-      if (!live || action.amount <= 0) return { state, log }
-      const absorbed = Math.min(live.temp, action.amount)
-      const toHp = action.amount - absorbed
-      const before = live.hp ?? maxHpOf(state, action.ref, opts) ?? 0
-      const after = Math.max(0, before - toHp)
-      next = withLive(state, action.ref, (l) => ({ ...l, temp: l.temp - absorbed, hp: after }))
+      const hit = takeDamage(state, action.ref, action.amount, opts)
+      if (!hit) return { state, log }
+      next = hit.state
       log.push({
         kind: 'damage',
-        text: `${nameOf(state, action.ref, opts)} recibe ${action.amount} (${after} PG)`,
+        text: `${nameOf(state, action.ref, opts)} recibe ${action.amount} (${hit.hp} PG)`,
       })
-      if (after === 0 && before > 0) {
-        log.push({ kind: 'death', text: `${nameOf(state, action.ref, opts)} cae a 0 PG` })
-        if (refKind(action.ref) === 'pc') {
-          next = withLive(next, action.ref, (l) => ({
-            ...l,
-            conditions: l.conditions.includes('Inconsciente')
-              ? l.conditions
-              : [...l.conditions, 'Inconsciente'],
-          }))
-        }
-      }
+      log.push(...hit.log)
       break
     }
     case 'hp/heal': {
-      const live = liveOf(state, action.ref)
-      if (!live || action.amount <= 0) return { state, log }
-      const max = maxHpOf(state, action.ref, opts)
-      const before = live.hp ?? 0
-      const after = max === null ? before + action.amount : Math.min(max, before + action.amount)
-      next = withLive(state, action.ref, (l) => ({
-        ...l,
-        hp: after,
-        // Coming back from 0 ends the dying state.
-        death: before === 0 ? { ok: 0, fail: 0 } : l.death,
-        conditions:
-          before === 0 ? l.conditions.filter((c) => c !== 'Inconsciente') : l.conditions,
-      }))
+      const healed = giveHealing(state, action.ref, action.amount, opts)
+      if (!healed) return { state, log }
+      next = healed.state
       log.push({
         kind: 'heal',
-        text: `${nameOf(state, action.ref, opts)} recupera ${after - before} (${after} PG)`,
+        text: `${nameOf(state, action.ref, opts)} recupera ${healed.gained} (${healed.hp} PG)`,
       })
       break
     }
@@ -508,6 +618,62 @@ export function reduce(
         },
       }
       log.push({ kind: 'encounter', text: `Combate iniciado (${action.members.length})` })
+      break
+    }
+    /**
+     * A whole action, applied at once.
+     *
+     * The randomness happened in the console; what arrives is a list of
+     * outcomes. Everything that touches hit points goes through the same two
+     * helpers `hp/damage` and `hp/heal` use, so temporary hit points absorb
+     * here too and a PC who drops still goes Inconsciente.
+     */
+    case 'attack/resolve': {
+      const live = liveOf(state, action.ref)
+      if (!live || action.targets.length === 0) return { state, log }
+      next = state
+
+      if (action.spend) {
+        const { level } = action.spend
+        next = withLive(next, action.ref, (l) => ({
+          ...l,
+          spent: { ...l.spent, [level]: (l.spent[level] ?? 0) + 1 },
+        }))
+        log.push({
+          kind: 'attack',
+          text: `${nameOf(state, action.ref, opts)} usa ${action.name} (espacio de nivel ${level})`,
+        })
+      }
+
+      for (const target of action.targets) {
+        // The line is written against `state`, not `next`: with two soldiers
+        // caught in the same cone, the second one's name must not be looked up
+        // in a state the first one already changed.
+        // For a save the amount already accounts for the roll — `afterSave`
+        // halved or zeroed it in the console — so a made save against Manos
+        // Ardientes still takes its half. Only an attack roll can land on
+        // nothing at all.
+        const lands = action.kind === 'attack' ? target.hit : true
+        if (!lands || target.amount <= 0) {
+          log.push({ kind: 'attack', text: attackLine(state, action, target, null, opts) })
+          continue
+        }
+        if (action.kind === 'heal') {
+          const healed = giveHealing(next, target.ref, target.amount, opts)
+          if (!healed) continue
+          next = healed.state
+          log.push({
+            kind: 'attack',
+            text: attackLine(state, action, { ...target, amount: healed.gained }, healed.hp, opts),
+          })
+          continue
+        }
+        const hit = takeDamage(next, target.ref, target.amount, opts)
+        if (!hit) continue
+        next = hit.state
+        log.push({ kind: 'attack', text: attackLine(state, action, target, hit.hp, opts) })
+        log.push(...hit.log)
+      }
       break
     }
     case 'encounter/end':

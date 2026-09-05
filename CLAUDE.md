@@ -12,6 +12,8 @@ This file is the part that matters when editing it.
 ```
 shared/     the whole core. No DOM, no node — the browser and the tests
             import the same files.
+shared/combat/  what a combatant can do, read out of the prose that already
+            describes it. Pure: no state, no session, no dice inside `reduce`.
 app/        two pages: index.html (console) and tv.html (television).
 server.py   a static host. Stdlib only.
 test/       fixture wiring, node-only.
@@ -109,6 +111,66 @@ The television window has no directory handle, so it cannot read a campaign
 even in principle. Keep it that way: it receives a `TableView` and blobs it
 asked for by key, over `app/src/transport/`. Nothing else.
 
+## Where the dice are
+
+The reducer is deterministic. `ReduceOpts` injects ids so the whole suite can
+drive `reduce` without stubbing a generator, and initiative used to be rolled
+in there and was deliberately taken out — `reducer.ts` still says *"Nothing is
+rolled here"* and `reducer.vault.test.ts` still asserts it.
+
+Resolving an attack did not change that. The console rolls — by the DM's hand
+or by the 🎲 beside the field, which are the same thing as far as anything
+downstream is concerned — and `attack/resolve` carries an *outcome*:
+who swung, what with, and per target the face, the verdict and the amount. So
+the die the DM wanted and the determinism the tests rest on are not in tension;
+they are on opposite sides of one action payload.
+
+Two things follow, and both matter more than they look:
+
+- **The verdict is a suggestion.** `hits()` returns `null` when nothing states
+  an AC or the note gives no attack bonus, and the console shows «sin CA —
+  decides tú» with a `⇄` rather than inventing a number. A wizard with Escudo
+  up has an AC no sheet knows about, and nothing is applied until Aplicar.
+- **`AttackTarget.hit` means "it landed", which for a save means the target
+  *failed* it** — and it does not decide the damage. `amount` is already what
+  that target takes, a made save's half included (`afterSave` in the console).
+  The reducer applies `amount` for a save whatever `hit` says; only an attack
+  roll can land on nothing at all.
+
+`attack/resolve` is one action rather than three dispatches because a fireball
+that half-applied would be worse than one that did not, and because three
+entries in the bitácora would not say they were the same swing. It reaches the
+same `takeDamage`/`giveHealing` helpers `hp/damage` and `hp/heal` do, so
+temporary hit points absorb and a PC who drops still goes Inconsciente.
+
+## What an action is read from
+
+`shared/combat/attacks.ts` reads attacks out of prose a human wrote for a
+human. Nothing was added to any campaign for it: a pnj note already said
+«+3 al ataque, 1d6+1 de daño cortante» and a `-fc5.xml` already said
+«Ataque +5, daño 1d6 +3 perforante». Asking the DM to restate those in a second
+structured field would mean two places that can disagree.
+
+- **No dice, no action.** That one rule is what keeps Misil Mágico (three
+  darts, «no fallan nunca», one `<roll>` that describes none of it), Grasa,
+  Bendición and Guía off the list, and it needs no special case for any of
+  them. Ossian's «El agua lo cierra todo» and Tulio's «La sal» state no damage
+  and stay prose on the ficha, which is where the DM runs them from.
+- **Damage is what makes an attack; the bonus is optional.** Gerald's
+  Devastating Cuddle is `2d8+4` and no to-hit at all, and refusing to offer it
+  would be refusing to run the only attack the demo campaign's boss has. What
+  a missing bonus costs is the verdict, not the action.
+- **Both languages.** `marea-baja` is Spanish and the shipped fixture is
+  English; that is one format in two languages, so it is one alternation
+  rather than a setting somebody has to get right.
+- **The damage type is dropped on the floor.** Nothing here resists, absorbs
+  or doubles anything, so carrying "cortante" to the log would be decoration
+  that reads like a mechanic.
+- `attacks.vault.test.ts` pins the *coverage* against the real campaign — every
+  seated pnj and every player sheet. That is the file that tells you a new
+  statblock worded its attack some other way, rather than an empty menu at the
+  table telling you mid-fight.
+
 ## Traps worth knowing first
 
 - **Asset keys are not URLs.** `/vault/assets/x.jpg` and
@@ -175,7 +237,7 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 193 with the DM's vault present, 62 without
+npm test                 # 282 with the DM's vault present, 135 without
 npm run typecheck
 npm run build
 ```

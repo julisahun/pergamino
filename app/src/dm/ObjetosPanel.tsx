@@ -16,7 +16,7 @@ import type { GameObject } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { ObjectDetail } from './ObjectDetail.tsx'
-import { artIndex, combatants, type Combatant } from './combat.ts'
+import { artIndex, combatants, pcSheets, type Combatant } from './combat.ts'
 
 export function ObjetosPanel() {
   const { objects, pnjs, characters, sheets, state, dispatch } = useDm()
@@ -25,17 +25,7 @@ export function ObjetosPanel() {
   const [detail, setDetail] = useState<string | null>(null)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
-  const pcs = useMemo(
-    () =>
-      characters.map((c) => ({
-        id: c.id,
-        name: c.name || c.id,
-        hpMax: sheets[c.id]?.hpMax ?? null,
-        initMod: sheets[c.id]?.initMod ?? 0,
-        hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
-      })),
-    [characters, sheets],
-  )
+  const pcs = useMemo(() => pcSheets(characters, sheets), [characters, sheets])
   const everyone = useMemo(
     () => (state ? combatants(state, pcs, art) : []),
     [state, pcs, art],

@@ -430,6 +430,9 @@ textarea {
   position: absolute; inset: 0;
   display: grid; place-content: center;
   color: var(--ink-faint);
+  /* It is a glyph, not a control, and it covers the whole board — without
+     this it swallows every click on a token whenever no map is loaded. */
+  pointer-events: none;
 }
 
 .grid-lines line {
@@ -476,6 +479,13 @@ textarea {
 .token.pc { border-color: #6ea8d8; }
 .token.npc { border-color: #c0685a; }
 .token.active { box-shadow: 0 0 0 3px var(--accent), 0 3px 10px rgba(0, 0, 0, 0.6); }
+/* Being aimed at: a red ring that reads over the accent one of whoever is
+   up, because the two happen at once when somebody hits themselves. */
+.token.targeted { box-shadow: 0 0 0 3px var(--danger), 0 0 14px 2px rgba(180, 70, 47, 0.55); }
+.token.active.targeted {
+  box-shadow: 0 0 0 3px var(--danger), 0 0 0 6px var(--accent), 0 3px 10px rgba(0, 0, 0, 0.6);
+}
+.board.tool-target { cursor: crosshair; }
 .token.dead { filter: grayscale(1); opacity: 0.55; }
 .token.dead::after {
   content: ''; position: absolute; inset: 12%;
@@ -752,7 +762,7 @@ textarea {
   font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--ink-faint); min-width: 66px; padding-top: 2px;
 }
-.log-kind.death, .log-kind.damage { color: var(--danger); }
+.log-kind.death, .log-kind.damage, .log-kind.attack { color: var(--danger); }
 .log-kind.loot { color: var(--accent); }
 
 .dev-list { display: flex; flex-direction: column; gap: 3px; }
@@ -824,6 +834,21 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 .sheet-actions { margin: 0 0 4px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .sheet ul { margin: 0; padding-left: 20px; color: var(--ink-dim); line-height: 1.55; }
 .sheet ul li { margin-bottom: 5px; }
+
+/* The campaign format, on the welcome screen: prose and a folder-by-folder
+   list, so the scoping keeps it off every other sheet. */
+.format-sheet p { margin: 0 0 12px; line-height: 1.55; }
+.format-sheet .format-list {
+  list-style: none; margin: 0 0 16px; padding: 0 0 0 4px;
+  display: grid; gap: 5px;
+}
+.format-sheet .format-list li { display: flex; gap: 10px; align-items: baseline; margin: 0; }
+.format-list code {
+  flex: 0 0 76px;
+  color: var(--accent);
+  font: 500 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.format-list span { color: var(--ink-faint); font-size: 12.5px; line-height: 1.5; }
 
 /* -------------------------------------------------------------- mesa tab */
 
@@ -1044,3 +1069,94 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   letter-spacing: 0.16em;
   color: var(--accent);
 }
+
+
+/* --- la barra de acción ---------------------------------------------------
+   Under the row whose turn it is: what this one can do, who it lands on, and
+   what it will cost them — none of which touches the session until Aplicar. */
+.irow-block { display: flex; flex-direction: column; gap: 0; }
+
+.act-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 2px 0;
+  padding: 6px 8px;
+  background: #201b14;
+  border: 1px solid var(--accent-dim);
+  border-top: none;
+  border-radius: 0 0 7px 7px;
+}
+.act-bar.empty {
+  display: block;
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-style: italic;
+  border-color: var(--line);
+}
+.act-bar.open { flex-direction: column; gap: 6px; }
+
+.act-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 8px;
+  line-height: 1.25;
+  text-align: left;
+}
+.act-pick b { font-size: 12px; }
+.act-pick .muted { font-size: 10px; }
+
+.act-head { display: flex; align-items: baseline; gap: 8px; }
+.act-head b { font-size: 13px; }
+.act-head .muted { font-size: 11px; }
+
+.act-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.act-roll { display: inline-flex; align-items: center; gap: 4px; }
+.act-roll-label { color: var(--ink-dim); font-size: 10px; text-transform: uppercase; }
+.act-roll input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: inherit;
+  font: inherit;
+  padding: 3px 5px;
+  text-align: center;
+}
+
+.act-spend { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-dim); }
+/* Spending one you do not have is allowed — the DM is the authority — but it
+   says so rather than happening quietly. */
+.act-spend.none-left { color: var(--danger); }
+
+.act-hint { margin: 0; color: var(--ink-dim); font-size: 11px; font-style: italic; }
+
+.act-targets { display: flex; flex-direction: column; gap: 3px; }
+/* Two lines rather than one: the rail is a column beside the board, and a
+   verdict that says what it beat and what it leaves does not fit next to a
+   name and a die. */
+.act-target {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.act-who {
+  font-size: 12px; font-weight: 600;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-outcome {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+}
+.act-verdict { font-size: 11px; color: var(--ink-dim); text-align: right; }
+
+.act-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.act-foot select { font-size: 11px; padding: 3px 5px; max-width: 46%; }
+.act-foot > button:last-child { margin-left: auto; }

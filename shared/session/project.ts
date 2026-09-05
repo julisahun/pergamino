@@ -40,9 +40,15 @@ export const revealFor = (state: SessionState, ref: Ref): RevealState =>
 /** What the server knows about a PC from its sheet, not from live state. */
 export interface PcInfo {
   name: string
-  /** Both derived from the `-fc5.xml` sheet; null when it is missing. */
+  /** All three derived from the `-fc5.xml` sheet; null when it is missing. */
   hpMax: number | null
   initMod: number | null
+  /**
+   * The number the sheet's own line quotes. Read only by the bitácora, so a
+   * swing at a player can say what it was up against — the hit or miss itself
+   * is settled in the console, where the DM knows about the Escudo.
+   */
+  ac: number | null
   hasPortrait: boolean
 }
 

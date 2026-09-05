@@ -41,6 +41,10 @@ describe('readSheet', () => {
       skills: [],
       saves: [],
       summary: expect.stringContaining('nivel 1'),
+      // Present, so a field cannot appear here unnoticed; what is *in* them is
+      // pinned by the two tests below rather than by thirteen spells inline.
+      weapons: expect.any(Array),
+      spells: expect.any(Array),
     })
     // croma.md: "PG 11 · Iniciativa −1" — 11 because dureza enana adds a
     // point a plain d8 + CON 14 calculation would miss.
@@ -48,6 +52,37 @@ describe('readSheet', () => {
     expect(croma.hpMax).toBe(11)
     expect(croma.initMod).toBe(-1)
     expect(croma.ac).toBe(14)
+  })
+
+  it('counts an item as a weapon only when it has a damage die', async () => {
+    // Abraxas carries a daga, a bastón, a «Bastón (foco arcano)», a túnica, a
+    // libro de conjuros and eight sheets of parchment. Two of those are things
+    // to swing, and the difference is `<damage1H>`, not the prose.
+    const { weapons } = await readSheet(last, pj('abraxas'))
+    expect(weapons.map((w) => w.name)).toEqual(['Daga', 'Bastón'])
+    expect(weapons[0]).toMatchObject({
+      damage: '1d4',
+      text: expect.stringContaining('Ataque +4, daño 1d4 +2'),
+    })
+  })
+
+  it('reads the spells with the roll each one states', async () => {
+    const { spells } = await readSheet(last, pj('abraxas'))
+    const saeta = spells.find((s) => s.name === 'Saeta de Fuego')
+    // A cantrip writes no `<level>`; zero is what that absence means.
+    expect(saeta).toMatchObject({ level: 0, roll: '1d10' })
+    expect(spells.find((s) => s.name === 'Manos Ardientes')).toMatchObject({
+      level: 1,
+      roll: '3d6',
+    })
+    // Listed even with nothing to roll — deciding that is not this file's job.
+    expect(spells.find((s) => s.name === 'Detectar Magia')).toMatchObject({ roll: null })
+  })
+
+  it('gives a sheet with no spells an empty list, not a missing one', async () => {
+    const toribio = await readSheet(last, pj('toribio'))
+    expect(toribio.spells).toEqual([])
+    expect(toribio.weapons.map((w) => w.name)).toEqual(['Daga', 'Espada corta', 'Arco corto'])
   })
 
   it('takes the stated initiative over DEX wherever the two disagree', async () => {

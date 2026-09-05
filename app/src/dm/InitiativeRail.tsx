@@ -3,17 +3,18 @@
  * is, how hurt everyone is, and damage — all one click away. The stat block
  * slides in over the rail when you pick someone.
  */
-import { useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Ref, RevealState } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
 import { tableNames } from '../../../shared/session/project.ts'
 import { es } from '../strings/es.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
+import { ActionBar } from './ActionBar.tsx'
 import { AddToTable } from './AddToTable.tsx'
 import { CombatantDetail } from './CombatantDetail.tsx'
 import { CombatSetup } from './CombatSetup.tsx'
-import { artIndex, combatants, isDead, isDown, orderByInit, type Combatant } from './combat.ts'
+import { artIndex, combatants, isDead, isDown, orderByInit, pcSheets, type Combatant } from './combat.ts'
 
 const PC_DEFAULT: RevealState = { on: true, hp: 'exact', name: 'alias' }
 const NPC_DEFAULT: RevealState = { on: false, hp: 'none', name: 'alias' }
@@ -36,6 +37,7 @@ function RailRow({
   showInit,
   onRemove,
   onSelect,
+  bar,
 }: {
   c: Combatant
   reveal: RevealState
@@ -47,6 +49,8 @@ function RailRow({
   showInit: boolean
   onRemove: () => void
   onSelect: () => void
+  /** The action bar, on the row whose turn it is and nowhere else. */
+  bar?: React.ReactNode
 }) {
   const dispatch = useDm((s) => s.dispatch)
   const [amount, setAmount] = useState('')
@@ -66,6 +70,7 @@ function RailRow({
   const fraction = hp !== null && c.hpMax ? Math.max(0, Math.min(1, hp / c.hpMax)) : null
 
   return (
+    <div className={`irow-block${active ? ' active' : ''}`}>
     <div
       className={`irow${showInit ? '' : ' no-init'}${active ? ' active' : ''}${
         isDown(c) ? ' down' : ''
@@ -174,27 +179,28 @@ function RailRow({
         </div>
       </div>
     </div>
+    {bar && <div onClick={(e) => e.stopPropagation()}>{bar}</div>}
+    </div>
   )
 }
 
-export function InitiativeRail() {
+export function InitiativeRail({
+  aim,
+  onArm,
+  onDisarm,
+}: {
+  /** Refs picked on the board while an action is open; null when disarmed. */
+  aim: Ref[] | null
+  onArm: (refs: Ref[]) => void
+  onDisarm: () => void
+}) {
   const { state, characters, pnjs, sheets, dispatch } = useDm()
   const [selected, setSelected] = useState<Ref | null>(null)
   const [adding, setAdding] = useState(false)
   const [starting, setStarting] = useState(false)
 
   const art = useMemo(() => artIndex(pnjs), [pnjs])
-  const pcs = useMemo(
-    () =>
-      characters.map((c) => ({
-        id: c.id,
-        name: c.name || c.id,
-        hpMax: sheets[c.id]?.hpMax ?? null,
-        initMod: sheets[c.id]?.initMod ?? 0,
-        hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
-      })),
-    [characters, sheets],
-  )
+  const pcs = useMemo(() => pcSheets(characters, sheets), [characters, sheets])
 
   const everyone = useMemo(() => (state ? combatants(state, pcs, art) : []), [state, pcs, art])
   // The same map the television is built from, so the console can say exactly
@@ -246,6 +252,19 @@ export function InitiativeRail() {
     <RailRow
       key={c.ref}
       c={c}
+      bar={
+        // Only whoever is up. Out of combat there is no "up", and the ficha is
+        // where an action is reached from instead.
+        encounter.on && encounter.activeRef === c.ref ? (
+          <ActionBar
+            actor={c}
+            everyone={all}
+            targets={aim ?? []}
+            onArm={onArm}
+            onDisarm={onDisarm}
+          />
+        ) : undefined
+      }
       reveal={state.field.reveal[c.ref] ?? (c.npc ? NPC_DEFAULT : PC_DEFAULT)}
       tableName={(c.npc && labels.get(c.npc.id)) || null}
       init={encounter.init[c.ref]}

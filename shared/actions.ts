@@ -1,5 +1,46 @@
 /** Every mutation a client can ask the server to perform. */
+import type { AttackKind } from './combat/attacks.ts'
 import type { AudioState, FieldMode, Handout, HpReveal, NameReveal, Ref } from './types.ts'
+
+/**
+ * What one action did to one of the people it was aimed at.
+ *
+ * The dice are already thrown. They are thrown in the console — by the DM's
+ * hand or by its die button, which come to the same thing here — because
+ * `reduce` is deterministic and the suite drives it without stubbing a
+ * generator. What crosses into the reducer is an outcome, not a chance.
+ */
+export interface AttackTarget {
+  ref: Ref
+  /** The d20 face, before the modifier. Null when nothing was rolled to land. */
+  roll: number | null
+  /**
+   * Whether it landed — and for a save, whether the target *failed* it, which
+   * is the same statement about the same event. The console suggests it from
+   * the target's AC and the DM can overrule it: a wizard with Escudo up has an
+   * AC no sheet knows about.
+   *
+   * It does not decide the damage. `amount` is already what this target takes,
+   * a made save's half included.
+   */
+  hit: boolean
+  crit: boolean
+  /** What the *target* rolled against the DC, for a save. */
+  save: number | null
+  /** Hit points off, or on for a heal. Already halved for a made save. */
+  amount: number
+}
+
+/**
+ * The resource an action costs, when it costs one — a spell level.
+ *
+ * Not a charged object, deliberately. Both of the ones the campaign has say in
+ * their own prose that they are not actions: the Lágrima de Milia is *«pasivo:
+ * no cuesta acción, no hay que activarla ni declarar que se usa»* and the Óleo
+ * de Santa Milia is *«sin tirada, sin salvación, no falla»*. Charges are spent
+ * where they are tracked, in `Charges.tsx`.
+ */
+export type AttackSpend = { level: string }
 
 export type Action =
   // --- Escena -------------------------------------------------------------
@@ -43,6 +84,30 @@ export type Action =
   | { type: 'encounter/members'; members: Ref[] }
   | { type: 'encounter/init'; ref: Ref; value: number }
   | { type: 'encounter/advance'; delta: 1 | -1 }
+  /**
+   * One resolved action, applied in a single step.
+   *
+   * It exists rather than the console firing `hp/damage` per target and a
+   * `slots/set` beside it, because those would be three entries in the
+   * bitácora that do not say they were the same swing, and a half-applied
+   * fireball if anything went wrong between them. The reducer still reaches
+   * the same helpers `hp/damage` does, so temporary hit points absorb and a PC
+   * dropped to zero still goes Inconsciente.
+   */
+  | {
+      type: 'attack/resolve'
+      /** Who acted. */
+      ref: Ref
+      /** What they used — the ability, weapon or spell, for the bitácora. */
+      name: string
+      kind: AttackKind
+      /** The attacker's bonus, so a line can read `15 +3 = 18`. */
+      mod: number | null
+      /** The DC a save was against. */
+      dc: number | null
+      targets: AttackTarget[]
+      spend?: AttackSpend
+    }
   // --- Tablero ------------------------------------------------------------
   | { type: 'token/move'; ref: Ref; x: number; y: number }
   | { type: 'token/remove'; ref: Ref }

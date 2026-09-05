@@ -130,6 +130,27 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
   a quien mire desde la barrera. Las casillas de iniciativa **empiezan
   vacías**: las escribes tú, ⏎ baja a la siguiente, y el dado de cada fila sólo
   tira si lo pulsas. La app ya no tira nada por su cuenta.
+- **La barra de acción**, debajo de la fila de quien va. Trae lo que esa
+  criatura sabe hacer *leído de su nota*: `pnj/bandido.md` dice «+3 al ataque,
+  1d6+1 de daño cortante» y ahí sale «Cimitarra +3 · 1d6+1». Para la party lo
+  mismo, desde el `-fc5.xml`: las armas y los conjuros que sí tienen números
+  — ataque de conjuro, salvación con CD, o curación.
+  - Eliges la acción y **el tablero se arma**: cada ficha que pulses entra en
+    la acción con un anillo rojo, y pulsarla otra vez la saca. Un cono son
+    tres clics y una sola tirada de daño.
+  - Cada casilla tiene su dado al lado, como en «Iniciar combate»: **lo tiras
+    tú o lo tira el botón**, y lo que escribas manda. Un 20 dobla los dados y
+    lo dice; un 1 falla.
+  - Lo que sale es una **previsualización** — «Impacta · 18 vs CA 12 · 5 → 4
+    PG» — y no toca nada hasta que le das a **Aplicar**. El veredicto es una
+    sugerencia: el `⇄` lo cambia, porque el Escudo que se acaba de lanzar no
+    está en ninguna hoja.
+  - Un conjuro **gasta su espacio** al aplicarlo, y lo dice en la bitácora.
+    Puedes desmarcarlo (rituales, la tirada gratis de *Iniciado en la magia*).
+  - La bitácora se queda con **todo, fallos incluidos**: leída después, una
+    pelea es sobre todo gente que no acierta.
+  - Lo que la nota no escribe en números — «El agua lo cierra todo», Misil
+    Mágico — **no sale en la lista**. Sigue en Rasgos, y se lleva a mano.
 - La nota de lectura de la escena queda fijada abajo.
 - **Congelar la mesa**: la pantalla de los jugadores se queda con el último
   fotograma mientras preparas lo siguiente — colocar fichas, cargar un reparto,
@@ -196,11 +217,11 @@ existen:
 | Fichero | Qué saca |
 |---|---|
 | `scenarios/*.json` | escena, arte, rejilla, nota de lectura, reparto |
-| `pnj/*.md` | CA, PG, iniciativa, rasgos, retrato y `alias` en el front matter; la nota, debajo |
+| `pnj/*.md` | CA, PG, iniciativa, rasgos, retrato y `alias` en el front matter; la nota, debajo. Un rasgo que escriba daño («+3 al ataque, 1d6+1 de daño») sale además como acción |
 | `objects/*.md` | `mods.ac`, `usos` y efectos en el front matter; la nota, debajo |
 | `players/*.md` | la party compartida de la campaña: nombre, retrato y quién es |
 | `runs/<mesa>/players/*.md` | la party de esa mesa, que **tapa** la anterior por id |
-| `players/*-fc5.xml` | PG máximos, iniciativa y espacios **calculados** |
+| `players/*-fc5.xml` | PG máximos, iniciativa y espacios **calculados**, más las armas y los conjuros con números |
 | `story/**.md`, `mundo/**.md` | las notas |
 | `runs/<mesa>/session.json` | el estado vivo |
 
@@ -347,6 +368,10 @@ shared/                  todo el núcleo: lo comparten el navegador y las prueba
   pathish.ts             el trozo de node:path que hacía falta, en POSIX
   types.ts, actions.ts   tipos y acciones
   grid.ts, conditions.ts geometría y estados
+  combat/
+    dice.ts              1d6+1: leer, tirar, doblar en un crítico
+    attacks.ts           qué sabe hacer cada uno, leído de su propia prosa
+    resolve.ts           de lo que hay en las casillas a lo que ha pasado
   vault/
     source.ts            VaultDir / WritableVaultDir — la costura
     binding.ts           CampaignVault: forma, campañas, mesas, los dos descensos
@@ -354,7 +379,7 @@ shared/                  todo el núcleo: lo comparten el navegador y las prueba
     node.ts              vault sobre node:fs (sólo pruebas)
     campaign.ts          escenas, monstruos, objetos, personajes
     session.ts           carga, migración y persistencia de session.json
-    sheet.ts             PG, iniciativa y espacios desde el -fc5.xml
+    sheet.ts             PG, iniciativa, espacios, armas y conjuros del -fc5.xml
     notes.ts             índice de notas, wikilinks, backlinks, etiquetas
     render.ts            markdown → HTML con wikilinks navegables
     writeback.ts         bitácora y estado.md

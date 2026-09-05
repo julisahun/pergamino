@@ -217,6 +217,7 @@ export interface Field {
 
 export type LogKind =
   | 'scene'
+  | 'attack'
   | 'damage'
   | 'heal'
   | 'death'

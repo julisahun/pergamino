@@ -75,6 +75,7 @@ export function pcsOf(run: RunData): Map<string, PcInfo> {
         name: c.name,
         hpMax: run.sheets.get(c.id)?.hpMax ?? null,
         initMod: run.sheets.get(c.id)?.initMod ?? null,
+        ac: run.sheets.get(c.id)?.ac ?? null,
         hasPortrait: c.portrait !== null,
       },
     ]),
