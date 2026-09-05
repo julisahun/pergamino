@@ -8,6 +8,7 @@ import { ObjetosPanel } from './ObjetosPanel.tsx'
 import { NotasPanel } from './NotasPanel.tsx'
 import { SesionPanel } from './SesionPanel.tsx'
 import { PreparacionPanel } from './PreparacionPanel.tsx'
+import { CampaignFormat } from './CampaignFormat.tsx'
 
 /** The screens used during play. The bookends live behind the ⋯ menu. */
 const TABS: { id: Tab; label: string }[] = [
@@ -87,12 +88,24 @@ function MoreMenu() {
  */
 function Welcome() {
   const { phase, vaultName, pick, reopen, error } = useDm()
+  const [format, setFormat] = useState(false)
+
+  // What has to be inside the folder is a question you have *before* there is
+  // one, so it hangs here rather than behind the ⋯ menu — and it is still the
+  // question on a browser that cannot open folders at all.
+  const formato = (
+    <>
+      <button onClick={() => setFormat(true)}>{es.formato}</button>
+      {format && <CampaignFormat onClose={() => setFormat(false)} />}
+    </>
+  )
 
   if (phase === 'sin-soporte') {
     return (
       <div className="welcome">
         <h2>{es.navegadorNoSoportado}</h2>
         <p className="muted">{es.navegadorAyuda}</p>
+        <div className="row">{formato}</div>
       </div>
     )
   }
@@ -124,6 +137,7 @@ function Welcome() {
       )}
       <p className="muted small">{es.bienvenidaAyuda}</p>
       <p className="muted small">{es.bienvenidaForma}</p>
+      <div className="row">{formato}</div>
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
     </div>
   )

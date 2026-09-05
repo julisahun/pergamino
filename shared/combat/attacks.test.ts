@@ -63,6 +63,21 @@ describe('a pnj note', () => {
     expect(formatDice(attack!.dice)).toBe('1d4+2')
   })
 
+  it('reads every spelling of the to-hit the format allows', () => {
+    // `instructions.md` writes «a impactar»; the campaign writes «al ataque»;
+    // the fixture writes «to hit». A statblock converted by following the
+    // contract has to come out with a bonus, not a null.
+    for (const desc of [
+      '+4 al ataque, 1d6+2 de daño perforante.',
+      '+4 a impactar, 1d6+2 de daño perforante.',
+      '+4 to hit, 1d6+2 piercing damage.',
+    ]) {
+      const [attack] = attacksOfAbilities([ability('Lanza corta', desc)])
+      expect(attack, desc).toMatchObject({ mod: 4 })
+      expect(formatDice(attack!.dice)).toBe('1d6+2')
+    }
+  })
+
   it('offers an attack that states damage and no bonus, with no bonus', () => {
     // Gerald's Devastating Cuddle. Refusing it would be refusing to run the
     // only attack the boss of the demo campaign has.

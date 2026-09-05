@@ -66,8 +66,13 @@ export interface Attack {
  * demo campaign says «+4 to hit, 1d4+2 piercing damage». That is one format in
  * two languages, not two formats, so it is one pattern with an alternation
  * rather than a setting somebody has to get right.
+ *
+ * «a impactar» is the third spelling because `instructions.md` writes it that
+ * way, and a statblock converted by following the contract has to parse. The
+ * alternation is the cheap half of that agreement; `attacks.test.ts` pins all
+ * three so the next phrasing added is a deliberate one.
  */
-const HIT_MOD = /([+-]\s*\d+)\s*(?:al\s+ataque|to\s+hit)/i
+const HIT_MOD = /([+-]\s*\d+)\s*(?:al\s+ataque|a\s+impactar|to\s+hit)/i
 /** `Ataque +4,` — how the sheet generator states it. */
 const SHEET_MOD = /\b(?:ataque|attack)\s*([+-]\s*\d+)/i
 

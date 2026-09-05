@@ -237,7 +237,7 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 282 with the DM's vault present, 135 without
+npm test                 # 283 with the DM's vault present, 136 without
 npm run typecheck
 npm run build
 ```
