@@ -19,7 +19,7 @@ import type { PcInfo } from '../shared/session/project.ts'
 import type { RunData } from '../shared/session/store.ts'
 import type { SessionState } from '../shared/types.ts'
 import { CampaignVault } from '../shared/vault/binding.ts'
-import { emptyLiveState } from '../shared/vault/session.ts'
+import { emptyLiveState, emptySession } from '../shared/vault/session.ts'
 import { openNodeVault } from '../shared/vault/node.ts'
 import type { WritableVaultDir } from '../shared/vault/source.ts'
 import { CAMPAIGN, WORLD, worldRootPath } from './roots.ts'
@@ -86,17 +86,32 @@ export function pcsOf(run: RunData): Map<string, PcInfo> {
 export const playingPcs = (run: RunData): string[] => run.characters.map((c) => c.id).sort()
 
 /**
- * The run's state with the whole party seated at full HP — what
+ * A fresh session with the whole party seated at full HP — what
  * `SessionStore.open` does on the way in, done here for the tests that drive
  * the reducer and the projection directly instead of through the store.
  *
  * Seating is what makes a PC addressable: `state.play` is the live layer, and
  * a `hp/damage` at someone who is not in it does nothing.
+ *
+ * **It builds, and does not start from `run.state`.** That is the whole point
+ * of the paragraph at the top of this file, and this function quietly broke it
+ * — `run.state` *is* `runs/<mesa>/session.json`, so every test built on
+ * `seated()` inherited whatever the DM last left in a live gameplay file. It
+ * cost the suite two failures that had nothing to do with any code: a bandit
+ * left on the board from a session played months ago, which made
+ * `npc/add count: 3` produce four, and that same bandit's `file` — written
+ * `pnj/bandido.md` when the campaign was still a flat folder, and never
+ * matching the `campaigns/marea-baja/pnj/bandido.md` a world-shaped vault
+ * loads today. Neither is a fact about this campaign; both are silt.
+ *
+ * What the run legitimately supplies is who is *in* the party and where their
+ * notes are. The scenario is the test's own.
  */
 export function seated(run: RunData): SessionState {
-  const play = { ...run.state.play }
+  const state = emptySession()
+  const play: SessionState['play'] = {}
   for (const c of run.characters) {
-    play[c.id] ??= emptyLiveState(run.sheets.get(c.id)?.hpMax ?? null)
+    play[c.id] = emptyLiveState(run.sheets.get(c.id)?.hpMax ?? null)
   }
-  return { ...run.state, play }
+  return { ...state, play, playerFiles: { ...run.playerFiles } }
 }
