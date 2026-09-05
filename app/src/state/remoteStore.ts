@@ -88,7 +88,7 @@ export class RemoteSessionStore {
   }
 
   /** Open the socket; resolves on the first full state, rejects when refused. */
-  connect(campaignId: string, token: string): Promise<void> {
+  connect(campaignId: string, secret: string): Promise<void> {
     this.close()
     this.#campaignId = campaignId
     this.#synced = false
@@ -97,7 +97,7 @@ export class RemoteSessionStore {
       const hello = (): ClientHello => ({
         type: 'hello',
         role: 'dm',
-        token,
+        secret,
         campaign: campaignId,
       })
       this.#socket = new LiveSocket(

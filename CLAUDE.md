@@ -254,17 +254,23 @@ directly; the server never sees a directory, a note, `story/` or a scene's
 prose. Characters and live state are the server's, keyed by the id in
 `.pergamino/campaign.json`; renaming a folder changes nothing. The console
 keeps device preferences locally — the folder handle in IndexedDB, the
-campaign, mesa and DM token in `localStorage`.
+campaign and mesa in `localStorage`.
 
 **The server's contract** (`server/src/`): it receives the campaign's title,
 the published statblocks (`PrepBody`), a `-fc5.xml` per character, and
-actions. Every write under `/api/dm/` wants the DM's bearer token from `.env`;
-the server refuses to start without one. A link secret (`/pj#<link>`) reveals
-the picker and one character's own view, and lets whoever holds it add or
-replace a character — friend-scale trust, rotatable from the console. No route
-serves a campaign file; `deploy-dm.yml` re-asserts that on the box. Cache
-headers are the ones `server.py` learned the hard way: assets immutable, pages
-`no-cache`, errors `no-store`.
+actions. There is no server-wide secret and no account: registering a campaign
+is open, and what comes back — the id, a **DM secret** and the players' link
+secret — is the only way in. The console writes the id and the DM secret to
+`.pergamino/campaign.json`, so *holding the folder is being the DM*, and one
+server serves as many DMs as register on it. Every write under
+`/api/dm/campaigns/:id/` and the DM's `hello` want that campaign's secret;
+re-registering under a held id after a wiped database takes the folder's
+secret as the campaign's. A link secret (`/pj#<link>`) reveals the picker and
+one character's own view, and lets whoever holds it add or replace a character
+— friend-scale trust. Both secrets rotate from the console. No route serves a
+campaign file; `deploy-dm.yml` re-asserts that on the box. Cache headers are
+the ones `server.py` learned the hard way: assets immutable, pages `no-cache`,
+errors `no-store`.
 
 **The build is deliberate.** This repo held "no build, no npm" for years, and
 the rebuilt app broke it: Vite, React and TypeScript, so there is a
@@ -318,7 +324,7 @@ A test that needs someone at the table **builds** the state — `seated()`, plus
 And, for anything on screen, one of the drivers:
 
 ```bash
-npm run dev &            # the server (data/dev.sqlite, token `dev`) and Vite
+npm run dev &            # the server (data/dev.sqlite) and Vite
 node scripts/e2e.mjs     # starts an in-memory server itself if none answers
 ```
 
@@ -326,8 +332,9 @@ They open the app on `?fixture=example`, which mounts
 `app/src/fixtures/example.json` in memory — the native folder picker cannot be
 driven from a script — and registers it on the dev server under one fixed id,
 wiped and rebuilt on every boot, uploading the sheet the snapshot keeps under
-`players/`. The harness sets the token in `localStorage` the way the DM does;
-there is no test door in the app. The fixture is dev-only; `import.meta.env.DEV`
+`players/`. The fixture registers under a fixed id *and* a fixed DM secret,
+which stands in for the `.pergamino/campaign.json` a real folder holds; there
+is no test door in the app. The fixture is dev-only; `import.meta.env.DEV`
 keeps it out of the production bundle. It is the *only* copy of the demo
 campaign, so treat it as content rather than as build output; regenerate it
 with `node scripts/build-fixture.mjs <folder>` if you want a different one.

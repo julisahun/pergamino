@@ -6,6 +6,7 @@
  * makes the order of actions total without a lock. The whole database is a
  * few rows per campaign; a WAL write is milliseconds even on an SD card.
  */
+import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import nodePath from 'node:path'
 import type { DatabaseSync as DatabaseSyncType, SQLInputValue } from 'node:sqlite'
@@ -15,13 +16,14 @@ import type { DatabaseSync as DatabaseSyncType, SQLInputValue } from 'node:sqlit
 // called `sqlite`. `getBuiltinModule` (Node ≥ 22.3) sidesteps every bundler.
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite')
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS campaign (
   id          TEXT PRIMARY KEY,
   title       TEXT NOT NULL,
   link_secret TEXT NOT NULL UNIQUE,
+  dm_secret   TEXT NOT NULL,
   created_at  INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS character (
@@ -87,10 +89,28 @@ export class Db {
     this.#db.exec('PRAGMA synchronous = NORMAL')
     this.#db.exec('PRAGMA foreign_keys = ON')
     this.#db.exec(SCHEMA)
+    this.#migrate()
     this.run(
-      `INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO NOTHING`,
+      `INSERT INTO meta (key, value) VALUES ('schema_version', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       String(SCHEMA_VERSION),
     )
+  }
+
+  /**
+   * v1 → v2: the DM's credential moves from one server-wide token in `.env` to
+   * a secret per campaign. A row from before gets one minted here; the console
+   * that holds that campaign's folder learns it by re-registering under the id
+   * it has — see `PUT /api/dm/campaigns/:id`.
+   */
+  #migrate(): void {
+    const columns = this.all<{ name: string }>('PRAGMA table_info(campaign)').map((c) => c.name)
+    if (!columns.includes('dm_secret')) {
+      this.#db.exec(`ALTER TABLE campaign ADD COLUMN dm_secret TEXT NOT NULL DEFAULT ''`)
+    }
+    for (const { id } of this.all<{ id: string }>(`SELECT id FROM campaign WHERE dm_secret = ''`)) {
+      this.run('UPDATE campaign SET dm_secret = ? WHERE id = ?', randomBytes(15).toString('base64url'), id)
+    }
   }
 
   exec(sql: string): void {

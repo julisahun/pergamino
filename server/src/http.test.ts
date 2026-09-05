@@ -10,7 +10,6 @@ import { readEnv } from './env.ts'
 import { createHandler } from './http.ts'
 import { memoryWorld, NEL, TOLMO } from './fixtures.ts'
 
-const TOKEN = 'secret-token'
 let server: Server
 let base: string
 
@@ -22,7 +21,7 @@ beforeAll(async () => {
   }
   fs.writeFileSync(nodePath.join(dist, 'assets/index.html.js'), 'console.log(1)')
   fs.writeFileSync(nodePath.join(dist, '.secret'), 'no')
-  const env = readEnv({ DM_TOKEN: TOKEN, DM_DB: ':memory:', DM_DIST: dist, PUBLIC_URL: 'https://dm.example' })
+  const env = readEnv({ DM_DB: ':memory:', DM_DIST: dist, PUBLIC_URL: 'https://dm.example' })
   const world = memoryWorld()
   server = createServer(createHandler({ env, ...world, version: 'test' }))
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
@@ -31,13 +30,24 @@ beforeAll(async () => {
 })
 afterAll(() => new Promise<void>((r) => server.close(() => r())))
 
-const dm = (path: string, init: RequestInit = {}) =>
-  fetch(base + path, { ...init, headers: { Authorization: `Bearer ${TOKEN}`, ...(init.headers ?? {}) } })
 const json = (body: unknown): RequestInit => ({
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
 })
+/** A request with a campaign's DM secret as the bearer. */
+const as = (secret: string) => (path: string, init: RequestInit = {}) =>
+  fetch(base + path, { ...init, headers: { Authorization: `Bearer ${secret}`, ...(init.headers ?? {}) } })
+/** A fresh campaign and a requester that is its DM. */
+async function campaign(title = 'x') {
+  const reg = (await (await fetch(`${base}/api/dm/campaigns`, json({ title }))).json()) as {
+    id: string
+    link: string
+    url: string
+    dmSecret: string
+  }
+  return { ...reg, dm: as(reg.dmSecret) }
+}
 
 describe('the static host', () => {
   it('serves the three pages revalidated and the assets forever', async () => {
@@ -69,29 +79,67 @@ describe('the static host', () => {
 })
 
 describe('the DM', () => {
-  it('needs the token', async () => {
-    expect((await fetch(`${base}/api/dm/whoami`)).status).toBe(401)
-    expect((await fetch(`${base}/api/dm/whoami`, { headers: { Authorization: 'Bearer nope' } })).status).toBe(401)
-    expect((await fetch(`${base}/api/dm/campaigns`, json({ title: 'x' }))).status).toBe(401)
-    expect((await dm('/api/dm/whoami')).status).toBe(200)
+  it('registers openly, and what comes back is the only way in', async () => {
+    const none = await (await fetch(`${base}/api/dm/campaigns/no-such`)).json()
+    expect(none).toEqual({ exists: false })
+    const reg = await campaign('Marea Baja')
+    expect(reg.url).toBe(`https://dm.example/pj#${reg.link}`)
+    expect(reg.dmSecret).toMatch(/^[A-Za-z0-9_-]{20}$/)
+    const summary = await (await reg.dm(`/api/dm/campaigns/${reg.id}`)).json()
+    expect(summary).toMatchObject({ exists: true, title: 'Marea Baja', rev: 0, party: [] })
+
+    for (const bad of [fetch(`${base}/api/dm/campaigns/${reg.id}`), as('nope')(`/api/dm/campaigns/${reg.id}`)]) {
+      const res = await bad
+      expect(res.status).toBe(401)
+      expect(res.headers.get('cache-control')).toBe('no-store')
+    }
+    expect((await fetch(`${base}/api/dm/campaigns/${reg.id}/state`)).status).toBe(401)
+    expect((await fetch(`${base}/api/dm/campaigns/${reg.id}/prep`, { method: 'PUT', body: '{}' })).status).toBe(401)
   })
 
-  it('registers a campaign and reads it back, and says so when there is none', async () => {
-    const none = await (await dm('/api/dm/campaigns/no-such')).json()
-    expect(none).toEqual({ exists: false })
-    const reg = await (await dm('/api/dm/campaigns', json({ title: 'Marea Baja' }))).json()
-    expect(reg.url).toBe(`https://dm.example/pj#${reg.link}`)
-    const summary = await (await dm(`/api/dm/campaigns/${reg.id}`)).json()
-    expect(summary).toMatchObject({ exists: true, title: 'Marea Baja', rev: 0, party: [] })
-    // The console re-registers under the id it holds after a wiped database.
-    const again = await (await dm(`/api/dm/campaigns/${reg.id}`, { ...json({ title: 'Marea Baja' }), method: 'PUT' })).json()
-    expect(again.id).toBe(reg.id)
+  it('keeps one campaign from another: a secret opens its own and nothing else', async () => {
+    const a = await campaign('a')
+    const b = await campaign('b')
+    expect((await a.dm(`/api/dm/campaigns/${a.id}/state`)).status).toBe(200)
+    expect((await a.dm(`/api/dm/campaigns/${b.id}/state`)).status).toBe(401)
+    expect((await a.dm(`/api/dm/campaigns/${b.id}/reset`, { method: 'POST' })).status).toBe(401)
+    expect((await a.dm(`/api/dm/campaigns/${b.id}`, { method: 'DELETE' })).status).toBe(401)
+    expect((await b.dm(`/api/dm/campaigns/${b.id}`)).status).toBe(200)
+  })
+
+  it('re-registers under the id and secret the folder holds, so a wiped database changes nothing', async () => {
+    // A folder from before: id and secret, no row on the server.
+    const held = as('the-folders-secret')
+    const reg = await (await held('/api/dm/campaigns/c-held', { ...json({ title: 'Held' }), method: 'PUT' })).json()
+    expect(reg).toMatchObject({ id: 'c-held', dmSecret: 'the-folders-secret' })
+    expect((await held('/api/dm/campaigns/c-held/state')).status).toBe(200)
+    // Once the row is there, re-registering is a title update and wants the secret.
+    expect((await fetch(`${base}/api/dm/campaigns/c-held`, { ...json({ title: 'x' }), method: 'PUT' })).status).toBe(401)
+    const again = await (await held('/api/dm/campaigns/c-held', { ...json({ title: 'Held again' }), method: 'PUT' })).json()
+    expect(again.dmSecret).toBe('the-folders-secret')
+    expect((await (await held('/api/dm/campaigns/c-held')).json()).title).toBe('Held again')
+    // A file from before secrets brings none: the server mints one and says so.
+    const minted = await (await fetch(`${base}/api/dm/campaigns/c-old`, { ...json({ title: 'Old' }), method: 'PUT' })).json()
+    expect(minted.dmSecret).toMatch(/^[A-Za-z0-9_-]{20}$/)
+    expect((await as(minted.dmSecret)('/api/dm/campaigns/c-old/state')).status).toBe(200)
+  })
+
+  it('rotates the secret, and the old one stops opening the campaign', async () => {
+    const reg = await campaign()
+    const { dmSecret } = await (await reg.dm(`/api/dm/campaigns/${reg.id}/secret/rotate`, { method: 'POST' })).json()
+    expect(dmSecret).not.toBe(reg.dmSecret)
+    expect((await reg.dm(`/api/dm/campaigns/${reg.id}/state`)).status).toBe(401)
+    expect((await as(dmSecret)(`/api/dm/campaigns/${reg.id}/state`)).status).toBe(200)
+    // Deleting takes the secret too, and is idempotent once it is gone.
+    expect((await as(dmSecret)(`/api/dm/campaigns/${reg.id}`, { method: 'DELETE' })).status).toBe(204)
+    expect((await fetch(`${base}/api/dm/campaigns/${reg.id}`, { method: 'DELETE' })).status).toBe(204)
+    expect(await (await fetch(`${base}/api/dm/campaigns/${reg.id}`)).json()).toEqual({ exists: false })
   })
 })
 
 describe("a player's link", () => {
   it('creates a character from an xml, sees it, acts on it, and only on it', async () => {
-    const { id, link } = await (await dm('/api/dm/campaigns', json({ title: 'x' }))).json()
+    const { id, link, dm } = await campaign()
     const pub = await fetch(`${base}/api/pj/${link}`)
     expect(pub.status).toBe(200)
     expect(pub.headers.get('cache-control')).toBe('no-store')
@@ -130,7 +178,7 @@ describe("a player's link", () => {
     const miss = await fetch(`${base}/api/pj/nope`)
     expect(miss.status).toBe(404)
     expect(miss.headers.get('cache-control')).toBe('no-store')
-    const { id, link } = await (await dm('/api/dm/campaigns', json({ title: 'x' }))).json()
+    const { id, link, dm } = await campaign()
     const rotated = await (await dm(`/api/dm/campaigns/${id}/link/rotate`, { method: 'POST' })).json()
     expect(rotated.link).not.toBe(link)
     expect((await fetch(`${base}/api/pj/${link}`)).status).toBe(404)
@@ -138,7 +186,7 @@ describe("a player's link", () => {
   })
 
   it('serves a portrait with an ETag', async () => {
-    const { id, link } = await (await dm('/api/dm/campaigns', json({ title: 'x' }))).json()
+    const { id, link, dm } = await campaign()
     const { id: pc } = await (await dm(`/api/dm/campaigns/${id}/characters?player=Ana`, { method: 'POST', body: TOLMO })).json()
     expect((await fetch(`${base}/api/pj/${link}/portrait/pc/${pc}`)).status).toBe(404)
     const put = await dm(`/api/dm/campaigns/${id}/characters/${pc}/portrait`, {

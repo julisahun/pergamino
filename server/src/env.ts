@@ -1,17 +1,16 @@
 /**
  * Configuration, from the environment and nothing else.
  *
- * `DM_TOKEN` is the one secret and the server refuses to start without it —
- * a console that could publish and dispatch with no token would be a public
- * write endpoint, which is exactly what the old static host promised never to
- * have.
+ * No secret lives here. The credentials are per campaign — a DM secret and a
+ * link secret, both rows in the database — so the server holds nothing that
+ * would make it one DM's, and a public write endpoint is still not a thing
+ * it has: every write under `/api/dm/campaigns/:id/` wants that campaign's
+ * secret.
  */
 import nodePath from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export interface Env {
-  /** The DM's bearer token. */
-  token: string
   /** SQLite file, or `:memory:`. */
   db: string
   port: number
@@ -25,12 +24,9 @@ export interface Env {
 const here = nodePath.dirname(fileURLToPath(import.meta.url))
 
 export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
-  const token = env.DM_TOKEN?.trim()
-  if (!token) throw new Error('DM_TOKEN is not set — the server will not start without it.')
   const port = Number(env.DM_PORT) || 8085
   const db = env.DM_DB || nodePath.resolve(process.cwd(), 'data/dm.sqlite')
   return {
-    token,
     db,
     port,
     // `server/src/env.ts` and `server/dist/index.mjs` both sit two levels under

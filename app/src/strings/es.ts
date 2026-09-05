@@ -312,19 +312,21 @@ export const es = {
     'La consola necesita el servidor de la campaña: es donde viven los personajes ' +
     'y el estado de la mesa. Arráncalo y vuelve a intentarlo.',
   reintentar: 'Reintentar',
-  tokenDm: 'Token del DM',
-  tokenDmAyuda:
-    'El token está en el .env del servidor. Se guarda en este navegador y no se vuelve a pedir.',
-  guardarToken: 'Guardar y continuar',
-  cambiarToken: 'Cambiar token del servidor',
-  sinAutorizar: 'El servidor no acepta ese token.',
+  sinAutorizar:
+    'El servidor no reconoce el secreto que guarda .pergamino/campaign.json para esta campaña. ' +
+    'Registrarla de nuevo crea otra campaña en el servidor, sin la party de ésta.',
+  nuevoSecreto: 'Renovar el secreto del DM',
+  nuevoSecretoConfirmar:
+    'El secreto nuevo se guarda en .pergamino/campaign.json de esta carpeta. ' +
+    'Cualquier otra copia de la carpeta dejará de poder dirigir la campaña. ¿Seguir?',
   sinConexion: 'Sin conexión con el servidor',
   reconectando: 'Reconectando…',
   registrarCampana: 'Registrar la campaña en el servidor',
   registrarCampanaAyuda:
-    'La primera vez, la campaña se da de alta en el servidor y su identificador se guarda en ' +
-    '.pergamino/campaign.json dentro de la carpeta. Los personajes de la party viven allí, ' +
-    'no en la carpeta: cada jugador sube su ficha desde el enlace.',
+    'La primera vez, la campaña se da de alta en el servidor y su identificador y el secreto ' +
+    'del DM se guardan en .pergamino/campaign.json dentro de la carpeta: tener la carpeta es ' +
+    'dirigir la campaña. Los personajes de la party viven en el servidor, no en la carpeta: ' +
+    'cada jugador sube su ficha desde el enlace.',
   registrando: 'Registrando…',
   enlaceJugadores: 'Enlace para los jugadores',
   enlaceJugadoresAyuda:

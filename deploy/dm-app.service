@@ -1,8 +1,8 @@
 # The unit dm-app runs under on the Pi. It is not a copy: the workflow ships
 # this file to /opt/dm-app/deploy/ and /etc/systemd/system/dm-app.service is a
 # `systemctl link` to it, so editing it here and pushing is editing the unit —
-# the restart step runs `daemon-reload` first. `.env` holds DM_TOKEN, DM_PORT,
-# DM_DB and PUBLIC_URL, mode 600, and is never rsynced.
+# the restart step runs `daemon-reload` first. `.env` holds DM_PORT, DM_DB and
+# PUBLIC_URL, mode 600, and is never rsynced.
 [Unit]
 Description=pantalla-dm (console, television, player page and the campaign server)
 After=network-online.target

@@ -37,8 +37,13 @@ export class Registry {
     return this.store.campaigns().map((row) => this.get(row.id)!)
   }
 
-  /** A new campaign: a fresh id, or the one the console already holds in `.pergamino/`. */
-  register(title: string, id: string = randomUUID()): CampaignSession {
+  /**
+   * A new campaign: a fresh id, or the one the console already holds in
+   * `.pergamino/` — and, after a wiped database, the DM secret it holds too, so
+   * the folder goes on being the credential. The caller has checked the secret
+   * when the id is already here; this only updates the title.
+   */
+  register(title: string, id: string = randomUUID(), dmSecret: string = randomSecret()): CampaignSession {
     const existing = this.get(id)
     if (existing) {
       if (title && title !== existing.title) existing.setTitle(title)
@@ -48,6 +53,7 @@ export class Registry {
       id,
       title: title || id,
       link_secret: randomSecret(),
+      dm_secret: dmSecret,
       created_at: this.now(),
     })
     return this.get(id)!

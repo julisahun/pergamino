@@ -3,8 +3,9 @@
  *
  * The server keeps its database in `data/dev.sqlite` (gitignored) so a file
  * save that restarts it does not lose the table; `DM_DB=:memory:` for a clean
- * slate. The token is `dev` unless `DM_TOKEN` says otherwise — paste it once
- * into the console, or open `?fixture=example`, which the drivers do.
+ * slate. No credential to set up: a campaign's DM secret is minted when the
+ * console registers it and lives in the folder's `.pergamino/campaign.json`;
+ * `?fixture=example`, which the drivers open, registers under a fixed one.
  */
 import { spawn } from 'node:child_process'
 import path from 'node:path'
@@ -13,7 +14,6 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const env = {
   ...process.env,
-  DM_TOKEN: process.env.DM_TOKEN ?? 'dev',
   DM_DB: process.env.DM_DB ?? path.join(root, 'data/dev.sqlite'),
   DM_PORT: process.env.DM_PORT ?? '8085',
 }

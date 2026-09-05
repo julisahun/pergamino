@@ -57,6 +57,13 @@ export { SCENARIOS_DIR } from './campaign.ts'
  */
 export interface CampaignIdentity {
   id: string
+  /**
+   * The DM's credential for this campaign on the server. Holding the folder is
+   * being its DM — which is why this file is not in a dotdir the notes walk
+   * reads, and why the DM decides where the folder goes. `null` in a file
+   * written before there was one; the console then re-registers under the id.
+   */
+  dmSecret: string | null
   /** The server it was registered with, for the DM's information. */
   server: string | null
   /** ISO date. */
@@ -173,12 +180,13 @@ export class CampaignVault {
     if (!raw || typeof raw.id !== 'string' || !raw.id) return null
     return {
       id: raw.id,
+      dmSecret: typeof raw.dmSecret === 'string' && raw.dmSecret ? raw.dmSecret : null,
       server: typeof raw.server === 'string' ? raw.server : null,
       registered: typeof raw.registered === 'string' ? raw.registered : '',
     }
   }
 
-  /** Written once, on registration — the only prep write that is not a scene. */
+  /** Written on registration, and again when the DM secret rotates — the only prep write that is not a scene. */
   async writeIdentity(identity: CampaignIdentity): Promise<void> {
     const dir = await this.pergamino()
     await dir.write(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`)

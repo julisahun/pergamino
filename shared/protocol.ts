@@ -43,6 +43,12 @@ export interface Registered {
   link: string
   /** The full URL to hand out, built from the server's own public address. */
   url: string
+  /**
+   * The DM's credential for this campaign, and nothing else. The console
+   * writes it to `.pergamino/campaign.json`: holding the folder is being the
+   * DM, and no server-wide secret exists.
+   */
+  dmSecret: string
 }
 
 export interface PartyMember {
@@ -114,7 +120,7 @@ export type Role = 'dm' | 'pc' | 'tv'
 
 /** The first message on a socket. `since` is the last revision the client saw. */
 export type ClientHello =
-  | { type: 'hello'; role: 'dm'; token: string; campaign: string; since?: number }
+  | { type: 'hello'; role: 'dm'; secret: string; campaign: string; since?: number }
   | { type: 'hello'; role: 'pc'; link: string; pc: string; since?: number }
   | { type: 'hello'; role: 'tv'; link: string; since?: number }
 

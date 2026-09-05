@@ -70,7 +70,7 @@ describe('what a session can write', () => {
   it('writes the campaign id through its own door, and nowhere else', async () => {
     const { vault, memory } = await openMemoryVault()
     expect(await vault.readIdentity()).toBeNull()
-    const identity = { id: 'c-1', server: null, registered: '2026-09-05' }
+    const identity = { id: 'c-1', dmSecret: 'the-dms-secret', server: null, registered: '2026-09-05' }
     await vault.writeIdentity(identity)
     expect(memory.writes).toEqual([`${CAMPAIGN}/.pergamino/campaign.json`])
     expect(memory.openedWritable).toContain(`${CAMPAIGN}/.pergamino`)

@@ -102,6 +102,9 @@ export class CampaignSession {
   get link(): string {
     return this.#row.link_secret
   }
+  get dmSecret(): string {
+    return this.#row.dm_secret
+  }
   get characters(): Character[] {
     return this.#characters
   }
@@ -278,6 +281,14 @@ export class CampaignSession {
     const secret = randomSecret()
     this.store.setLink(this.id, secret)
     this.#row = { ...this.#row, link_secret: secret }
+    return secret
+  }
+
+  /** A new DM secret; the console rewrites `.pergamino/campaign.json` with it. */
+  rotateDmSecret(): string {
+    const secret = randomSecret()
+    this.store.setDmSecret(this.id, secret)
+    this.#row = { ...this.#row, dm_secret: secret }
     return secret
   }
 

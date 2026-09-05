@@ -6,7 +6,7 @@
 # node_modules reach the Pi. It runs `node server/dist/index.mjs` under
 # dm-app.service — the unit on the box is a `systemctl link` to the shipped
 # file, so a change to it deploys like any other and takes effect on the
-# `daemon-reload` before the restart — with DM_TOKEN, DM_DB and PUBLIC_URL in
+# `daemon-reload` before the restart — with DM_DB and PUBLIC_URL in
 # /opt/dm-app/.env.
 #
 # Two things on the Pi are never touched by this workflow: `.env`, and `data/`,
@@ -82,9 +82,10 @@ jobs:
 
       # The pages *and everything they name*; the cache headers that once cost
       # four hours of blank page; and the properties that make public hosting
-      # safe, re-asserted on the box: no route serves a campaign file, nothing
-      # under /api/dm/ answers without the token, an unknown link is a 404,
-      # and the database survived the deploy.
+      # safe, re-asserted on the box: no route serves a campaign file, a
+      # campaign answers its DM only with its own secret (a throwaway one is
+      # registered, probed and deleted), an unknown link is a 404, and the
+      # database survived the deploy.
       - name: Restart & smoke test
         run: |
           ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
@@ -117,8 +118,19 @@ jobs:
                echo "dm-app: /vault/ answered something" >&2; exit 1; }
              curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8085/ | grep -qx 404 || {
                echo "dm-app: POST / answered something" >&2; exit 1; }
-             curl -s -o /dev/null -w "%{http_code}" -X POST -d "{}" http://localhost:8085/api/dm/campaigns | grep -qx 401 || {
-               echo "dm-app: the DM surface answers without a token" >&2; exit 1; }
+             reg=$(curl -sf -X POST -H "Content-Type: application/json" -d "{\"title\":\"smoke\"}" http://localhost:8085/api/dm/campaigns)
+             id=$(printf %s "$reg" | python3 -c "import sys,json; print(json.load(sys.stdin)[\"id\"])")
+             secret=$(printf %s "$reg" | python3 -c "import sys,json; print(json.load(sys.stdin)[\"dmSecret\"])")
+             curl -s -o /dev/null -w "%{http_code}" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 401 || {
+               echo "dm-app: a campaign answers its DM surface without the secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer nope" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 401 || {
+               echo "dm-app: a campaign answers a wrong secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 200 || {
+               echo "dm-app: a campaign does not answer its own secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id" | grep -qx 204 || {
+               echo "dm-app: the smoke campaign could not be deleted" >&2; exit 1; }
+             curl -s -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id" | grep -q "\"exists\":false" || {
+               echo "dm-app: the smoke campaign is still there" >&2; exit 1; }
              curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/api/pj/nope | grep -qx 404 || {
                echo "dm-app: an unknown link answered" >&2; exit 1; }
              test -f /opt/dm-app/data/dm.sqlite || {

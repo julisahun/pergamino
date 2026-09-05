@@ -53,7 +53,7 @@ if (!(await ping())) {
   server = spawn(process.execPath, ['server/src/index.ts'], {
     cwd: path.resolve(here, '..'),
     stdio: 'inherit',
-    env: { ...process.env, DM_TOKEN: process.env.DM_TOKEN ?? 'dev', DM_DB: ':memory:', DM_PORT: API_PORT },
+    env: { ...process.env, DM_DB: ':memory:', DM_PORT: API_PORT },
   })
   for (let i = 0; i < 50 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 200))
   if (!(await ping())) {

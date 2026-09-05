@@ -9,6 +9,8 @@ export interface CampaignRow {
   id: string
   title: string
   link_secret: string
+  /** The DM's credential for this campaign alone; `.pergamino/campaign.json` holds the copy. */
+  dm_secret: string
   created_at: number
 }
 
@@ -62,10 +64,11 @@ export class Store {
 
   insertCampaign(row: CampaignRow): void {
     this.db.run(
-      'INSERT INTO campaign (id, title, link_secret, created_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO campaign (id, title, link_secret, dm_secret, created_at) VALUES (?, ?, ?, ?, ?)',
       row.id,
       row.title,
       row.link_secret,
+      row.dm_secret,
       row.created_at,
     )
   }
@@ -76,6 +79,10 @@ export class Store {
 
   setLink(id: string, secret: string): void {
     this.db.run('UPDATE campaign SET link_secret = ? WHERE id = ?', secret, id)
+  }
+
+  setDmSecret(id: string, secret: string): void {
+    this.db.run('UPDATE campaign SET dm_secret = ? WHERE id = ?', secret, id)
   }
 
   deleteCampaign(id: string): void {

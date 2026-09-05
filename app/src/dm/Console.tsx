@@ -25,7 +25,7 @@ const MENU: { id: Tab; label: string }[] = [
 ]
 
 function MoreMenu() {
-  const { tab, setTab, close, changeToken } = useDm()
+  const { tab, setTab, close, rotateSecret } = useDm()
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
 
@@ -68,10 +68,10 @@ function MoreMenu() {
           <button
             onClick={() => {
               setOpen(false)
-              changeToken()
+              if (window.confirm(es.nuevoSecretoConfirmar)) void rotateSecret()
             }}
           >
-            {es.cambiarToken}
+            {es.nuevoSecreto}
           </button>
           <button
             onClick={() => {
@@ -84,34 +84,6 @@ function MoreMenu() {
         </div>
       )}
     </div>
-  )
-}
-
-/** The DM's token, pasted once from the server's `.env`. */
-function TokenForm() {
-  const { setToken, serverError } = useDm()
-  const [token, setTokenText] = useState('')
-  return (
-    <form
-      className="row"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void setToken(token)
-      }}
-    >
-      <input
-        type="password"
-        autoFocus
-        placeholder={es.tokenDm}
-        value={token}
-        onChange={(e) => setTokenText(e.target.value)}
-        style={{ minWidth: 260 }}
-      />
-      <button className="primary" type="submit" disabled={!token.trim()}>
-        {es.guardarToken}
-      </button>
-      {serverError && <span style={{ color: 'var(--danger)' }}>{serverError}</span>}
-    </form>
   )
 }
 
@@ -158,15 +130,6 @@ function Welcome() {
             {es.reintentar}
           </button>
         </div>
-      </div>
-    )
-  }
-  if (phase === 'sin-token') {
-    return (
-      <div className="welcome">
-        <h2>{es.tokenDm}</h2>
-        <p className="muted">{es.tokenDmAyuda}</p>
-        <TokenForm />
       </div>
     )
   }

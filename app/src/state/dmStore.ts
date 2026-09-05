@@ -9,7 +9,7 @@
  *
  * Bringing the console up is therefore two halves. The folder half is what it
  * always was — pick, open, read. The server half comes after: is it there, is
- * the token good, is this campaign registered (`.pergamino/campaign.json`),
+ * is this campaign registered (`.pergamino/campaign.json`, id and DM secret),
  * publish the statblocks the reducer needs, connect. Each question the server
  * half cannot answer is a `Phase` the welcome screen knows how to ask.
  */
@@ -55,7 +55,6 @@ import {
 } from '../vault/open.ts'
 import { es } from '../strings/es.ts'
 import { api, ApiError } from '../net/api.ts'
-import { rememberToken, savedToken } from './auth.ts'
 import { publishPrep } from './publish.ts'
 import { RemoteSessionStore, type Connection } from './remoteStore.ts'
 
@@ -72,8 +71,6 @@ export type Phase =
   | 'abriendo'
   /** The folder is open; the server did not answer. */
   | 'sin-servidor'
-  /** The folder is open; there is no token, or the server refused it. */
-  | 'sin-token'
   /** The folder is open and has no `.pergamino/campaign.json` yet. */
   | 'sin-registrar'
   | 'lista'
@@ -108,11 +105,14 @@ export interface CloseDraft {
 /** The one asset cache the DM window uses, shared by every panel. */
 export const dmAssets = new AssetCache()
 
-/** The dev fixture registers under one id, wiped and rebuilt on every boot. */
+/** The dev fixture registers under one id and secret, wiped and rebuilt on every boot. */
 const FIXTURE_ID = 'fixture-example'
+const FIXTURE_SECRET = 'fixture-example'
 
 const store = new RemoteSessionStore()
 let vault: CampaignVault | null = null
+/** This campaign's DM secret, read from `.pergamino/campaign.json` or minted at registration. */
+let secret: string | null = null
 let notes: NotesIndex | null = null
 let transport: TableTransport | null = null
 let unsubscribe: (() => void) | null = null
@@ -148,7 +148,6 @@ interface DmStore {
   /** Non-null while the table screen is holding an older frame. */
   frozen: FrozenSummary | null
   connection: Connection
-  hasToken: boolean
   /** The server's id for this campaign, once registered. */
   campaignId: string | null
   /** The players' link, ready to hand out. */
@@ -172,10 +171,10 @@ interface DmStore {
   reload: () => Promise<void>
 
   // --- the server ---
-  setToken: (token: string) => Promise<void>
-  changeToken: () => void
   retryServer: () => Promise<void>
   register: () => Promise<void>
+  /** A new DM secret for this campaign, written to the folder; the old one stops working. */
+  rotateSecret: () => Promise<void>
   rotateLink: () => Promise<void>
   addCharacter: (file: File, player: string) => Promise<void>
   replaceSheet: (pcId: string, file: File) => Promise<void>
@@ -215,7 +214,6 @@ export const useDm = create<DmStore>((set, get) => ({
   state: null,
   frozen: null,
   connection: 'inactiva',
-  hasToken: savedToken() !== null,
   campaignId: null,
   link: null,
   serverError: null,
@@ -328,11 +326,10 @@ export const useDm = create<DmStore>((set, get) => ({
     store.setPrep(vault.title, campaign)
     notes = await vault.buildNotesIndex()
     set({ assets: await vault.listAssets() })
-    const token = savedToken()
     const campaignId = get().campaignId
-    if (token && campaignId) {
+    if (secret && campaignId) {
       try {
-        await publishPrep(token, campaignId, vault, campaign)
+        await publishPrep(secret, campaignId, vault, campaign)
       } catch (err) {
         set({ serverError: (err as Error).message })
       }
@@ -343,30 +340,18 @@ export const useDm = create<DmStore>((set, get) => ({
 
   // --- the server ------------------------------------------------------------
 
-  setToken: async (token) => {
-    rememberToken(token.trim() || null)
-    set({ hasToken: Boolean(token.trim()), serverError: null })
-    if (vault) await connectServer(set)
-  },
-
-  /** Back to the token screen; the folder stays open behind it. */
-  changeToken: () => {
-    store.close()
-    set({ phase: 'sin-token', ready: false, connection: 'inactiva' })
-  },
-
   retryServer: async () => {
     if (vault) await connectServer(set)
   },
 
   register: async () => {
-    const token = savedToken()
-    if (!vault || !token) return
+    if (!vault) return
     set({ phase: 'abriendo', error: null })
     try {
-      const reg = await api.register(token, vault.title)
+      const reg = await api.register(vault.title)
       await vault.writeIdentity({
         id: reg.id,
+        dmSecret: reg.dmSecret,
         server: location.origin,
         registered: new Date().toISOString().slice(0, 10),
       })
@@ -376,12 +361,32 @@ export const useDm = create<DmStore>((set, get) => ({
     }
   },
 
-  rotateLink: async () => {
-    const token = savedToken()
+  rotateSecret: async () => {
     const id = get().campaignId
-    if (!token || !id) return
+    if (!vault || !secret || !id) return
     try {
-      const { url } = await api.rotateLink(token, id)
+      const { dmSecret } = await api.rotateSecret(secret, id)
+      const identity = await vault.readIdentity()
+      await vault.writeIdentity({
+        id,
+        dmSecret,
+        server: identity?.server ?? location.origin,
+        registered: identity?.registered || new Date().toISOString().slice(0, 10),
+      })
+      secret = dmSecret
+      // The open socket said hello with the old secret; say it again with the new.
+      await store.connect(id, secret)
+      set({ serverError: null })
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
+  },
+
+  rotateLink: async () => {
+    const id = get().campaignId
+    if (!secret || !id) return
+    try {
+      const { url } = await api.rotateLink(secret, id)
       set({ link: url })
     } catch (err) {
       set({ serverError: (err as Error).message })
@@ -389,11 +394,10 @@ export const useDm = create<DmStore>((set, get) => ({
   },
 
   addCharacter: async (file, player) => {
-    const token = savedToken()
     const id = get().campaignId
-    if (!token || !id) return
+    if (!secret || !id) return
     try {
-      await api.addCharacter(token, id, await file.text(), player)
+      await api.addCharacter(secret, id, await file.text(), player)
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })
@@ -401,11 +405,10 @@ export const useDm = create<DmStore>((set, get) => ({
   },
 
   replaceSheet: async (pcId, file) => {
-    const token = savedToken()
     const id = get().campaignId
-    if (!token || !id) return
+    if (!secret || !id) return
     try {
-      await api.replaceSheet(token, id, pcId, await file.text())
+      await api.replaceSheet(secret, id, pcId, await file.text())
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })
@@ -413,22 +416,20 @@ export const useDm = create<DmStore>((set, get) => ({
   },
 
   removeCharacter: async (pcId) => {
-    const token = savedToken()
     const id = get().campaignId
-    if (!token || !id) return
+    if (!secret || !id) return
     try {
-      await api.removeCharacter(token, id, pcId)
+      await api.removeCharacter(secret, id, pcId)
     } catch (err) {
       set({ serverError: describe(err) })
     }
   },
 
   resetSession: async () => {
-    const token = savedToken()
     const id = get().campaignId
-    if (!token || !id) return
+    if (!secret || !id) return
     try {
-      await api.reset(token, id)
+      await api.reset(secret, id)
     } catch (err) {
       set({ serverError: describe(err) })
     }
@@ -667,26 +668,11 @@ async function connectServer(set: Setter): Promise<void> {
     return
   }
 
-  const token = savedToken()
-  if (!token) {
-    set({ phase: 'sin-token', hasToken: false })
-    return
-  }
-  try {
-    await api.whoami(token)
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 401) {
-      set({ phase: 'sin-token', hasToken: true, serverError: es.sinAutorizar })
-    } else {
-      set({ phase: 'sin-servidor', serverError: (err as Error).message })
-    }
-    return
-  }
-
   try {
     let id: string
     if (fixtureSheets) {
-      id = await fixtureIdentity(token, vault.title)
+      id = await fixtureIdentity(vault.title)
+      secret = FIXTURE_SECRET
     } else {
       const identity = await vault.readIdentity()
       if (!identity) {
@@ -694,14 +680,23 @@ async function connectServer(set: Setter): Promise<void> {
         return
       }
       id = identity.id
-      // A wiped database still recognises the id the folder holds.
-      const known = await api.campaign(token, id)
-      if (!known.exists) await api.reregister(token, id, vault.title)
+      secret = identity.dmSecret
+      // A wiped database still recognises the id the folder holds — and takes
+      // the folder's secret as the campaign's. A file from before secrets has
+      // none: the server mints one, and it is written back beside the id.
+      const known = secret ? await api.campaign(secret, id) : { exists: false as const }
+      if (!known.exists) {
+        const reg = await api.reregister(secret, id, vault.title)
+        if (reg.dmSecret !== secret) {
+          secret = reg.dmSecret
+          await vault.writeIdentity({ ...identity, dmSecret: secret })
+        }
+      }
     }
 
-    await publishPrep(token, id, vault, store.campaign)
-    await store.connect(id, token)
-    const summary = await api.campaign(token, id)
+    await publishPrep(secret!, id, vault, store.campaign)
+    await store.connect(id, secret!)
+    const summary = await api.campaign(secret!, id)
 
     set({
       phase: 'lista',
@@ -713,8 +708,10 @@ async function connectServer(set: Setter): Promise<void> {
     syncFromStore(set)
     publish()
   } catch (err) {
-    if ((err as Error).message === 'sin-autorizar') {
-      set({ phase: 'sin-token', serverError: es.sinAutorizar })
+    // The folder's secret is not this campaign's: the DM can register anew,
+    // knowingly, and that is a different campaign on the server.
+    if ((err as Error).message === 'sin-autorizar' || (err instanceof ApiError && err.status === 401)) {
+      set({ phase: 'sin-registrar', error: es.sinAutorizar })
     } else {
       set({ phase: 'error', error: (err as Error).message })
     }
@@ -726,11 +723,11 @@ async function connectServer(set: Setter): Promise<void> {
  * boot, so each driver starts from the same party and an empty table — the
  * isolation a fresh `MemoryVault` used to give for free.
  */
-async function fixtureIdentity(token: string, title: string): Promise<string> {
-  await api.remove(token, FIXTURE_ID).catch(() => undefined)
-  await api.reregister(token, FIXTURE_ID, title)
+async function fixtureIdentity(title: string): Promise<string> {
+  await api.remove(FIXTURE_SECRET, FIXTURE_ID).catch(() => undefined)
+  await api.reregister(FIXTURE_SECRET, FIXTURE_ID, title)
   for (const { player, xml } of await fixtureSheets!()) {
-    await api.addCharacter(token, FIXTURE_ID, xml, player)
+    await api.addCharacter(FIXTURE_SECRET, FIXTURE_ID, xml, player)
   }
   return FIXTURE_ID
 }

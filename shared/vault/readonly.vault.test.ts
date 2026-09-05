@@ -34,7 +34,7 @@ describe('the suite cannot write to the vault', () => {
 
   it('refuses the app\'s own folder too, on a read-only vault', async () => {
     await expect(
-      vault.writeIdentity({ id: 'x', server: null, registered: '2026-09-05' }),
+      vault.writeIdentity({ id: 'x', dmSecret: 's', server: null, registered: '2026-09-05' }),
     ).rejects.toThrow(VaultWriteError)
     expect(read(sessionFile)).toBe(read(sessionFile))
     expect(read(backupFile)).toBe(read(backupFile))

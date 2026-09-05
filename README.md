@@ -28,16 +28,16 @@ fallar de forma rara.
 
 ```bash
 npm install
-npm run dev          # el servidor (token `dev`, data/dev.sqlite) y Vite en :5173
+npm run dev          # el servidor (data/dev.sqlite) y Vite en :5173
 ```
 
 Abre la consola, pulsa **Abrir carpeta de campaña** y elige tu mundo
 (`talasia/`) o una campaña suelta (`marea-baja/`). La primera vez la consola
-pide el **token del DM** (el `DM_TOKEN` del servidor; en desarrollo, `dev`) y
-ofrece **Registrar la campaña**: el servidor le da un identificador, que se
-guarda en `.pergamino/campaign.json` dentro de la carpeta. Desde ahí, **Abrir
-pantalla de mesa** para la segunda ventana, y en **Party** el enlace que se
-reparte a los jugadores.
+ofrece **Registrar la campaña**: el servidor le da un identificador y un
+**secreto de DM**, y los dos se guardan en `.pergamino/campaign.json` dentro de
+la carpeta. Tener la carpeta es dirigir la campaña: ábrela en otro ordenador y
+la consola conecta sin pedir nada. Desde ahí, **Abrir pantalla de mesa** para
+la segunda ventana, y en **Party** el enlace que se reparte a los jugadores.
 
 El navegador recuerda la carpeta entre recargas, pero el permiso caduca: al
 volver, la consola ofrece **Reabrir** y basta un clic para recuperarlo.
@@ -94,11 +94,14 @@ consola y los móviles le mandan acciones por WebSocket y reciben el estado
 entero de vuelta, cada uno en la forma que le toca: a la consola todo, a un
 móvil la proyección de su personaje.
 
-Dos credenciales y ninguna cuenta: el **token del DM** (`DM_TOKEN` en el
-`.env`; sin él el servidor no arranca) para todo lo que hay bajo `/api/dm/`, y
-el **enlace de la campaña**, que da acceso al selector de personajes y a la
-ficha propia, y permite crear o sustituir un personaje a quien lo tenga. Se
-puede regenerar desde la consola.
+Dos credenciales por campaña y ninguna cuenta. Dar de alta una campaña está
+abierto a cualquiera; lo que devuelve es la única puerta. El **secreto del
+DM**, que la consola guarda en `.pergamino/campaign.json` de la carpeta, abre
+todo lo que hay bajo `/api/dm/campaigns/<id>/` — sólo de esa campaña, así que
+un servidor sirve a tantos DM como se registren en él. El **enlace de la
+campaña** da acceso al selector de personajes y a la ficha propia, y permite
+crear o sustituir un personaje a quien lo tenga. Los dos se pueden renovar
+desde la consola; el secreto, desde el menú ⋯.
 
 Lo que **no** llega al servidor: `story/`, las notas, la prosa de un PNJ, la
 descripción de un objeto, la nota de lectura de una escena, ninguna carpeta.

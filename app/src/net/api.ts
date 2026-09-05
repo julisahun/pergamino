@@ -29,7 +29,8 @@ export class ApiError extends Error {
 
 interface Options {
   method?: string
-  token?: string | null
+  /** The campaign's DM secret, sent as a bearer. */
+  secret?: string | null
   json?: unknown
   body?: BodyInit
   type?: string
@@ -38,7 +39,7 @@ interface Options {
 
 async function call<T>(path: string, opts: Options = {}): Promise<T> {
   const headers: Record<string, string> = {}
-  if (opts.token) headers.Authorization = `Bearer ${opts.token}`
+  if (opts.secret) headers.Authorization = `Bearer ${opts.secret}`
   let body: BodyInit | undefined = opts.body
   if (opts.json !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -74,52 +75,58 @@ async function call<T>(path: string, opts: Options = {}): Promise<T> {
 
 export const api = {
   ping: () => call<{ app: string }>('/api/ping', { timeoutMs: 4000 }),
-  whoami: (token: string) => call<{ ok: true }>('/api/dm/whoami', { token }),
-  register: (token: string, title: string) =>
-    call<Registered>('/api/dm/campaigns', { token, json: { title } }),
-  reregister: (token: string, id: string, title: string) =>
-    call<Registered>(`/api/dm/campaigns/${enc(id)}`, { token, method: 'PUT', json: { title } }),
-  campaign: (token: string, id: string) =>
-    call<CampaignSummary | { exists: false }>(`/api/dm/campaigns/${enc(id)}`, { token }),
-  remove: (token: string, id: string) =>
-    call<void>(`/api/dm/campaigns/${enc(id)}`, { token, method: 'DELETE' }),
-  prep: (token: string, id: string, prep: PrepBody) =>
-    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/prep`, { token, method: 'PUT', json: prep }),
-  pnjPortrait: (token: string, id: string, pnjId: string, blob: Blob) =>
+  /** Open to anyone: what comes back — the id and both secrets — is the only way in. */
+  register: (title: string) => call<Registered>('/api/dm/campaigns', { json: { title } }),
+  /**
+   * Under the id the folder holds. With the folder's secret after a wiped
+   * database, the server takes that secret as the campaign's; without one
+   * (a file from before secrets) it mints one, and the answer carries it.
+   */
+  reregister: (secret: string | null, id: string, title: string) =>
+    call<Registered>(`/api/dm/campaigns/${enc(id)}`, { secret, method: 'PUT', json: { title } }),
+  rotateSecret: (secret: string, id: string) =>
+    call<{ dmSecret: string }>(`/api/dm/campaigns/${enc(id)}/secret/rotate`, { secret, method: 'POST' }),
+  campaign: (secret: string, id: string) =>
+    call<CampaignSummary | { exists: false }>(`/api/dm/campaigns/${enc(id)}`, { secret }),
+  remove: (secret: string, id: string) =>
+    call<void>(`/api/dm/campaigns/${enc(id)}`, { secret, method: 'DELETE' }),
+  prep: (secret: string, id: string, prep: PrepBody) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/prep`, { secret, method: 'PUT', json: prep }),
+  pnjPortrait: (secret: string, id: string, pnjId: string, blob: Blob) =>
     call<void>(`/api/dm/campaigns/${enc(id)}/portrait/pnj/${enc(pnjId)}`, {
-      token,
+      secret,
       method: 'PUT',
       body: blob,
       type: blob.type || 'image/jpeg',
     }),
-  party: (token: string, id: string) =>
+  party: (secret: string, id: string) =>
     call<{ characters: Character[]; sheets: Record<string, SheetStats> }>(
       `/api/dm/campaigns/${enc(id)}/party`,
-      { token },
+      { secret },
     ),
-  addCharacter: (token: string, id: string, xml: string, player: string) =>
+  addCharacter: (secret: string, id: string, xml: string, player: string) =>
     call<{ id: string; rev: number }>(
       `/api/dm/campaigns/${enc(id)}/characters?player=${enc(player)}`,
-      { token, method: 'POST', body: xml, type: 'application/xml' },
+      { secret, method: 'POST', body: xml, type: 'application/xml' },
     ),
-  replaceSheet: (token: string, id: string, pc: string, xml: string) =>
+  replaceSheet: (secret: string, id: string, pc: string, xml: string) =>
     call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/characters/${enc(pc)}/sheet`, {
-      token,
+      secret,
       method: 'PUT',
       body: xml,
       type: 'application/xml',
     }),
-  removeCharacter: (token: string, id: string, pc: string) =>
-    call<void>(`/api/dm/campaigns/${enc(id)}/characters/${enc(pc)}`, { token, method: 'DELETE' }),
-  rotateLink: (token: string, id: string) =>
+  removeCharacter: (secret: string, id: string, pc: string) =>
+    call<void>(`/api/dm/campaigns/${enc(id)}/characters/${enc(pc)}`, { secret, method: 'DELETE' }),
+  rotateLink: (secret: string, id: string) =>
     call<{ link: string; url: string }>(`/api/dm/campaigns/${enc(id)}/link/rotate`, {
-      token,
+      secret,
       method: 'POST',
     }),
-  reset: (token: string, id: string) =>
-    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/reset`, { token, method: 'POST' }),
-  dispatch: (token: string, id: string, action: unknown) =>
-    call<DispatchResult>(`/api/dm/campaigns/${enc(id)}/actions`, { token, json: { action } }),
+  reset: (secret: string, id: string) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/reset`, { secret, method: 'POST' }),
+  dispatch: (secret: string, id: string, action: unknown) =>
+    call<DispatchResult>(`/api/dm/campaigns/${enc(id)}/actions`, { secret, json: { action } }),
 
   // --- a player's link ---
   pj: {
