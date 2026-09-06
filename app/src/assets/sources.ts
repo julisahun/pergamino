@@ -20,10 +20,24 @@ export interface PortraitLookup {
 
 /** DM side: the vault, plus the portraits that live inside the session data. */
 export class VaultAssetSource implements AssetSource {
+  #fallback: AssetSource | null = null
+
   constructor(
     private vault: CampaignVault,
     private portraits: PortraitLookup,
   ) {}
+
+  /**
+   * Where to ask when the folder has nothing.
+   *
+   * A player's own face is the one portrait the vault can never answer for: it
+   * arrives as an upload and lives in the server's `character` row, so the
+   * `src` the row names — `pc/<id>` — is a row key and not a path. The console
+   * holds the players' link, so it can ask the endpoint the phones ask.
+   */
+  setFallback(source: AssetSource | null): void {
+    this.#fallback = source
+  }
 
   async blobFor(key: string): Promise<Blob | null> {
     const parsed = parseKey(key)
@@ -41,13 +55,13 @@ export class VaultAssetSource implements AssetSource {
             },
             this.portraits.pnjs(),
           )
-    if (!portrait) return null
     // The vault stores portraits inline as `data:` URIs; some point at a file.
-    if (portrait.stamp) {
+    if (portrait?.stamp) {
       const blob = decodeDataUri(portrait.stamp)
       if (blob) return blob
     }
-    return portrait.src ? this.#fromVault(portrait.src) : null
+    const fromVault = portrait?.src ? await this.#fromVault(portrait.src) : null
+    return fromVault ?? (await this.#fallback?.blobFor(key)) ?? null
   }
 
   async #fromVault(path: string): Promise<Blob | null> {

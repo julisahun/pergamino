@@ -37,6 +37,7 @@ import {
   type Deviation,
 } from '../../../shared/vault/writeback.ts'
 import { AssetCache } from '../assets/cache.ts'
+import { HttpAssetSource } from '../assets/http.ts'
 import { noteFromUrl } from './noteUrl.ts'
 import { VaultAssetSource } from '../assets/sources.ts'
 import { BroadcastChannelTransport } from '../transport/broadcast.ts'
@@ -697,6 +698,14 @@ async function connectServer(set: Setter): Promise<void> {
     await publishPrep(secret!, id, vault, store.campaign)
     await store.connect(id, secret!)
     const summary = await api.campaign(secret!, id)
+
+    // The party's own faces are rows on the server, not files in the folder.
+    // The link is only known once the summary is in, so anything asked for
+    // before now was answered with a null the cache is still holding.
+    if (summary.exists) {
+      assetSource?.setFallback(new HttpAssetSource(summary.link))
+      dmAssets.clear()
+    }
 
     set({
       phase: 'lista',
