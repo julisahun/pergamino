@@ -40,7 +40,11 @@ button {
   padding: 6px 11px;
   cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: var(--accent-dim); background: #2f2820; }
+/* Behind `hover: hover` because a phone has none: a tap that only *lands* on a
+   button was leaving it lit until the next tap somewhere else. */
+@media (hover: hover) {
+  button:hover:not(:disabled) { border-color: var(--accent-dim); background: #2f2820; }
+}
 button:disabled { opacity: 0.4; cursor: default; }
 button[aria-pressed="true"] { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
 

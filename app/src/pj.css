@@ -1,7 +1,13 @@
 /*
  * The player's page. Shares the tokens with the console and nothing else: a
  * phone wants 44 px targets, 16 px inputs (or Safari zooms), a sticky head and
- * a bottom bar under the thumb, and no hover states at all.
+ * a bottom bar under the thumb, and no hover states at all — that last one is
+ * `@media (hover: hover)` in tokens.css, because saying it here did not make
+ * it true.
+ *
+ * Widths are the small ones: 320 px is the floor and nothing may overflow it,
+ * every gutter clears `env(safe-area-inset-*)` for a notch held sideways, and
+ * a 360 px-tall landscape screen still has room for a tab under the head.
  */
 @import './tokens.css';
 
@@ -39,7 +45,7 @@ button.big { padding: 12px 18px; font-size: 17px; }
 
 /* --- the sheet -------------------------------------------------------------- */
 .pj-sheet { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
-.pj-head { position: sticky; top: 0; z-index: 2; background: var(--bg-panel); border-bottom: 1px solid var(--line); padding: 10px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.pj-head { position: sticky; top: 0; z-index: 2; background: var(--bg-panel); border-bottom: 1px solid var(--line); padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 10px; }
 .pj-head-row { display: flex; align-items: center; gap: 12px; }
 .pj-head-name { flex: 1; min-width: 0; }
 .pj-head-name h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -55,20 +61,52 @@ button.big { padding: 12px 18px; font-size: 17px; }
 .pj-big.ok { border-color: var(--ok); color: #bfe0ad; }
 .pj-amount { width: 84px; height: 48px; text-align: center; font-size: 18px; color: var(--ink); background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px; }
 .pj-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.pj-chips-all { padding: 8px; background: var(--bg-raised); border-radius: 8px; }
+.pj-chips-all { padding: 8px; background: var(--bg-raised); border-radius: 8px; max-height: 40dvh; overflow-y: auto; }
 .pj-chip { min-height: 34px; padding: 4px 10px; font-size: 14px; border-radius: 999px; }
 .pj-chip.on { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
 .pj-death { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
 .pj-banner { background: var(--accent-dim); color: #fff; text-align: center; padding: 6px 12px; font-size: 14px; }
 .pj-banner.warn { background: var(--danger); }
-.pj-menu { position: absolute; right: 12px; top: 64px; z-index: 3; background: var(--bg-raised); border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; min-width: 220px; overflow: hidden; }
+.pj-menu { position: fixed; right: max(12px, env(safe-area-inset-right)); top: calc(64px + env(safe-area-inset-top)); z-index: 3; background: var(--bg-raised); border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; min-width: 220px; overflow: hidden; }
 .pj-menu-item { display: block; padding: 12px 16px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: var(--ink); font: inherit; cursor: pointer; }
 .pj-menu-item:last-child { border-bottom: 0; }
 
-.pj-body { padding: 4px 14px 16px; flex: 1; }
-.pj-tabs { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--bg-panel); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.pj-tabs button { flex: 1; border: 0; border-radius: 0; background: none; padding: 12px 4px; font-size: 12px; color: var(--ink-dim); min-height: 52px; }
+.pj-body { padding: 4px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left)); flex: 1; }
+/* Six tabs on a 320 px phone: a glyph carries the column and the word sits
+   under it at 10 px.
+   `flex: 1` was not enough on its own, because flex refuses to shrink a column
+   below its longest word: «Características» measured 93 px — twice any other
+   label — so the row came to 345 px in a 320 px window and pushed «Mesa» off
+   the right edge of a bar that is fixed and does not scroll. That label is
+   «Aptitudes» now, but the guard is `min-width: 0`, which is what makes the
+   row unable to outgrow the phone whatever a future tab is called. */
+.pj-tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; display: flex;
+  background: var(--bg-panel); border-top: 1px solid var(--line);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.pj-tabs button {
+  flex: 1 1 0; min-width: 0; border: 0; border-radius: 0; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 3px 9px; color: var(--ink-dim); min-height: 52px;
+}
+.pj-tab-icon { font-size: 18px; line-height: 1; }
+.pj-tab-label { max-width: 100%; font-size: 10px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 360px) { .pj-tab-label { font-size: 11px; } }
 .pj-tabs button[aria-pressed="true"] { color: var(--accent); background: none; box-shadow: inset 0 3px 0 var(--accent); }
+
+/* A phone held sideways is ~360 px tall. The head keeps everything it has —
+   the portrait, the hit points, the ∓ — at two thirds the height, so the tab
+   below it is not left with nothing to draw in. */
+@media (max-height: 480px) {
+  .pj-head { padding-top: 6px; padding-bottom: 6px; gap: 6px; }
+  .pj-head-name .muted { display: none; }
+  .pj-hp-now { font-size: 28px; }
+  .pj-hp-max { font-size: 15px; }
+  .pj-big { width: 40px; height: 40px; font-size: 22px; }
+  .pj-amount { width: 68px; height: 40px; }
+  .pj-chip { min-height: 30px; font-size: 13px; }
+}
 
 .pj-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 10px; }
 .pj-stats.six { grid-template-columns: repeat(3, 1fr); }

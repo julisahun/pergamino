@@ -6,7 +6,7 @@ import { es } from '../../strings/es.ts'
 const SCORES: (keyof Abilities)[] = ['str', 'dex', 'con', 'int', 'wis', 'cha']
 
 /** Scores, saves and all eighteen skills — the sheet's numbers, marked for what they are. */
-export function Caracteristicas({ view }: { view: PlayerView }) {
+export function Aptitudes({ view }: { view: PlayerView }) {
   const { sheet } = view
   const rows = skillRows(sheet)
   return (

@@ -357,7 +357,7 @@ export const es = {
   tuTurno: '¡Tu turno!',
   turnoDeOtro: 'Turno de',
   combate: 'Combate',
-  caracteristicas: 'Características',
+  aptitudes: 'Aptitudes',
   conjuros: 'Conjuros',
   rasgosTab: 'Rasgos',
   equipoTab: 'Equipo',

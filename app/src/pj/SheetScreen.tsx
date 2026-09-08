@@ -6,14 +6,14 @@ import { useState } from 'react'
 import { es } from '../strings/es.ts'
 import { usePj } from '../state/pjStore.ts'
 import { HpHeader } from './HpHeader.tsx'
-import { Caracteristicas } from './tabs/Caracteristicas.tsx'
+import { Aptitudes } from './tabs/Aptitudes.tsx'
 import { Combate } from './tabs/Combate.tsx'
 import { Conjuros } from './tabs/Conjuros.tsx'
 import { Equipo } from './tabs/Equipo.tsx'
 import { Mesa } from './tabs/Mesa.tsx'
 import { Rasgos } from './tabs/Rasgos.tsx'
 
-type Tab = 'combate' | 'caracteristicas' | 'conjuros' | 'rasgos' | 'equipo' | 'mesa'
+type Tab = 'combate' | 'aptitudes' | 'conjuros' | 'rasgos' | 'equipo' | 'mesa'
 
 export function SheetScreen() {
   const { view, connection, reject, forget, replaceSheet, busy } = usePj()
@@ -23,13 +23,13 @@ export function SheetScreen() {
   if (!view) return <div className="pj-center muted">{es.cargando}</div>
 
   const casts = Object.keys(view.sheet.slots).length > 0 || view.sheet.spells.length > 0
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'combate', label: es.combate },
-    { id: 'caracteristicas', label: es.caracteristicas },
-    ...(casts ? [{ id: 'conjuros' as Tab, label: es.conjuros }] : []),
-    { id: 'rasgos', label: es.rasgosTab },
-    { id: 'equipo', label: es.equipoTab },
-    { id: 'mesa', label: es.mesa },
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: 'combate', label: es.combate, icon: '◈' },
+    { id: 'aptitudes', label: es.aptitudes, icon: '✥' },
+    ...(casts ? [{ id: 'conjuros' as Tab, label: es.conjuros, icon: '✦' }] : []),
+    { id: 'rasgos', label: es.rasgosTab, icon: '❖' },
+    { id: 'equipo', label: es.equipoTab, icon: '▤' },
+    { id: 'mesa', label: es.mesa, icon: '◉' },
   ]
   const offline = connection !== 'conectada'
 
@@ -64,7 +64,7 @@ export function SheetScreen() {
       )}
       <main className="pj-body">
         {tab === 'combate' && <Combate view={view} />}
-        {tab === 'caracteristicas' && <Caracteristicas view={view} />}
+        {tab === 'aptitudes' && <Aptitudes view={view} />}
         {tab === 'conjuros' && <Conjuros view={view} disabled={offline} />}
         {tab === 'rasgos' && <Rasgos view={view} />}
         {tab === 'equipo' && <Equipo view={view} disabled={offline} />}
@@ -73,7 +73,10 @@ export function SheetScreen() {
       <nav className="pj-tabs">
         {tabs.map((t) => (
           <button key={t.id} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>
-            {t.label}
+            <span className="pj-tab-icon" aria-hidden="true">
+              {t.icon}
+            </span>
+            <span className="pj-tab-label">{t.label}</span>
           </button>
         ))}
       </nav>

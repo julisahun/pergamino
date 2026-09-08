@@ -69,7 +69,7 @@ await phone.waitForFunction((before) => document.querySelector('.pj-hp-now')?.te
 console.log(`  phone back to ${await phone.locator('.pj-hp-now').innerText()}`)
 
 console.log('pestañas:')
-for (const tab of ['Características', 'Rasgos', 'Equipo', 'Mesa']) {
+for (const tab of ['Aptitudes', 'Rasgos', 'Equipo', 'Mesa']) {
   await phone.locator('.pj-tabs').getByRole('button', { name: tab }).click()
   await phone.waitForTimeout(150)
   await phone.screenshot({ path: `/tmp/dmshots/pj-4-${tab.toLowerCase()}.png` })
