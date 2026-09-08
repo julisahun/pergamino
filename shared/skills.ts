@@ -11,8 +11,10 @@
  * proficiency bonus, doubled for an expertise. The sheet's own line, when it
  * has one, always wins.
  */
+import type { Scores } from './types.ts'
 import type { Abilities, SheetStats } from './vault/sheet.ts'
 import { abilityMod } from './vault/sheet.ts'
+import { ABILITY_KEYS } from './vault/fc5.ts'
 
 export interface Skill {
   name: string
@@ -102,5 +104,38 @@ export function skillRows(sheet: SheetStats | undefined): SkillRow[] {
       return { ...skill, ...flags, mod, stated: false, derived: true }
     }
     return { ...skill, ...flags, mod: abilityMod(score), stated: false, derived: false }
+  })
+}
+
+// --- a statblock's own six -------------------------------------------------
+
+export interface SaveRow {
+  ability: keyof Scores
+  /** `FUE`, `DES`… — the same label the player's sheet is drawn with. */
+  label: string
+  /** Null when the note states neither a score nor a save for this one. */
+  mod: number | null
+  /** True when the note quoted this save by name, which makes it the note's. */
+  stated: boolean
+}
+
+/**
+ * The six saving throws of a PNJ, from what its note states and nothing else.
+ *
+ * The same rule `skillRows` keeps for a player: **a stated line always wins**,
+ * an unstated one is the ability modifier, and what the note is silent about
+ * comes back `null` rather than `+0`. That last part is the whole point. The
+ * console used to resolve a saving throw by comparing a bare d20 against the
+ * DC, which is `+0` for every creature in the campaign — a modifier no note
+ * had ever given it. A `null` here reads as «—» on screen: the app saying it
+ * was not told, which is the truth and is useful, where a `+0` was neither.
+ */
+export function saveRows(scores: Scores | null, stated: Partial<Scores> = {}): SaveRow[] {
+  return ABILITY_KEYS.map((ability) => {
+    const label = ABILITY_LABEL[ability]
+    const quoted = stated[ability]
+    if (quoted !== undefined) return { ability, label, mod: quoted, stated: true }
+    const score = scores?.[ability]
+    return { ability, label, mod: score === undefined ? null : abilityMod(score), stated: false }
   })
 }

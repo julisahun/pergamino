@@ -173,7 +173,6 @@ export class CampaignSession {
       pcName: (id) => ctx.pcs.get(id)?.name,
       pcMaxHp: (id) => ctx.pcs.get(id)?.hpMax ?? null,
       pcInitMod: (id) => ctx.pcs.get(id)?.initMod ?? null,
-      pcAc: (id) => ctx.pcs.get(id)?.ac ?? null,
       newId: () => randomUUID().slice(0, 12),
     })
     if (state === this.#state) return { rev: this.#rev, changed: false }

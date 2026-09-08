@@ -136,6 +136,8 @@ ac: 15
 hpMax: 16
 initMod: 1
 speed: 9
+scores: {fue: 13, des: 12, con: 14, int: 9, sab: 11, car: 10}
+saves: {con: 4}
 portrait: assets/pnj/tulio.jpg
 abilities:
   - name: Lanza corta
@@ -161,7 +163,9 @@ compañía sabe todavía que es él.
 | `initMod` | number | no | `0` |
 | `speed` | number | no | `null`. **Metres.** Rendered as `<n> m`. 30 ft → `9`. |
 | `portrait` | string, or `{src: string}` | no | `null`. Campaign-relative path (§9). No leading `/`, no `..`. |
-| `abilities` | list of `{name, desc, id?}` | no | `[]`. An entry with neither `name` nor `desc` is dropped. `id` defaults to a slug of `name`, then `ability-<n>`. **An entry whose `desc` states damage dice becomes a resolvable action — see §4.1.** |
+| `abilities` | list of `{name, desc, id?}` | no | `[]`. An entry with neither `name` nor `desc` is dropped. `id` defaults to a slug of `name`, then `ability-<n>`. **An entry whose `desc` states damage dice is listed as an action — see §4.1.** |
+| `scores` | map of the six | no | `null`. **All six or none** — see §4.3. Keys either language: `fue/str`, `des/dex`, `con`, `int`, `sab/wis`, `car/cha`. |
+| `saves` | map, any subset of the six | no | `{}`. Only the saves the statblock *quotes*; the rest come off `scores` — see §4.3. |
 | `ficha` | string | no | **Reserved.** If present it overrides the note's title. Do not use it here. |
 | anything else | — | — | **Ignored by the app.** Harmless in Obsidian, invisible in the console. Do not put mechanics there and expect them to show up. |
 
@@ -172,10 +176,14 @@ one clean opening sentence and put the rest below.
 
 ### 4.1 An ability with numbers is an action
 
-Whoever is up in a fight gets an action bar under their row, and it is built by
-reading `abilities` back. An entry that states **damage dice** becomes something
-the DM can resolve — pick it, pick who it lands on, roll, apply — and an entry
-that does not stays prose on the ficha.
+Whoever is up in a fight gets a list of actions under their row, and it is
+built by reading `abilities` back. An entry that states **damage dice** is
+listed with its numbers — the bonus, the dice, a spell's level and DC — and an
+entry that does not stays prose on the ficha.
+
+**The list is read-only.** The console does not resolve an action against a
+target and does not apply anything: hit points move from the ∓ on the rail
+row, by the DM. It used to, and the reason it stopped is in §4.3.
 
 ```yaml
 abilities:
@@ -187,12 +195,12 @@ abilities:
 
 | What the desc states | What you get |
 |---|---|
-| damage dice **and** a to-hit | the action, with a verdict against the target's CA |
-| damage dice, no to-hit | the action, and the console hands the hit/miss call back to the DM |
+| damage dice **and** a to-hit | the line, with the bonus quoted beside the dice |
+| damage dice, no to-hit | the line, with the dice alone |
 | no damage dice | nothing — it stays a trait |
 
-Damage is what makes an action; the to-hit only decides whether the app can
-judge the roll. Write it as `+4 al ataque` or `+4 a impactar`, and the dice
+Damage is what makes an action; the to-hit is quoted when it is there. Write it
+as `+4 al ataque` or `+4 a impactar`, and the dice
 beside the word `daño` — `1d6+2 de daño perforante`. The damage *type* is read
 and thrown away; nothing in the app resists or doubles anything, so it is there
 for the DM to read, not for the app to act on.
@@ -222,6 +230,50 @@ note controls.
 
 Only write `alias` when the source itself distinguishes "what it is called" from
 "what the players are told". Otherwise leave it out and ask if you are unsure.
+
+### 4.3 `scores` and `saves` — the six, and what this fixes
+
+```yaml
+scores: {fue: 13, des: 12, con: 14, int: 9, sab: 11, car: 10}
+saves:  {con: 4}
+```
+
+The ficha shows the six modifiers and the six saving throws, which is what the
+DM reads when a player casts something with a CD. **A save is the ability
+modifier unless `saves` quotes it**, and a quoted one wins — the same rule the
+app already keeps for a player's skills, and the only arithmetic it allows
+itself. `saves` is for the exceptions: a proficient save, a monster's flat
+bonus. A save that is just its ability needs no line, and writing one would be
+two places that can disagree.
+
+**Why this key exists.** For a while the console resolved a saving throw for
+the DM: it took the d20 rolled beside the target's name and compared it
+straight to the DC. There was no `scores` and no `saves`, so there was nothing
+to add to that face — every creature in every campaign saved at **+0**, a
+modifier no note had ever stated, shown in the same voice as the armour class
+that had been read off the note. That resolver is gone (§4.1) and this is the
+field that should have existed instead.
+
+So the shape of the thing is:
+
+| The note states | The ficha says |
+|---|---|
+| `scores`, no `saves` | six modifiers, and each save equal to its ability |
+| `scores` and a `saves` entry | the quoted save, marked as the note's own |
+| `saves` alone | those saves, and no modifier column |
+| neither | **nothing**, plus a line telling you to add `scores` |
+
+That last row is the point. A note that says nothing gets `—`, never `+0`:
+the app has no business inventing a number and then presenting it like one it
+was told.
+
+**All six or none.** Five scores and a missing one would put a silent `+0` in
+the column, which is the exact failure this exists to end — so a partial
+`scores` is dropped whole and says so in the console log. `saves` is the
+opposite: every key optional, because that is what quoting an exception means.
+
+`hpMax` still decides whether a PNJ can be seated; `scores` decides nothing at
+all. It is reference the DM reads, and a *sólo trato* PNJ can carry it.
 
 ---
 

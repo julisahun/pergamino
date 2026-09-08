@@ -35,7 +35,7 @@ export const es = {
     'Cada PNJ y cada objeto es una nota con su ficha en el front matter y su ' +
     'prosa debajo; cada escena, un json con su arte, su rejilla y su reparto; ' +
     'cada PJ, una carpeta con su nota y su hoja.',
-  formatoPnj: 'gente y bichos: CA, PG, iniciativa, rasgos y retrato',
+  formatoPnj: 'gente y bichos: CA, PG, iniciativa, características, rasgos y retrato',
   formatoObjetos: 'objetos: cargas, efectos y descripción',
   formatoEscenas: 'escenas: arte, sonido, rejilla, reparto y nota de lectura',
   formatoPlayers: 'la party: una carpeta por PJ, con su nota y su -fc5.xml',
@@ -141,28 +141,12 @@ export const es = {
   rasgos: 'Rasgos',
   anadir: 'Añadir',
 
-  // acciones: elegir qué se hace y contra quién, y ver el resultado antes
-  // de aplicarlo
+  // acciones: lo que sabe hacer quien va, con sus números. Sólo se leen —
+  // los PG los mueve el DM con el ∓ de la fila.
   sinAcciones: 'Nada con números en su ficha — se lleva a mano.',
-  objetivos: 'Objetivos',
-  elegirEnTablero: 'Elige en el tablero',
-  elegirObjetivo: 'Elige a quién',
-  tirar: 'Tirar',
   salvacion: 'Salv',
   curacion: 'Curación',
-  impacta: 'Impacta',
-  falla: 'Falla',
-  critico: '¡Crítico!',
-  pifia: 'Pifia',
-  salva: 'Salva',
-  noSalva: 'No salva',
-  sinDano: 'sin daño',
   mitad: 'mitad',
-  aplicar: 'Aplicar',
-  gastar: 'Gastar',
-  espacioNivel: 'espacio de nivel',
-  quedan: 'quedan',
-  sinCa: 'sin CA — decides tú',
 
   // el tablero: quién está y quién entra
   anadirALaMesa: 'Añadir a la mesa',
@@ -221,6 +205,14 @@ export const es = {
   puntuaciones: 'Características',
   segunLaFicha: 'según la ficha',
   soloCaracteristica: 'sólo característica',
+
+  // las seis de un PNJ, leídas de su nota
+  salvacionDeclarada: 'la nota la declara — manda sobre la característica',
+  salvacionPorCaracteristica: 'el modificador de característica, sin competencia',
+  sinPuntuaciones:
+    'Su nota no declara características. Añade `scores` en el frontmatter ' +
+    '(fue, des, con, int, sab, car) y aquí saldrán sus seis modificadores y ' +
+    'sus salvaciones.',
   habilidadesSinDeclarar:
     'La ficha no declara habilidades, así que estas son sólo el modificador de ' +
     'característica: a quien tenga competencia o experticia le falta el bono. ' +

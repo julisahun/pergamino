@@ -24,6 +24,8 @@ const npc = (id: string, name: string, alias: string | null = null): Npc => ({
   speed: null,
   portrait: null,
   abilities: [],
+  scores: { str: 13, dex: 6, con: 16, int: 3, wis: 6, cha: 5 },
+  saves: { dex: -2 },
   file: `pnj/${id}.md`,
   ...emptyLiveState(16),
 })
@@ -54,6 +56,15 @@ function state(): SessionState {
 
 const shown = (s: SessionState): string[] =>
   projectTable(s, ctx()).combatants.map((c) => c.name)
+
+describe('la tele no ve las seis', () => {
+  it('ni las puntuaciones ni las salvaciones cruzan la proyección', () => {
+    const json = JSON.stringify(projectTable(state(), ctx()))
+    for (const leak of ['"scores"', '"saves"', '-2']) {
+      expect(json, leak).not.toContain(leak)
+    }
+  })
+})
 
 describe('un PNJ con alias', () => {
   it('llega a la mesa con el alias y no con su nombre', () => {

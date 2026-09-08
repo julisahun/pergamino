@@ -1,6 +1,11 @@
 /**
  * What a combatant can *do*, read out of the prose that already describes it.
  *
+ * Reading, and only reading. Nothing here judges whether an action landed:
+ * the app has no save bonus for a PNJ to judge one against, and a verdict it
+ * had to invent a modifier for was worse than no verdict at all. What comes
+ * out of this file is a list for the DM to read.
+ *
  * Nothing was added to the campaign for this. A pnj note writes its attack the
  * way a statblock always did —
  *
@@ -27,7 +32,7 @@ import type { SheetSpell, SheetStats, SheetWeapon } from '../vault/sheet.ts'
 import { parseDice, withMod, type Dice } from './dice.ts'
 
 /**
- * How an action lands.
+ * How an action lands — which is what the line about it has to say.
  *
  * - `attack` — a d20 against the target's AC, the attacker's own roll.
  * - `save`   — a DC the *target* rolls against, often for half.
@@ -231,27 +236,3 @@ export function attacksOfSheet(sheet: SheetStats | undefined): Attack[] {
   return out
 }
 
-// --- resolving ------------------------------------------------------------
-
-/** A natural 20 always lands and doubles the dice; a natural 1 always misses. */
-export const isCrit = (roll: number): boolean => roll === 20
-export const isFumble = (roll: number): boolean => roll === 1
-
-/**
- * Did it land? `null` for an AC nobody stated — the console shows the total
- * and lets the DM say.
- *
- * The verdict is only ever a suggestion: a wizard with Escudo up has an AC no
- * sheet knows about, which is why nothing applies until the DM presses
- * Aplicar.
- */
-export function hits(roll: number, mod: number, ac: number | null): boolean | null {
-  if (isCrit(roll)) return true
-  if (isFumble(roll)) return false
-  if (ac === null) return null
-  return roll + mod >= ac
-}
-
-/** What a save does to the damage: nothing, half, or all of it. */
-export const afterSave = (amount: number, made: boolean, half: boolean): number =>
-  made ? (half ? Math.floor(amount / 2) : 0) : amount

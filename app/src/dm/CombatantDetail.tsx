@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react'
 import type { Ref } from '../../../shared/types.ts'
 import { CONDITIONS } from '../../../shared/conditions.ts'
 import { revealFor, tableNames } from '../../../shared/session/project.ts'
+import { saveRows } from '../../../shared/skills.ts'
+import { abilityMod, formatMod } from '../../../shared/vault/sheet.ts'
 import { es } from '../strings/es.ts'
 import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
@@ -33,6 +35,17 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
   const tableName = c.npc && state ? tableNames(state).get(c.npc.id) : undefined
   const lootable = c.npc !== null && (carried.length > 0 || c.live.gold > 0)
   const party = Object.keys(state?.play ?? {})
+  /**
+   * The six, for a PNJ.
+   *
+   * A PC has its whole sheet behind the ⓘ, derived from an `-fc5.xml` that
+   * states every number; a PNJ has only what its note wrote down, and until
+   * `scores` existed that was nothing at all. This is the panel to read when
+   * somebody casts a spell with a CD: it says what this one rolls, or says
+   * plainly that the note never said.
+   */
+  const scores = c.npc?.scores ?? null
+  const saves = c.npc ? saveRows(scores, c.npc.saves) : []
 
   return (
     <div className="detail">
@@ -165,6 +178,41 @@ export function CombatantDetail({ c }: { c: Combatant | null }) {
           ))}
         </div>
       </section>
+
+      {c.npc && (
+        <section className="card" style={{ marginBottom: 12 }}>
+          <h3>{es.puntuaciones}</h3>
+          {scores && (
+            <div className="stats">
+              {saves.map((s) => (
+                <div className="stat" key={s.ability}>
+                  <span className="stat-label">{s.label}</span>
+                  <span className="stat-mod">{formatMod(abilityMod(scores[s.ability]))}</span>
+                  <span className="stat-score">{scores[s.ability]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {saves.some((s) => s.mod !== null) && (
+            <>
+              <div className="carry-label">{es.tiradasSalvacion}</div>
+              <div className="rolls">
+                {saves.map((s) => (
+                  <span
+                    className={`roll${s.stated ? ' stated' : ''}`}
+                    key={s.ability}
+                    title={s.stated ? es.salvacionDeclarada : es.salvacionPorCaracteristica}
+                  >
+                    {s.label} <b>{s.mod === null ? '—' : formatMod(s.mod)}</b>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+          {/* No invented `+0`: a note that says nothing gets told what to write. */}
+          {!scores && <p className="prep-note">{es.sinPuntuaciones}</p>}
+        </section>
+      )}
 
       {c.npc && c.npc.abilities.length > 0 && (
         <section className="card" style={{ marginBottom: 12 }}>

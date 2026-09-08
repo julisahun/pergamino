@@ -38,7 +38,8 @@ describe('loadPnj — alias', () => {
 describe('la sesión — alias', () => {
   const TULIO: Pnj = {
     id: 'tulio', name: 'Tulio', alias: 'Soldado ahogado', tag: null, ac: 15, hpMax: 16,
-    initMod: 1, speed: null, portrait: null, abilities: [], file: 'pnj/tulio.md', lead: '',
+    initMod: 1, speed: null, portrait: null, abilities: [], scores: null, saves: {},
+    file: 'pnj/tulio.md', lead: '',
   }
   const opts = { pnj: (id: string) => (id === 'tulio' ? TULIO : undefined), newId: () => 'x' }
   const seat = () => reduce(emptySession(), { type: 'npc/add', pnjId: 'tulio', count: 1 }, 0, opts).state

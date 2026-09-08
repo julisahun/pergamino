@@ -183,16 +183,7 @@ function RailRow({
   )
 }
 
-export function InitiativeRail({
-  aim,
-  onArm,
-  onDisarm,
-}: {
-  /** Refs picked on the board while an action is open; null when disarmed. */
-  aim: Ref[] | null
-  onArm: (refs: Ref[]) => void
-  onDisarm: () => void
-}) {
+export function InitiativeRail() {
   const { state, characters, pnjs, sheets, dispatch } = useDm()
   const [selected, setSelected] = useState<Ref | null>(null)
   const [adding, setAdding] = useState(false)
@@ -254,15 +245,7 @@ export function InitiativeRail({
       bar={
         // Only whoever is up. Out of combat there is no "up", and the ficha is
         // where an action is reached from instead.
-        encounter.on && encounter.activeRef === c.ref ? (
-          <ActionBar
-            actor={c}
-            everyone={all}
-            targets={aim ?? []}
-            onArm={onArm}
-            onDisarm={onDisarm}
-          />
-        ) : undefined
+        encounter.on && encounter.activeRef === c.ref ? <ActionBar actor={c} /> : undefined
       }
       reveal={state.field.reveal[c.ref] ?? (c.npc ? NPC_DEFAULT : PC_DEFAULT)}
       tableName={(c.npc && labels.get(c.npc.id)) || null}

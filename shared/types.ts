@@ -54,10 +54,49 @@ export interface Pnj {
   speed: number | null
   portrait: Portrait | null
   abilities: Ability[]
+  /**
+   * The six scores, when the note states them. `null` when it does not, which
+   * is most notes — and then the ficha shows no modifiers at all rather than
+   * a column of `+0`.
+   *
+   * This is the field the app was missing when it judged a saving throw: it
+   * compared a bare d20 against the DC, so every PNJ in the campaign saved at
+   * exactly +0, a number nobody had written anywhere.
+   */
+  scores: Scores | null
+  /**
+   * Saving throws the statblock quotes by name, for the ones that are not just
+   * the ability — a proficient save, a monster's flat bonus. Partial on
+   * purpose: what is here wins, what is absent falls back to the score.
+   *
+   * The same rule `skillRows` already keeps for a player's sheet, which is the
+   * one piece of arithmetic this app allows itself: stated beats derived.
+   */
+  saves: Partial<Scores>
   /** Vault-relative path of the note — also its key in `NotesIndex`. */
   file: string
   /** The note's opening paragraph, shown on the card. */
   lead: string
+}
+
+/**
+ * The six, as a statblock states them.
+ *
+ * Structurally the sheet's `Abilities`, deliberately — so `abilityMod` and
+ * `ABILITY_LABEL` work on a PNJ's numbers with nothing to convert. It is
+ * declared here rather than imported so `types.ts` goes on importing nothing.
+ *
+ * The name is `Scores` and not `Abilities` because `Pnj.abilities` is already
+ * taken, by the traits and attacks the note lists. One is what the creature
+ * *is*; the other is what it *does*.
+ */
+export interface Scores {
+  str: number
+  dex: number
+  con: number
+  int: number
+  wis: number
+  cha: number
 }
 
 /** `objects/*.md` */
@@ -216,6 +255,12 @@ export interface Field {
 
 export type LogKind =
   | 'scene'
+  /**
+   * Nothing writes this any more — it was `attack/resolve`'s line, and that
+   * action is gone. It stays because a session already in the database and a
+   * bitácora already written to `runs/<mesa>/` still carry it, and the label
+   * map and the stylesheet are its *readers*. Not dead code: compatibility.
+   */
   | 'attack'
   | 'damage'
   | 'heal'

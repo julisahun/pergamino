@@ -175,27 +175,28 @@ Cinco pantallas para jugar y dos detrás del menú `⋯` para abrir y cerrar.
   a quien mire desde la barrera. Las casillas de iniciativa **empiezan
   vacías**: las escribes tú, ⏎ baja a la siguiente, y el dado de cada fila sólo
   tira si lo pulsas. La app ya no tira nada por su cuenta.
-- **La barra de acción**, debajo de la fila de quien va. Trae lo que esa
+- **La lista de acciones**, debajo de la fila de quien va. Trae lo que esa
   criatura sabe hacer *leído de su nota*: `pnj/bandido.md` dice «+3 al ataque,
   1d6+1 de daño cortante» y ahí sale «Cimitarra +3 · 1d6+1». Para la party lo
-  mismo, desde el `-fc5.xml`: las armas y los conjuros que sí tienen números
-  — ataque de conjuro, salvación con CD, o curación.
-  - Eliges la acción y **el tablero se arma**: cada ficha que pulses entra en
-    la acción con un anillo rojo, y pulsarla otra vez la saca. Un cono son
-    tres clics y una sola tirada de daño.
-  - Cada casilla tiene su dado al lado, como en «Iniciar combate»: **lo tiras
-    tú o lo tira el botón**, y lo que escribas manda. Un 20 dobla los dados y
-    lo dice; un 1 falla.
-  - Lo que sale es una **previsualización** — «Impacta · 18 vs CA 12 · 5 → 4
-    PG» — y no toca nada hasta que le das a **Aplicar**. El veredicto es una
-    sugerencia: el `⇄` lo cambia, porque el Escudo que se acaba de lanzar no
-    está en ninguna hoja.
-  - Un conjuro **gasta su espacio** al aplicarlo, y lo dice en la bitácora.
-    Puedes desmarcarlo (rituales, la tirada gratis de *Iniciado en la magia*).
-  - La bitácora se queda con **todo, fallos incluidos**: leída después, una
-    pelea es sobre todo gente que no acierta.
+  mismo, desde el `-fc5.xml`: las armas y los conjuros que sí tienen números,
+  con su nivel y su «CD 13 Destreza» cuando la tienen.
+  - **Se lee y nada más.** No hay objetivos, no hay dados y no hay Aplicar:
+    los PG los mueves con el `∓` de la fila, que es donde han estado siempre.
+  - **Por qué.** La app resolvía la tirada: cogía el d20 y lo comparaba con la
+    CA, o con la CD si era una salvación. Lo primero podía hacerlo — la CA está
+    en la nota. Lo segundo no: **una nota de PNJ no tenía dónde escribir un
+    bono de salvación**, así que comparaba el d20 pelado contra la CD y todos
+    los PNJ de la campaña salvaban a +0, un número que no había escrito nadie
+    y que salía con el mismo aire que la CA, que sí estaba leída. Lo que
+    faltaba era el dato, y ahora está — `scores` en la nota, y la ficha te
+    dice a qué salva cada uno.
   - Lo que la nota no escribe en números — «El agua lo cierra todo», Misil
     Mágico — **no sale en la lista**. Sigue en Rasgos, y se lleva a mano.
+- **Las seis de un PNJ, en su ficha.** `scores: {fue: 11, des: 12, …}` en el
+  frontmatter y la ficha saca los seis modificadores y las seis salvaciones.
+  Una salvación es su característica salvo que la nota la declare aparte
+  (`saves: {des: 3}`), y entonces sale marcada como suya. Sin `scores` no sale
+  un `+0` inventado: sale un guión y una línea diciéndote qué escribir.
 - La nota de lectura de la escena queda fijada abajo.
 - **Congelar la mesa**: la pantalla de los jugadores se queda con el último
   fotograma mientras preparas lo siguiente — colocar fichas, cargar un reparto,
@@ -266,7 +267,7 @@ existen:
 | Fichero | Qué saca |
 |---|---|
 | `scenarios/*.json` | escena, arte, rejilla, nota de lectura, reparto |
-| `pnj/*.md` | CA, PG, iniciativa, rasgos, retrato y `alias` en el front matter; la nota, debajo. Un rasgo que escriba daño («+3 al ataque, 1d6+1 de daño») sale además como acción |
+| `pnj/*.md` | CA, PG, iniciativa, `scores`, `saves`, rasgos, retrato y `alias` en el front matter; la nota, debajo. Un rasgo que escriba daño («+3 al ataque, 1d6+1 de daño») sale además en la lista de acciones |
 | `objects/*.md` | `mods.ac`, `usos` y efectos en el front matter; la nota, debajo |
 | `story/**.md`, `mundo/**.md` | las notas |
 | `.pergamino/campaign.json` | el identificador con que el servidor conoce la campaña |
@@ -411,7 +412,6 @@ shared/                  todo el núcleo: lo comparten el navegador y las prueba
   combat/
     dice.ts              1d6+1: leer, tirar, doblar en un crítico
     attacks.ts           qué sabe hacer cada uno, leído de su propia prosa
-    resolve.ts           de lo que hay en las casillas a lo que ha pasado
   vault/
     source.ts            VaultDir / WritableVaultDir — la costura
     binding.ts           CampaignVault: forma, campañas, mesas, los dos descensos

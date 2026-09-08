@@ -32,12 +32,7 @@ export interface BoardToken {
   hidden: boolean
 }
 
-/**
- * `target` is armed by the action bar, not by the toolbar: while an attack is
- * open, a click on a token puts that one in the cone instead of dragging it.
- * It disarms itself the moment the action is resolved or dropped.
- */
-export type BoardTool = 'select' | 'measure' | 'target'
+export type BoardTool = 'select' | 'measure'
 
 export interface BoardProps {
   /** Asset key for the map or scene art behind the grid. */
@@ -51,9 +46,6 @@ export interface BoardProps {
   tool?: BoardTool
   onMoveToken?: (ref: string, x: number, y: number) => void
   onSelectToken?: (ref: string) => void
-  /** Refs currently in the cone, drawn with a ring. Only read in `target`. */
-  targets?: readonly string[]
-  onToggleTarget?: (ref: string) => void
 }
 
 /** A token's face. Its own component so each portrait resolves on its own. */
@@ -92,10 +84,7 @@ export function Board(props: BoardProps) {
     showGrid = true,
     interactive = false,
     tool = 'select',
-    targets,
   } = props
-
-  const targeted = useMemo(() => new Set(targets ?? []), [targets])
 
   const map = useAssetUrl(mapUrl)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -141,14 +130,6 @@ export function Board(props: BoardProps) {
 
   const startDrag = (e: React.PointerEvent, ref: string) => {
     if (!interactive) return
-    // Picking who is caught in something is the one gesture that must not also
-    // move them: an errant drag while aiming a cone would shift a token the
-    // players are watching.
-    if (tool === 'target') {
-      e.stopPropagation()
-      props.onToggleTarget?.(ref)
-      return
-    }
     if (tool !== 'select') return
     e.stopPropagation()
     props.onSelectToken?.(ref)
@@ -225,21 +206,13 @@ export function Board(props: BoardProps) {
             key={ref}
             className={`token${piece.dead ? ' dead' : ''}${piece.active ? ' active' : ''}${
               piece.hidden ? ' hidden-token' : ''
-            }${dragging ? ' dragging' : ''}${ref.startsWith('pc:') ? ' pc' : ' npc'}${
-              targeted.has(ref) ? ' targeted' : ''
-            }`}
+            }${dragging ? ' dragging' : ''}${ref.startsWith('pc:') ? ' pc' : ' npc'}`}
             style={{
               left: px(x) + (cell.w - tokenSize) / 2,
               top: py(y) + (cell.h - tokenSize) / 2,
               width: tokenSize,
               height: tokenSize,
-              cursor: interactive
-                ? tool === 'select'
-                  ? 'grab'
-                  : tool === 'target'
-                    ? 'crosshair'
-                    : undefined
-                : undefined,
+              cursor: interactive && tool === 'select' ? 'grab' : undefined,
             }}
             onPointerDown={(e) => startDrag(e, ref)}
             title={piece.name}

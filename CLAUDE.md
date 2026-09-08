@@ -147,37 +147,39 @@ character and does not cross; `player.test.ts` asserts the leaks by
 `shared/session/allow.ts`, applied on the server before `reduce` and on the
 phone only to grey a control out.
 
-## Where the dice are
+## Where the dice are: nowhere
 
 The reducer is deterministic. `ReduceOpts` injects ids so the whole suite can
 drive `reduce` without stubbing a generator, and initiative used to be rolled
 in there and was deliberately taken out — `reducer.ts` still says *"Nothing is
 rolled here"* and `reducer.vault.test.ts` still asserts it.
 
-Resolving an attack did not change that. The console rolls — by the DM's hand
-or by the 🎲 beside the field, which are the same thing as far as anything
-downstream is concerned — and `attack/resolve` carries an *outcome*:
-who swung, what with, and per target the face, the verdict and the amount. So
-the die the DM wanted and the determinism the tests rest on are not in tension;
-they are on opposite sides of one action payload.
+**The app does not resolve an action either, and that is the newer half of the
+same rule.** There was an `attack/resolve` action: the console rolled, judged
+the swing against the target and applied the damage to everyone caught in it.
+It is gone — the action, the reducer case, `shared/combat/resolve.ts` and the
+board's targeting mode with it — and what is left is `ActionBar`, a read-only
+list of what whoever is up can do.
 
-Two things follow, and both matter more than they look:
+The reason is worth keeping, because it is the shape of a mistake this repo is
+otherwise careful about. Judging an **attack** needs the target's AC, and a pnj
+note states one. Judging a **save** needs the target's save bonus, and a pnj
+note had no field for one — so `resolveTarget` compared the bare d20 face
+against the DC, and every creature in every campaign saved at exactly `+0`. A
+number nobody had written, rendered in the same voice as the `18 vs CA 12`
+beside it, which *had* been read off a note. The verdict was documented as "a
+suggestion", and for a save it was not even that.
 
-- **The verdict is a suggestion.** `hits()` returns `null` when nothing states
-  an AC or the note gives no attack bonus, and the console shows «sin CA —
-  decides tú» with a `⇄` rather than inventing a number. A wizard with Escudo
-  up has an AC no sheet knows about, and nothing is applied until Aplicar.
-- **`AttackTarget.hit` means "it landed", which for a save means the target
-  *failed* it** — and it does not decide the damage. `amount` is already what
-  that target takes, a made save's half included (`afterSave` in the console).
-  The reducer applies `amount` for a save whatever `hit` says; only an attack
-  roll can land on nothing at all.
+So the fix was not a better resolver. It was to stop pretending, and then to
+add the missing field: `Pnj.scores` and `Pnj.saves` (§4.3 of
+`instructions.md`), which the ficha shows as six modifiers and six saving
+throws. A note that states nothing shows `—` and a line saying what to write.
+Hit points move through `hp/damage` and `hp/heal`, from the `∓` on the rail
+row — the DM, who is the only one here who knows what the save was worth.
 
-`attack/resolve` is one action rather than three dispatches because a fireball
-that half-applied would be worse than one that did not, and because three
-entries in the bitácora would not say they were the same swing. It reaches the
-same `takeDamage`/`giveHealing` helpers `hp/damage` and `hp/heal` do, so
-temporary hit points absorb and a PC who drops still goes Inconsciente.
+`saveRows` in `shared/skills.ts` is where the arithmetic lives, beside
+`skillRows`, under the same rule: **a stated line always wins**, an unstated
+one is the ability modifier, and silence is `null` rather than zero.
 
 ## What an action is read from
 
@@ -193,9 +195,9 @@ structured field would mean two places that can disagree.
   them. Ossian's «El agua lo cierra todo» and Tulio's «La sal» state no damage
   and stay prose on the ficha, which is where the DM runs them from.
 - **Damage is what makes an attack; the bonus is optional.** Gerald's
-  Devastating Cuddle is `2d8+4` and no to-hit at all, and refusing to offer it
-  would be refusing to run the only attack the demo campaign's boss has. What
-  a missing bonus costs is the verdict, not the action.
+  Devastating Cuddle is `2d8+4` and no to-hit at all, and refusing to list it
+  would be refusing to show the only attack the demo campaign's boss has. A
+  missing bonus costs the line its `+n` and nothing else.
 - **Both languages.** `marea-baja` is Spanish and the shipped fixture is
   English; that is one format in two languages, so it is one alternation
   rather than a setting somebody has to get right.
@@ -301,7 +303,7 @@ identifiers, file names, comments and every doc file (including this one) are
 ## Treat a change here as unfinished until these pass
 
 ```bash
-npm test                 # 324 with the DM's vault present, 192 without
+npm test                 # 308 with the DM's vault present, 173 without
 npm run typecheck
 npm run build            # tsc, the pages, and server/dist/index.mjs
 ```

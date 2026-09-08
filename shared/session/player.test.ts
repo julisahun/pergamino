@@ -25,6 +25,10 @@ const pnj = (id: string, name: string, alias: string | null): PublishedPnj => ({
   speed: null,
   portrait: null,
   abilities: [{ id: 'a', name: 'Lanza', desc: '+4 al ataque, 1d6+2 de daño' }],
+  // Real numbers, so the leak assertions below have something to catch: a
+  // phone that could read these could read what a foe saves at.
+  scores: { str: 11, dex: 12, con: 12, int: 10, wis: 10, cha: 10 },
+  saves: { dex: 3 },
   file: `pnj/${id}.md`,
 })
 const BANDIDO = pnj('bandido', 'Bandido', null)
@@ -142,6 +146,12 @@ describe('projectPlayer', () => {
     }
     expect('note' in view.live).toBe(false)
     expect(json).not.toContain('"tokens"')
+    // The six and the save bonuses are the DM's side of a saving throw, so
+    // they must not reach a phone — but this player's *own* sheet carries a
+    // `saves` line of its own, in full, by design. So the leak to look for is
+    // on everybody else: nothing in `party` or `foes` states either.
+    const others = JSON.stringify([...view.party, ...view.foes])
+    for (const key of ['"scores"', '"saves"']) expect(others, key).not.toContain(key)
   })
 
   it('is null for someone who is not seated', () => {

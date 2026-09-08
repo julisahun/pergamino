@@ -6,14 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Ability } from '../types.ts'
 import { emptySheet, type SheetSpell, type SheetStats } from '../vault/sheet.ts'
-import {
-  afterSave,
-  attacksOfAbilities,
-  attacksOfSheet,
-  hits,
-  isCrit,
-  isFumble,
-} from './attacks.ts'
+import { attacksOfAbilities, attacksOfSheet } from './attacks.ts'
 import { formatDice } from './dice.ts'
 
 const ability = (name: string, desc: string): Ability => ({ id: name, name, desc })
@@ -281,34 +274,3 @@ describe('a player sheet', () => {
   })
 })
 
-describe('the verdict', () => {
-  it('is the total against the armour class', () => {
-    expect(hits(15, 3, 12)).toBe(true)
-    expect(hits(4, 3, 12)).toBe(false)
-    expect(hits(9, 3, 12)).toBe(true) // exactly 12 lands
-  })
-
-  it('lets a 20 through and a 1 past nothing', () => {
-    expect(hits(20, -5, 30)).toBe(true)
-    expect(hits(1, 20, 2)).toBe(false)
-    expect(isCrit(20)).toBe(true)
-    expect(isFumble(1)).toBe(true)
-  })
-
-  it('declines to say when nothing states an armour class', () => {
-    expect(hits(15, 3, null)).toBeNull()
-  })
-
-  it('still lets a 20 and a 1 through with no armour class to compare', () => {
-    expect(hits(20, 0, null)).toBe(true)
-    expect(hits(1, 0, null)).toBe(false)
-  })
-})
-
-describe('afterSave', () => {
-  it('halves a made save, rounding down, or stops it dead', () => {
-    expect(afterSave(11, false, true)).toBe(11)
-    expect(afterSave(11, true, true)).toBe(5)
-    expect(afterSave(11, true, false)).toBe(0)
-  })
-})

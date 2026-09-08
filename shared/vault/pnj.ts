@@ -11,7 +11,7 @@
  * Nothing writes these. The loaders take a `VaultDir`, so they cannot.
  */
 import * as path from '../pathish.ts'
-import type { Ability, GameObject, Pnj, Portrait } from '../types.ts'
+import type { Ability, GameObject, Pnj, Portrait, Scores } from '../types.ts'
 import { leadParagraph, parseNote, type Note } from './notes.ts'
 import { markdownNames, type VaultDir } from './source.ts'
 
@@ -51,6 +51,72 @@ function portraitOf(raw: unknown): Portrait | null {
   if (typeof raw === 'string') return raw.trim() ? { src: raw.trim(), stamp: null } : null
   const src = str(record(raw).src).trim()
   return src ? { src, stamp: null } : null
+}
+
+/**
+ * `fue` / `str`, and the four others each way.
+ *
+ * Both languages, for the same reason `attacks.ts` reads «+3 al ataque» and
+ * «+3 to hit» with one pattern: a campaign folder is written in whichever the
+ * DM writes in, and this is one format in two languages rather than a setting
+ * somebody has to get right.
+ */
+const SCORE_KEYS: Record<keyof Scores, readonly string[]> = {
+  str: ['str', 'fue'],
+  dex: ['dex', 'des'],
+  con: ['con'],
+  int: ['int'],
+  wis: ['wis', 'sab'],
+  cha: ['cha', 'car'],
+}
+
+/** The first key of `names` the map actually has a finite number under. */
+function scoreOf(raw: Record<string, unknown>, names: readonly string[]): number | null {
+  for (const name of names) {
+    const v = raw[name]
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+  }
+  return null
+}
+
+/**
+ * `scores: {fue: 11, des: 12, con: 12, int: 10, sab: 10, car: 10}`.
+ *
+ * **All six or none**, the same rule the `-fc5.xml` reader keeps for
+ * `<abilities>`: five scores and a missing one would put a silent `+0` on the
+ * ficha, which is the exact failure this field exists to end. A note that
+ * states a partial set gets nothing and says so in the console log.
+ */
+function scoresOf(raw: unknown, id: string): Scores | null {
+  const d = record(raw)
+  if (Object.keys(d).length === 0) return null
+  const out = {} as Scores
+  for (const key of Object.keys(SCORE_KEYS) as (keyof Scores)[]) {
+    const v = scoreOf(d, SCORE_KEYS[key])
+    if (v === null) {
+      console.warn(`[vault] ${id}: 'scores' needs all six (missing ${key}) — ignoring it`)
+      return null
+    }
+    out[key] = v
+  }
+  return out
+}
+
+/**
+ * `saves: {des: 3}` — only what the statblock quotes.
+ *
+ * Partial by design, and every key optional: a save that is just the ability
+ * modifier does not need a line, and writing one would be two places that can
+ * disagree.
+ */
+function savesOf(raw: unknown): Partial<Scores> {
+  const d = record(raw)
+  const out: Partial<Scores> = {}
+  for (const key of Object.keys(SCORE_KEYS) as (keyof Scores)[]) {
+    const v = scoreOf(d, SCORE_KEYS[key])
+    if (v !== null) out[key] = v
+  }
+  return out
 }
 
 function abilitiesOf(raw: unknown): Ability[] {
@@ -108,6 +174,8 @@ export async function loadPnj(dir: VaultDir | null, prefix = PNJ_DIR): Promise<P
       speed: nullableNum(fm.speed),
       portrait: portraitOf(fm.portrait),
       abilities: abilitiesOf(fm.abilities),
+      scores: scoresOf(fm.scores, note.slug),
+      saves: savesOf(fm.saves),
       file: note.path,
       lead: leadParagraph(note.body),
     }

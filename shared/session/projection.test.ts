@@ -23,6 +23,8 @@ const BANDIDO: Pnj = {
   speed: null,
   portrait: null,
   abilities: [],
+  scores: null,
+  saves: {},
   file: 'pnj/bandido.md',
   lead: '',
 }

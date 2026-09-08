@@ -3,7 +3,7 @@
  * marks which is which. Nothing here needs a vault.
  */
 import { describe, expect, it } from 'vitest'
-import { SKILLS, skillRows } from './skills.ts'
+import { SKILLS, saveRows, skillRows } from './skills.ts'
 import { emptySheet, parseSheet, type SheetStats } from './vault/sheet.ts'
 
 const sheetWith = (lines: string): SheetStats =>
@@ -110,5 +110,36 @@ describe('skillRows', () => {
       expect(rows).toHaveLength(18)
       expect(rows.every((r) => r.mod === null && !r.stated)).toBe(true)
     }
+  })
+})
+
+describe('saveRows — a PNJ, from what its note states', () => {
+  const SIX = { str: 11, dex: 12, con: 12, int: 10, wis: 10, cha: 10 }
+
+  it('is the ability modifier when the note quotes no save', () => {
+    const rows = saveRows(SIX)
+    expect(rows).toHaveLength(6)
+    expect(rows.find((r) => r.ability === 'dex')).toMatchObject({ label: 'DES', mod: 1, stated: false })
+    expect(rows.find((r) => r.ability === 'str')).toMatchObject({ mod: 0, stated: false })
+  })
+
+  it('lets a quoted save win over the score, and says it was quoted', () => {
+    const rows = saveRows(SIX, { dex: 5 })
+    expect(rows.find((r) => r.ability === 'dex')).toMatchObject({ mod: 5, stated: true })
+    // The others are untouched by it.
+    expect(rows.find((r) => r.ability === 'wis')).toMatchObject({ mod: 0, stated: false })
+  })
+
+  it('quotes a save with no scores behind it', () => {
+    const rows = saveRows(null, { wis: -1 })
+    expect(rows.find((r) => r.ability === 'wis')).toMatchObject({ mod: -1, stated: true })
+    expect(rows.filter((r) => r.mod === null)).toHaveLength(5)
+  })
+
+  /* The reason the field exists: a note that says nothing must not read as
+     `+0`, which is what the console used to compare a bare d20 against. */
+  it('says nothing at all for a note that states nothing', () => {
+    const rows = saveRows(null)
+    expect(rows.every((r) => r.mod === null && !r.stated)).toBe(true)
   })
 })
