@@ -368,13 +368,18 @@ produces an entry that can never be seated.
 
 ---
 
-## 7. The party — not in the folder
+## 7. The party — not in the folder, and not the campaign's
 
-Characters are **rows on the server**, not files. A player opens the
-campaign's link on their phone, chooses «Crear personaje» and uploads a
-`-fc5.xml`; the server seats the character at full hit points and from then on
-the phone tracks its own live layer. Replacing the xml later (a level-up) keeps
-that live layer.
+Characters are **rows on the server**, not files, and they belong to the
+**mesa** rather than to the campaign. A player opens the *mesa's* link on their
+phone, chooses «Crear personaje» and uploads a `-fc5.xml`; the server seats the
+character at full hit points and from then on the phone tracks its own live
+layer. Replacing the xml later (a level-up) keeps that live layer.
+
+Because the group owns them, the party and everything it carries — PG, oro,
+inventario, objetos, espacios — cross into the next campaign that mesa plays,
+and the link the players already have goes on working. A campaign you are
+writing therefore starts with whatever party walks in. Do not write one.
 
 So there is nothing for you to write here. If the source material comes with
 pregenerated characters, produce their `-fc5.xml` files (§8) and hand them to

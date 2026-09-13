@@ -144,7 +144,7 @@ interface Resolved {
 /** Who a hello is from, or null when its credentials do not hold up. */
 function resolveHello(ctx: ServerContext, hello: ClientMsg & { type: 'hello' }): Resolved | null {
   if (hello.role === 'dm') {
-    const session = ctx.registry.get(hello.campaign)
+    const session = ctx.registry.get(hello.campaign, hello.mesa)
     if (!session || !tokenMatches(hello.secret, session.dmSecret)) return null
     return { session, role: 'dm', actor: { kind: 'dm' } }
   }

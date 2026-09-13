@@ -4,11 +4,12 @@
  * It is the successor to `paths.ts`, and it does the same job by a different
  * means. There are no path strings to compare and no `assertWritable`: the
  * campaign, the world and every prep folder are handed out as `VaultDir`,
- * which has no `write`, and exactly three descents resolve a
+ * which has no `write`, and exactly four descents resolve a
  * `WritableVaultDir` — `partidas/<mesa>/<campaña>/` while playing,
- * `scenarios/` from Preparación, and `.pergamino/`, the app's own folder,
- * which holds the campaign's id and nothing a human edits. Writing anywhere
- * else is not refused at runtime; there is nothing to write it with.
+ * `scenarios/` from Preparación, and the two `.pergamino/` folders, the app's
+ * own, which hold the campaign's id and the mesa's and nothing a human edits.
+ * Writing anywhere else is not refused at runtime; there is nothing to write
+ * it with.
  *
  * A partida hangs off the **picked folder**, not off the campaign: a mesa
  * outlives any one adventure, so `partidas/last/` is the group and
@@ -60,9 +61,24 @@ export const ASSETS_DIR = 'assets'
 /** The app's own folder inside a campaign. Skipped by every note walk, being a dotdir. */
 export const PERGAMINO_DIR = '.pergamino'
 export const IDENTITY_FILE = 'campaign.json'
+export const MESA_FILE = 'mesa.json'
 // The prep folders are named where they are loaded from.
 export { OBJECTS_DIR, PNJ_DIR } from './pnj.ts'
 export { SCENARIOS_DIR } from './campaign.ts'
+
+/**
+ * What `partidas/<mesa>/.pergamino/mesa.json` holds: the id the server knows
+ * the **group** by. Minted when the mesa is first registered, and kept beside
+ * the mesa rather than beside a campaign, because the party, the players' link
+ * and what each PJ carries belong to the group and outlive any one adventure.
+ */
+export interface MesaIdentity {
+  id: string
+  /** The players' link, for the DM's information; the server is the truth. */
+  link: string | null
+  /** ISO date. */
+  registered: string
+}
 
 /**
  * What `.pergamino/campaign.json` holds: the id the server knows the campaign
@@ -145,9 +161,9 @@ export class CampaignVault {
       ? opts.campaign
       : info.campaigns[0]
     if (!id) throw new VaultError('El mundo no tiene ninguna campaña en campaigns/.')
-    // Reaching a campaign inside a world is the one writable descent that is
-    // not itself a write target: `runs/<mesa>/` lives under it. Nothing is
-    // created here, and the handle is only ever exposed read-only.
+    // Reaching a campaign inside a world is a writable descent that is not
+    // itself a write target — `scenarios/` and `.pergamino/` live under it.
+    // Nothing is created here, and the handle is only ever exposed read-only.
     const campaignsDir = await root.dir(CAMPAIGNS_DIR)
     const campaign = campaignsDir ? await campaignsDir.dir(id) : null
     if (!campaign) throw new VaultError(`No existe la campaña ${id}.`)
@@ -210,6 +226,27 @@ export class CampaignVault {
   async writeIdentity(identity: CampaignIdentity): Promise<void> {
     const dir = await this.pergamino()
     await dir.write(IDENTITY_FILE, `${JSON.stringify(identity, null, 2)}\n`)
+  }
+
+  /** The id the server knows this mesa by, or null before it is registered. */
+  async readMesaIdentity(mesa: string): Promise<MesaIdentity | null> {
+    assertRunName(mesa)
+    const partidas = await this.notesRoot.dir(PARTIDAS_DIR)
+    const grupo = partidas ? await partidas.dir(mesa) : null
+    const dir = grupo ? await grupo.dir(PERGAMINO_DIR) : null
+    if (!dir || !(await exists(dir, MESA_FILE))) return null
+    const raw = (await readJson(dir, MESA_FILE)) as Partial<MesaIdentity> | null
+    if (!raw || typeof raw.id !== 'string' || !raw.id) return null
+    return {
+      id: raw.id,
+      link: typeof raw.link === 'string' ? raw.link : null,
+      registered: typeof raw.registered === 'string' ? raw.registered : '',
+    }
+  }
+
+  async writeMesaIdentity(mesa: string, identity: MesaIdentity): Promise<void> {
+    const dir = await this.mesaPergamino(mesa)
+    await dir.write(MESA_FILE, `${JSON.stringify(identity, null, 2)}\n`)
   }
 
   // --- the notes graph ------------------------------------------------------
@@ -309,6 +346,14 @@ export class CampaignVault {
    */
   pergamino(): Promise<WritableVaultDir> {
     return this.campaignWritable.createDir(PERGAMINO_DIR)
+  }
+
+  /** `partidas/<mesa>/.pergamino/` — the same, for the group's id. */
+  async mesaPergamino(mesa: string): Promise<WritableVaultDir> {
+    assertRunName(mesa)
+    const partidas = await this.rootWritable.createDir(PARTIDAS_DIR)
+    const grupo = await partidas.createDir(mesa)
+    return grupo.createDir(PERGAMINO_DIR)
   }
 
   /** A read-only handle on a partida, for everything that only reads one. */

@@ -21,7 +21,7 @@ import type { Env } from './env.ts'
 import { HttpError, badRequest, notFound, unauthorized } from './errors.ts'
 import type { Registry } from './registry.ts'
 import { CACHE_NEVER, sendBytes, sendJson, serveStatic } from './static.ts'
-import type { Store } from './store.ts'
+import type { CampaignRow, MesaRow, Store } from './store.ts'
 
 export interface ServerContext {
   env: Env
@@ -116,22 +116,30 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
     routes.push({ method, ...compile(path), handler })
   }
 
-  const campaignOf = (params: Params): CampaignSession => {
-    const session = ctx.registry.get(params.id!)
-    if (!session) throw notFound('Esa campaña no está en el servidor')
-    return session
-  }
   /** The campaign in the path, once the bearer is its DM secret. */
+  const dmCampaign = (req: IncomingMessage, params: Params): CampaignRow => {
+    const row = ctx.registry.campaign(params.id!)
+    if (!row) throw notFound('Esa campaña no está en el servidor')
+    if (!tokenMatches(bearer(req), row.dm_secret)) throw unauthorized()
+    return row
+  }
+  /**
+   * The partida in the path — a mesa at a campaign — once the bearer is that
+   * campaign's DM secret. Opening one is also what points the mesa at this
+   * campaign, so a phone with its link lands where the table is.
+   */
   const dmOf = (req: IncomingMessage, params: Params): CampaignSession => {
-    const session = campaignOf(params)
-    if (!tokenMatches(bearer(req), session.dmSecret)) throw unauthorized()
+    const campaign = dmCampaign(req, params)
+    const session = ctx.registry.get(campaign.id, params.mesa!)
+    if (!session) throw notFound('Esa mesa no está en el servidor')
     return session
   }
-  const registered = (session: CampaignSession) => ({
-    id: session.id,
-    link: session.link,
-    url: linkUrl(ctx.env.publicUrl, session.link),
-    dmSecret: session.dmSecret,
+  const registered = (row: CampaignRow) => ({ id: row.id, dmSecret: row.dm_secret })
+  const mesaRegistered = (row: MesaRow) => ({
+    id: row.id,
+    title: row.title,
+    link: row.link_secret,
+    url: linkUrl(ctx.env.publicUrl, row.link_secret),
   })
   const linkOf = (params: Params): CampaignSession => {
     const session = ctx.registry.byLink(params.link!)
@@ -139,7 +147,7 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
     return session
   }
   const characterOf = (session: CampaignSession, pc: string): string => {
-    if (!session.hasCharacter(pc)) throw notFound('Ese personaje no está en la campaña')
+    if (!session.hasCharacter(pc)) throw notFound('Ese personaje no está en la mesa')
     return pc
   }
 
@@ -150,10 +158,10 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
 
   // --- the DM -----------------------------------------------------------------
   // Registering is open: anyone can start a campaign, and what they get is
-  // theirs alone — the secrets that come back are the only way in.
+  // theirs alone — the secret that comes back is the only way in.
   route('POST', '/api/dm/campaigns', async (req, res) => {
     const body = await readJson<RegisterBody>(req)
-    sendJson(res, 201, registered(ctx.registry.register(String(body.title ?? '').trim())))
+    sendJson(res, 201, registered(ctx.registry.registerCampaign(String(body.title ?? '').trim())))
   })
   // The console re-registers under the id its folder holds — after a wiped
   // database, with the secret it holds too, so the folder stays the credential.
@@ -161,102 +169,134 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
   route('PUT', '/api/dm/campaigns/:id', async (req, res, params) => {
     const body = await readJson<RegisterBody>(req)
     const title = String(body.title ?? '').trim()
-    const existing = ctx.registry.get(params.id!)
+    const existing = ctx.registry.campaign(params.id!)
     if (existing) {
-      if (!tokenMatches(bearer(req), existing.dmSecret)) throw unauthorized()
-      sendJson(res, 200, registered(ctx.registry.register(title, params.id!)))
+      if (!tokenMatches(bearer(req), existing.dm_secret)) throw unauthorized()
+      sendJson(res, 200, registered(ctx.registry.registerCampaign(title, params.id!)))
       return
     }
     const held = bearer(req)
-    sendJson(res, 200, registered(ctx.registry.register(title, params.id!, held || undefined)))
+    sendJson(res, 200, registered(ctx.registry.registerCampaign(title, params.id!, held || undefined)))
   })
   route('GET', '/api/dm/campaigns/:id', (req, res, params) => {
-    const session = ctx.registry.get(params.id!)
-    if (!session) {
+    const row = ctx.registry.campaign(params.id!)
+    if (!row) {
       sendJson(res, 200, { exists: false })
       return
     }
-    if (!tokenMatches(bearer(req), session.dmSecret)) throw unauthorized()
-    sendJson(res, 200, session.summary(ctx.env.publicUrl))
+    if (!tokenMatches(bearer(req), row.dm_secret)) throw unauthorized()
+    sendJson(res, 200, {
+      exists: true,
+      id: row.id,
+      title: row.title,
+      mesas: ctx.registry
+        .mesas()
+        .map((m) => ({ id: m.id, title: m.title, playing: m.playing === row.id })),
+    })
   })
   route('DELETE', '/api/dm/campaigns/:id', (req, res, params) => {
     // Idempotent: deleting what is not there is the state that was asked for.
-    const session = ctx.registry.get(params.id!)
-    if (session) {
-      if (!tokenMatches(bearer(req), session.dmSecret)) throw unauthorized()
-      ctx.registry.delete(session.id)
+    const row = ctx.registry.campaign(params.id!)
+    if (row) {
+      if (!tokenMatches(bearer(req), row.dm_secret)) throw unauthorized()
+      ctx.registry.deleteCampaign(row.id)
     }
     res.writeHead(204, { 'Cache-Control': CACHE_NEVER })
     res.end()
   })
   route('POST', '/api/dm/campaigns/:id/secret/rotate', (req, res, params) => {
-    const session = dmOf(req, params)
-    sendJson(res, 200, { dmSecret: session.rotateDmSecret() })
+    const row = dmCampaign(req, params)
+    sendJson(res, 200, { dmSecret: ctx.registry.rotateDmSecret(row.id) })
   })
-  route('PUT', '/api/dm/campaigns/:id/prep', async (req, res, params) => {
+
+  route('PUT', '/api/dm/campaigns/:id/portrait/pnj/:pnj', async (req, res, params) => {
+    const row = dmCampaign(req, params)
+    const mime = imageType(req)
+    const bytes = await readBody(req, LIMIT_IMAGE)
+    ctx.store.setPnjPortrait(row.id, params.pnj!, { mime, bytes, etag: etagOf(bytes) })
+    res.writeHead(204, { 'Cache-Control': CACHE_NEVER })
+    res.end()
+  })
+
+  // --- a mesa, and the partida it is playing -----------------------------------
+  // The group is registered once and then plays whatever it likes: the id and
+  // the link it gets back are kept in `partidas/<mesa>/.pergamino/mesa.json`.
+  route('POST', '/api/dm/campaigns/:id/mesas', async (req, res, params) => {
+    dmCampaign(req, params)
+    const body = await readJson<{ title?: unknown; id?: unknown }>(req)
+    const title = String(body.title ?? '').trim()
+    const id = body.id === undefined ? undefined : String(body.id)
+    sendJson(res, 201, mesaRegistered(ctx.registry.registerMesa(title, id)))
+  })
+  route('DELETE', '/api/dm/campaigns/:id/mesas/:mesa', (req, res, params) => {
+    // The group leaves the server: its party, its link and what it carried.
+    // Idempotent, and it says nothing about the campaigns it played.
+    dmCampaign(req, params)
+    ctx.registry.deleteMesa(params.mesa!)
+    res.writeHead(204, { 'Cache-Control': CACHE_NEVER })
+    res.end()
+  })
+  route('GET', '/api/dm/campaigns/:id/mesas/:mesa', (req, res, params) => {
+    const session = dmOf(req, params)
+    session.takeTheTable()
+    sendJson(res, 200, session.summary(ctx.env.publicUrl))
+  })
+  route('PUT', '/api/dm/campaigns/:id/mesas/:mesa/prep', async (req, res, params) => {
     const session = dmOf(req, params)
     const body = await readJson<PrepBody>(req)
     if (!Array.isArray(body.pnjs) || !Array.isArray(body.objects) || !Array.isArray(body.scenes)) {
       throw badRequest('La preparación viene incompleta')
     }
-    sendJson(res, 200, { rev: session.setPrep(body) })
+    sendJson(res, 200, { rev: ctx.registry.setPrep(session.id, body, session.mesaId) })
   })
-  route('PUT', '/api/dm/campaigns/:id/portrait/pnj/:pnj', async (req, res, params) => {
-    const session = dmOf(req, params)
-    const mime = imageType(req)
-    const bytes = await readBody(req, LIMIT_IMAGE)
-    ctx.store.setPnjPortrait(session.id, params.pnj!, { mime, bytes, etag: etagOf(bytes) })
-    res.writeHead(204, { 'Cache-Control': CACHE_NEVER })
-    res.end()
-  })
-  route('GET', '/api/dm/campaigns/:id/party', (req, res, params) => {
+  route('GET', '/api/dm/campaigns/:id/mesas/:mesa/party', (req, res, params) => {
     const session = dmOf(req, params)
     sendJson(res, 200, { characters: session.characters, sheets: Object.fromEntries(session.sheets) })
   })
-  route('POST', '/api/dm/campaigns/:id/characters', async (req, res, params, url) => {
+  route('POST', '/api/dm/campaigns/:id/mesas/:mesa/characters', async (req, res, params, url) => {
     const session = dmOf(req, params)
     const xml = (await readBody(req, LIMIT_XML)).toString('utf8')
     sendJson(res, 201, session.addCharacter(xml, url.searchParams.get('player') ?? ''))
   })
-  route('PUT', '/api/dm/campaigns/:id/characters/:pc/sheet', async (req, res, params) => {
+  route('PUT', '/api/dm/campaigns/:id/mesas/:mesa/characters/:pc/sheet', async (req, res, params) => {
     const session = dmOf(req, params)
     const xml = (await readBody(req, LIMIT_XML)).toString('utf8')
     sendJson(res, 200, { rev: session.replaceSheet(characterOf(session, params.pc!), xml) })
   })
-  route('PUT', '/api/dm/campaigns/:id/characters/:pc/portrait', async (req, res, params) => {
+  route('PUT', '/api/dm/campaigns/:id/mesas/:mesa/characters/:pc/portrait', async (req, res, params) => {
     const session = dmOf(req, params)
     const mime = imageType(req)
     const bytes = await readBody(req, LIMIT_IMAGE)
     sendJson(res, 200, { rev: session.setPortrait(characterOf(session, params.pc!), mime, bytes) })
   })
-  route('DELETE', '/api/dm/campaigns/:id/characters/:pc', (req, res, params) => {
+  route('DELETE', '/api/dm/campaigns/:id/mesas/:mesa/characters/:pc', (req, res, params) => {
     const session = dmOf(req, params)
     session.removeCharacter(characterOf(session, params.pc!))
     res.writeHead(204, { 'Cache-Control': CACHE_NEVER })
     res.end()
   })
-  route('POST', '/api/dm/campaigns/:id/link/rotate', (req, res, params) => {
+  route('POST', '/api/dm/campaigns/:id/mesas/:mesa/link/rotate', (req, res, params) => {
     const session = dmOf(req, params)
     const link = session.rotateLink()
     sendJson(res, 200, { link, url: linkUrl(ctx.env.publicUrl, link) })
   })
-  route('GET', '/api/dm/campaigns/:id/state', (req, res, params) => {
+  route('GET', '/api/dm/campaigns/:id/mesas/:mesa/state', (req, res, params) => {
     const session = dmOf(req, params)
     sendJson(res, 200, { rev: session.rev, state: session.state })
   })
-  route('POST', '/api/dm/campaigns/:id/actions', async (req, res, params) => {
+  route('POST', '/api/dm/campaigns/:id/mesas/:mesa/actions', async (req, res, params) => {
     const session = dmOf(req, params)
     const body = await readJson<ActionRequest>(req)
     if (!body.action || typeof body.action !== 'object') throw badRequest('Sin acción')
     sendJson(res, 200, session.dispatch(body.action, { kind: 'dm' }, body.expectRev))
   })
-  route('POST', '/api/dm/campaigns/:id/reset', (req, res, params) => {
+  route('POST', '/api/dm/campaigns/:id/mesas/:mesa/reset', (req, res, params) => {
     sendJson(res, 200, { rev: dmOf(req, params).reset() })
   })
-  route('GET', '/api/dm/campaigns/:id/log', (req, res, params, url) => {
+  route('GET', '/api/dm/campaigns/:id/mesas/:mesa/log', (req, res, params, url) => {
     const session = dmOf(req, params)
     const since = Number(url.searchParams.get('since') ?? 0) || 0
-    sendJson(res, 200, { entries: ctx.store.log(session.id, since) })
+    sendJson(res, 200, { entries: ctx.store.log(session.id, session.mesaId, since) })
   })
 
   // --- a player's link --------------------------------------------------------

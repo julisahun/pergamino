@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { HttpError } from './errors.ts'
 import { CampaignSession } from './campaign.ts'
-import { memoryWorld, NEL, TOLMO } from './fixtures.ts'
+import { memoryWorld, partida, NEL, TOLMO } from './fixtures.ts'
 
 const PREP = {
   pnjs: [
@@ -29,21 +29,45 @@ const PREP = {
 }
 
 describe('a campaign on the server', () => {
-  it('registers with a fresh id and a link, or under the id the console holds', () => {
+  it('registers with a fresh id, or under the id the console holds', () => {
     const { registry } = memoryWorld()
-    const fresh = registry.register('Marea Baja')
+    const fresh = registry.registerCampaign('Marea Baja')
     expect(fresh.id).toMatch(/^[0-9a-f-]{36}$/)
-    expect(fresh.link.length).toBeGreaterThanOrEqual(16)
-    const held = registry.register('Marea Baja', 'c-held')
+    const held = registry.registerCampaign('Marea Baja', 'c-held')
     expect(held.id).toBe('c-held')
     // Registering twice under one id is the same campaign, retitled at most.
-    expect(registry.register('Marea Baja (2)', 'c-held')).toBe(held)
-    expect(held.title).toBe('Marea Baja (2)')
+    expect(registry.registerCampaign('Marea Baja (2)', 'c-held').title).toBe('Marea Baja (2)')
+  })
+
+  it('gives the link to the mesa, so it survives changing campaign', () => {
+    const { registry } = memoryWorld()
+    const marea = partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+    const { id } = marea.addCharacter(TOLMO, 'Ana')
+    marea.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 4 }, { kind: 'dm' })
+    marea.dispatch({ type: 'gold/set', ref: `pc:${id}`, gold: 115 }, { kind: 'dm' })
+
+    // The same group sits down to something else entirely.
+    const bandera = partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+    expect(bandera.link).toBe(marea.link)
+    expect(bandera.characters.map((c) => c.name)).toEqual(['Tolmo'])
+    // And they bring what they were carrying: this is the whole point.
+    expect(bandera.state.play[id]).toMatchObject({ hp: 9, gold: 115 })
+    // What was on the table does not come with them.
+    expect(bandera.state.npcs).toEqual([])
+    expect(bandera.rev).not.toBe(marea.rev)
+  })
+
+  it('sends a phone with the link wherever the mesa is sitting now', () => {
+    const { registry } = memoryWorld()
+    const marea = partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+    expect(registry.byLink(marea.link)?.id).toBe('c-1')
+    partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+    expect(registry.byLink(marea.link)?.id).toBe('c-2')
   })
 
   it('seats a new character at full HP and bumps the revision', () => {
     const { registry } = memoryWorld()
-    const c = registry.register('x')
+    const c = partida(registry)
     expect(c.rev).toBe(0)
     const { id, rev } = c.addCharacter(TOLMO, 'Ana')
     expect(rev).toBe(1)
@@ -53,13 +77,13 @@ describe('a campaign on the server', () => {
   })
 
   it('refuses what is not a Fight Club sheet', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     expect(() => c.addCharacter('<html>no</html>', 'Ana')).toThrow(HttpError)
     expect(c.rev).toBe(0)
   })
 
   it('bumps the revision only when the reducer changed something', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     const first = c.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 3 }, { kind: 'dm' })
     expect(first).toEqual({ rev: 2, changed: true })
@@ -71,7 +95,7 @@ describe('a campaign on the server', () => {
   })
 
   it('refuses a player acting on someone else, before anything is reduced', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id: tal } = c.addCharacter(TOLMO, 'Ana')
     const { id: nel } = c.addCharacter(NEL, 'Bea')
     expect(() =>
@@ -82,7 +106,7 @@ describe('a campaign on the server', () => {
   })
 
   it('refuses a stale absolute setter', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id, rev } = c.addCharacter(TOLMO, 'Ana')
     c.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 1 }, { kind: 'dm' })
     expect(() => c.dispatch({ type: 'hp/set', ref: `pc:${id}`, hp: 5 }, { kind: 'dm' }, rev)).toThrow(/cambiado/)
@@ -90,14 +114,14 @@ describe('a campaign on the server', () => {
 
   it('round-trips through the database', () => {
     const { store, registry } = memoryWorld()
-    const c = registry.register('Marea', 'c-1')
-    c.setPrep(PREP)
+    const c = partida(registry, 'Marea', { campaign: 'c-1', mesa: 'm-1' })
+    registry.setPrep(c.id, PREP, c.mesaId)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     c.dispatch({ type: 'npc/add', pnjId: 'bandido', count: 2 }, { kind: 'dm' })
     c.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 4 }, { kind: 'dm' })
     c.dispatch({ type: 'object/give', ref: `pc:${id}`, objectId: 'anillo' }, { kind: 'dm' })
 
-    const again = CampaignSession.load(store, 'c-1')!
+    const again = CampaignSession.load(store, 'c-1', 'm-1')!
     expect(again.rev).toBe(c.rev)
     expect(again.state).toEqual(c.state)
     expect(again.characters).toEqual(c.characters)
@@ -106,7 +130,7 @@ describe('a campaign on the server', () => {
   })
 
   it('keeps the live layer when a sheet is replaced, capping hp to the new max', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     c.dispatch({ type: 'gold/set', ref: `pc:${id}`, gold: 42 }, { kind: 'dm' })
     c.replaceSheet(id, NEL)
@@ -115,7 +139,7 @@ describe('a campaign on the server', () => {
   })
 
   it('takes a removed character out of the fight, the board and the party', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     c.dispatch({ type: 'token/place', ref: `pc:${id}`, x: 1, y: 1 }, { kind: 'dm' })
     c.dispatch({ type: 'encounter/start', members: [`pc:${id}`] }, { kind: 'dm' })
@@ -126,18 +150,24 @@ describe('a campaign on the server', () => {
     expect(c.state.encounter.members).toEqual([])
   })
 
-  it('archives on reset and reseats the party fresh', () => {
+  it('archives on reset, clears the table and leaves the party alone', () => {
     const { store, registry } = memoryWorld()
-    const c = registry.register('x', 'c-1')
+    const c = partida(registry, 'x', { campaign: 'c-1', mesa: 'm-1' })
+    registry.setPrep(c.id, PREP, c.mesaId)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     c.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 5 }, { kind: 'dm' })
+    c.dispatch({ type: 'npc/add', pnjId: 'bandido', count: 2 }, { kind: 'dm' })
     c.reset()
-    expect(c.state.play[id]!.hp).toBe(13)
-    expect(store.log('c-1', 0).at(-1)).toMatchObject({ actor: 'system:reset' })
+    // The table is cleared…
+    expect(c.state.npcs).toEqual([])
+    // …and what the people carry is not the table's to clear. A new session is
+    // not a thing that takes away their oro, their inventario or their wounds.
+    expect(c.state.play[id]!.hp).toBe(8)
+    expect(store.log('c-1', 'm-1', 0).at(-1)).toMatchObject({ actor: 'system:reset' })
   })
 
   it('tells each subscriber what its role may see', () => {
-    const c = memoryWorld().registry.register('x')
+    const c = partida(memoryWorld().registry)
     const { id } = c.addCharacter(TOLMO, 'Ana')
     const seen: Record<string, string[]> = { dm: [], pc: [] }
     c.subscribe({ role: 'dm', send: (m) => seen.dm!.push(m.type) })

@@ -1,22 +1,39 @@
 /**
- * Rows, typed. Nothing here decides anything; `CampaignSession` does.
+ * Rows, typed. Nothing here decides anything; `Partida` does.
+ *
+ * Two owners, not one. A **campaign** owns the prep and the DM's credential; a
+ * **mesa** owns the party, the players' link and the live layer of each PJ —
+ * because a group outlives the adventure it is playing. What belongs to the
+ * pair of them is the `partida`: the NPCs on the table, the encounter, the
+ * scene, the log. `savePartida` is where a `SessionState` is cut along that
+ * seam and `partida()` is where it is sewn back together; nothing above this
+ * file ever sees the halves.
  */
-import type { Character, SessionState } from '../../shared/types.ts'
+import type { Character, LiveState, SessionState } from '../../shared/types.ts'
 import type { PrepBody } from '../../shared/protocol.ts'
 import type { Db } from './db.ts'
 
 export interface CampaignRow {
   id: string
   title: string
-  link_secret: string
   /** The DM's credential for this campaign alone; `.pergamino/campaign.json` holds the copy. */
   dm_secret: string
   created_at: number
 }
 
+export interface MesaRow {
+  id: string
+  title: string
+  /** What a player has. It follows the group from one campaign to the next. */
+  link_secret: string
+  /** The campaign this mesa has on the table, so a phone can find its partida. */
+  playing: string | null
+  created_at: number
+}
+
 export interface CharacterRow {
   id: string
-  campaign: string
+  mesa: string
   name: string
   player: string
   sheet_xml: string
@@ -58,16 +75,11 @@ export class Store {
     return this.db.get<CampaignRow>('SELECT * FROM campaign WHERE id = ?', id)
   }
 
-  campaignByLink(secret: string): CampaignRow | undefined {
-    return this.db.get<CampaignRow>('SELECT * FROM campaign WHERE link_secret = ?', secret)
-  }
-
   insertCampaign(row: CampaignRow): void {
     this.db.run(
-      'INSERT INTO campaign (id, title, link_secret, dm_secret, created_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO campaign (id, title, dm_secret, created_at) VALUES (?, ?, ?, ?)',
       row.id,
       row.title,
-      row.link_secret,
       row.dm_secret,
       row.created_at,
     )
@@ -75,10 +87,6 @@ export class Store {
 
   setTitle(id: string, title: string): void {
     this.db.run('UPDATE campaign SET title = ? WHERE id = ?', title, id)
-  }
-
-  setLink(id: string, secret: string): void {
-    this.db.run('UPDATE campaign SET link_secret = ? WHERE id = ?', secret, id)
   }
 
   setDmSecret(id: string, secret: string): void {
@@ -89,12 +97,54 @@ export class Store {
     this.db.run('DELETE FROM campaign WHERE id = ?', id)
   }
 
+  // --- mesas ------------------------------------------------------------------
+
+  mesas(): MesaRow[] {
+    return this.db.all<MesaRow>('SELECT * FROM mesa ORDER BY created_at')
+  }
+
+  mesa(id: string): MesaRow | undefined {
+    return this.db.get<MesaRow>('SELECT * FROM mesa WHERE id = ?', id)
+  }
+
+  mesaByLink(secret: string): MesaRow | undefined {
+    return this.db.get<MesaRow>('SELECT * FROM mesa WHERE link_secret = ?', secret)
+  }
+
+  insertMesa(row: MesaRow): void {
+    this.db.run(
+      'INSERT INTO mesa (id, title, link_secret, playing, created_at) VALUES (?, ?, ?, ?, ?)',
+      row.id,
+      row.title,
+      row.link_secret,
+      row.playing,
+      row.created_at,
+    )
+  }
+
+  setMesaTitle(id: string, title: string): void {
+    this.db.run('UPDATE mesa SET title = ? WHERE id = ?', title, id)
+  }
+
+  setMesaLink(id: string, secret: string): void {
+    this.db.run('UPDATE mesa SET link_secret = ? WHERE id = ?', secret, id)
+  }
+
+  /** What this mesa has on the table now — the campaign a phone with its link lands in. */
+  setPlaying(id: string, campaign: string): void {
+    this.db.run('UPDATE mesa SET playing = ? WHERE id = ?', campaign, id)
+  }
+
+  deleteMesa(id: string): void {
+    this.db.run('DELETE FROM mesa WHERE id = ?', id)
+  }
+
   // --- characters -------------------------------------------------------------
 
-  characters(campaign: string): CharacterRow[] {
+  characters(mesa: string): CharacterRow[] {
     return this.db.all<CharacterRow>(
-      'SELECT * FROM character WHERE campaign = ? ORDER BY created_at, id',
-      campaign,
+      'SELECT * FROM character WHERE mesa = ? ORDER BY created_at, id',
+      mesa,
     )
   }
 
@@ -104,10 +154,10 @@ export class Store {
 
   insertCharacter(row: Omit<CharacterRow, 'portrait_mime' | 'portrait'>): void {
     this.db.run(
-      `INSERT INTO character (id, campaign, name, player, sheet_xml, created_at, updated_at)
+      `INSERT INTO character (id, mesa, name, player, sheet_xml, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       row.id,
-      row.campaign,
+      row.mesa,
       row.name,
       row.player,
       row.sheet_xml,
@@ -193,35 +243,60 @@ export class Store {
 
   // --- live state -------------------------------------------------------------
 
-  session(campaign: string): { rev: number; state: SessionState } | null {
+  /**
+   * What the party has on it: PG, oro, inventario, objetos, espacios. Theirs,
+   * not the campaign's, so it lives here and not in the partida — and so it is
+   * still there when the same people sit down to the next adventure.
+   */
+  play(mesa: string): Record<string, LiveState> {
+    const row = this.db.get<{ play: string }>('SELECT play FROM mesa_play WHERE mesa = ?', mesa)
+    return row ? (JSON.parse(row.play) as Record<string, LiveState>) : {}
+  }
+
+  /** The session, sewn back together: the table's half plus the party's. */
+  partida(campaign: string, mesa: string): { rev: number; state: SessionState } | null {
     const row = this.db.get<{ rev: number; state: string }>(
-      'SELECT rev, state FROM session WHERE campaign = ?',
+      'SELECT rev, state FROM partida WHERE campaign = ? AND mesa = ?',
       campaign,
+      mesa,
     )
-    return row ? { rev: row.rev, state: JSON.parse(row.state) as SessionState } : null
+    if (!row) return null
+    const table = JSON.parse(row.state) as SessionState
+    return { rev: row.rev, state: { ...table, play: this.play(mesa) } }
   }
 
   /** The state and the action that produced it, in one transaction. */
-  saveSession(
+  savePartida(
     campaign: string,
+    mesa: string,
     rev: number,
     state: SessionState,
     actor: string,
     action: unknown,
     now: number,
   ): void {
+    const { play, ...table } = state
     this.db.transaction(() => {
       this.db.run(
-        `INSERT INTO session (campaign, rev, state, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(campaign) DO UPDATE SET rev = excluded.rev, state = excluded.state, updated_at = excluded.updated_at`,
+        `INSERT INTO partida (campaign, mesa, rev, state, updated_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(campaign, mesa) DO UPDATE SET rev = excluded.rev, state = excluded.state, updated_at = excluded.updated_at`,
         campaign,
+        mesa,
         rev,
-        JSON.stringify(state),
+        JSON.stringify(table),
         now,
       )
       this.db.run(
-        'INSERT OR REPLACE INTO action_log (campaign, rev, at, actor, action) VALUES (?, ?, ?, ?, ?)',
+        `INSERT INTO mesa_play (mesa, play, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(mesa) DO UPDATE SET play = excluded.play, updated_at = excluded.updated_at`,
+        mesa,
+        JSON.stringify(play),
+        now,
+      )
+      this.db.run(
+        'INSERT OR REPLACE INTO action_log (campaign, mesa, rev, at, actor, action) VALUES (?, ?, ?, ?, ?, ?)',
         campaign,
+        mesa,
         rev,
         now,
         actor,
@@ -230,30 +305,46 @@ export class Store {
     })
   }
 
-  archiveSession(campaign: string, now: number): void {
+  /**
+   * Put this partida away. Only the table's half is archived: what the players
+   * carry is not something a new session undoes, so `mesa_play` is left alone.
+   */
+  archivePartida(campaign: string, mesa: string, now: number): void {
     this.db.run(
-      `INSERT INTO session_archive (campaign, archived_at, rev, state)
-       SELECT campaign, ?, rev, state FROM session WHERE campaign = ?`,
+      `INSERT INTO session_archive (campaign, mesa, archived_at, rev, state)
+       SELECT campaign, mesa, ?, rev, state FROM partida WHERE campaign = ? AND mesa = ?`,
       now,
       campaign,
+      mesa,
     )
   }
 
-  log(campaign: string, since: number): { rev: number; at: number; actor: string; action: unknown }[] {
+  log(
+    campaign: string,
+    mesa: string,
+    since: number,
+  ): { rev: number; at: number; actor: string; action: unknown }[] {
     return this.db
       .all<{ rev: number; at: number; actor: string; action: string }>(
-        'SELECT rev, at, actor, action FROM action_log WHERE campaign = ? AND rev > ? ORDER BY rev',
+        'SELECT rev, at, actor, action FROM action_log WHERE campaign = ? AND mesa = ? AND rev > ? ORDER BY rev',
         campaign,
+        mesa,
         since,
       )
       .map((r) => ({ ...r, action: JSON.parse(r.action) as unknown }))
   }
 
-  /** Keep the last `keep` entries per campaign; the state itself is the truth. */
+  /** Keep the last `keep` entries per partida; the state itself is the truth. */
   pruneLog(keep = 5000): void {
-    for (const { id } of this.campaigns()) {
-      const top = this.db.get<{ rev: number }>('SELECT rev FROM session WHERE campaign = ?', id)
-      if (top) this.db.run('DELETE FROM action_log WHERE campaign = ? AND rev < ?', id, top.rev - keep)
+    for (const row of this.db.all<{ campaign: string; mesa: string; rev: number }>(
+      'SELECT campaign, mesa, rev FROM partida',
+    )) {
+      this.db.run(
+        'DELETE FROM action_log WHERE campaign = ? AND mesa = ? AND rev < ?',
+        row.campaign,
+        row.mesa,
+        row.rev - keep,
+      )
     }
   }
 }

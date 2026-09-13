@@ -121,12 +121,16 @@ jobs:
              reg=$(curl -sf -X POST -H "Content-Type: application/json" -d "{\"title\":\"smoke\"}" http://localhost:8085/api/dm/campaigns)
              id=$(printf %s "$reg" | python3 -c "import sys,json; print(json.load(sys.stdin)[\"id\"])")
              secret=$(printf %s "$reg" | python3 -c "import sys,json; print(json.load(sys.stdin)[\"dmSecret\"])")
-             curl -s -o /dev/null -w "%{http_code}" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 401 || {
-               echo "dm-app: a campaign answers its DM surface without the secret" >&2; exit 1; }
-             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer nope" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 401 || {
-               echo "dm-app: a campaign answers a wrong secret" >&2; exit 1; }
-             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id/state" | grep -qx 200 || {
-               echo "dm-app: a campaign does not answer its own secret" >&2; exit 1; }
+             mesa=$(curl -sf -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $secret" -d "{\"title\":\"smoke\"}" "http://localhost:8085/api/dm/campaigns/$id/mesas" | python3 -c "import sys,json; print(json.load(sys.stdin)[\"id\"])")
+             partida="http://localhost:8085/api/dm/campaigns/$id/mesas/$mesa"
+             curl -s -o /dev/null -w "%{http_code}" "$partida/state" | grep -qx 401 || {
+               echo "dm-app: a partida answers its DM surface without the secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer nope" "$partida/state" | grep -qx 401 || {
+               echo "dm-app: a partida answers a wrong secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $secret" "$partida/state" | grep -qx 200 || {
+               echo "dm-app: a partida does not answer its own secret" >&2; exit 1; }
+             curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $secret" "$partida" | grep -qx 204 || {
+               echo "dm-app: the smoke mesa could not be deleted" >&2; exit 1; }
              curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id" | grep -qx 204 || {
                echo "dm-app: the smoke campaign could not be deleted" >&2; exit 1; }
              curl -s -H "Authorization: Bearer $secret" "http://localhost:8085/api/dm/campaigns/$id" | grep -q "\"exists\":false" || {

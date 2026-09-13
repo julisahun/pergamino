@@ -114,6 +114,10 @@ const store = new RemoteSessionStore()
 let vault: CampaignVault | null = null
 /** This campaign's DM secret, read from `.pergamino/campaign.json` or minted at registration. */
 let secret: string | null = null
+/** The mesa folder in `partidas/` that is playing — the group, by its vault name. */
+let mesa: string | null = null
+/** The group's id on the server. The party and the link are its, not the campaign's. */
+let mesaId: string | null = null
 let notes: NotesIndex | null = null
 let transport: TableTransport | null = null
 let unsubscribe: (() => void) | null = null
@@ -308,11 +312,16 @@ export const useDm = create<DmStore>((set, get) => ({
     })
   },
 
-  /** The mesa only says where bitácora and estado.md are written now. */
-  openRun: async (mesa) => {
-    if (!vault || mesa === get().mesa) return
-    rememberMesa(vault.campaignId, mesa)
-    set({ mesa })
+  /**
+   * Sitting a different group at this campaign. It is a different partida —
+   * its own state, its own party, its own link — so the server half runs again.
+   */
+  openRun: async (next) => {
+    if (!vault || next === get().mesa) return
+    rememberMesa(vault.campaignId, next)
+    mesa = next
+    set({ mesa: next })
+    await connectServer(set)
   },
 
   openCampaign: async (id) => {
@@ -330,7 +339,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const campaignId = get().campaignId
     if (secret && campaignId) {
       try {
-        await publishPrep(secret, campaignId, vault, campaign)
+        if (!mesaId) return
+        await publishPrep(secret, campaignId, mesaId, vault, campaign)
       } catch (err) {
         set({ serverError: (err as Error).message })
       }
@@ -376,7 +386,7 @@ export const useDm = create<DmStore>((set, get) => ({
       })
       secret = dmSecret
       // The open socket said hello with the old secret; say it again with the new.
-      await store.connect(id, secret)
+      await store.connect(id, mesaId!, secret)
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })
@@ -387,7 +397,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const id = get().campaignId
     if (!secret || !id) return
     try {
-      const { url } = await api.rotateLink(secret, id)
+      if (!mesaId) return
+      const { url } = await api.rotateLink(secret, id, mesaId)
       set({ link: url })
     } catch (err) {
       set({ serverError: (err as Error).message })
@@ -398,7 +409,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const id = get().campaignId
     if (!secret || !id) return
     try {
-      await api.addCharacter(secret, id, await file.text(), player)
+      if (!mesaId) return
+      await api.addCharacter(secret, id, mesaId, await file.text(), player)
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })
@@ -409,7 +421,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const id = get().campaignId
     if (!secret || !id) return
     try {
-      await api.replaceSheet(secret, id, pcId, await file.text())
+      if (!mesaId) return
+      await api.replaceSheet(secret, id, mesaId, pcId, await file.text())
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })
@@ -420,7 +433,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const id = get().campaignId
     if (!secret || !id) return
     try {
-      await api.removeCharacter(secret, id, pcId)
+      if (!mesaId) return
+      await api.removeCharacter(secret, id, mesaId, pcId)
     } catch (err) {
       set({ serverError: describe(err) })
     }
@@ -430,7 +444,8 @@ export const useDm = create<DmStore>((set, get) => ({
     const id = get().campaignId
     if (!secret || !id) return
     try {
-      await api.reset(secret, id)
+      if (!mesaId) return
+      await api.reset(secret, id, mesaId)
     } catch (err) {
       set({ serverError: describe(err) })
     }
@@ -606,14 +621,20 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
 
     const runs = await vault.listRuns()
     if (runs.length === 0) {
+      // A campaign folder picked on its own cannot reach the world's
+      // `partidas/`: it sits above it, and a handle cannot name its parent.
+      // That is the wrong folder rather than an empty one, so say which.
       set({
         phase: 'error',
-        error: `${name}: no hay ninguna mesa en partidas/.`,
+        error:
+          vault.shape === 'campaign'
+            ? `${name}: las partidas no viven dentro de una campaña. Abre la carpeta del mundo —la que tiene campaigns/ y partidas/ al lado— y elige ${vault.campaignId} ahí.`
+            : `${name}: no hay ninguna mesa en partidas/.`,
       })
       return
     }
     const wanted = lastMesa(vault.campaignId)
-    const mesa = wanted && runs.includes(wanted) ? wanted : runs[0]!
+    mesa = wanted && runs.includes(wanted) ? wanted : runs[0]!
     rememberMesa(vault.campaignId, mesa)
 
     store.setPrep(vault.title, await vault.loadCampaign())
@@ -653,6 +674,41 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
     set({ phase: 'error', ready: false, error: (err as Error).message })
   }
 }
+
+/**
+ * The group's id on the server, from `partidas/<mesa>/.pergamino/mesa.json` —
+ * or minted and written there the first time this mesa plays anything.
+ *
+ * It is deliberately not the campaign's business: the same file is read again
+ * when this group opens the next campaign, and the party, the link and what
+ * each PJ carries come back with it.
+ */
+async function resolveMesa(campaign: string): Promise<string> {
+  if (!vault || !mesa) throw new Error('sin mesa')
+  const held = await vault.readMesaIdentity(mesa)
+  // A folder that has never registered a mesa, against a server that already
+  // has one sitting at this campaign, is the upgrade path: before mesas
+  // existed the party belonged to the campaign, and the migration turned it
+  // into exactly this group. Adopt it, or the real party is orphaned behind a
+  // brand-new empty one.
+  const adopted = held?.id ?? (await mesaAlreadyHere(campaign))
+  const reg = await api.registerMesa(secret!, campaign, titleCase(mesa), adopted)
+  if (held?.id !== reg.id || held.link !== reg.link) {
+    await vault.writeMesaIdentity(mesa, {
+      id: reg.id,
+      link: reg.link,
+      registered: held?.registered || new Date().toISOString().slice(0, 10),
+    })
+  }
+  return reg.id
+}
+
+async function mesaAlreadyHere(campaign: string): Promise<string | undefined> {
+  const known = await api.campaign(secret!, campaign)
+  return known.exists ? known.mesas.find((m) => m.playing)?.id : undefined
+}
+
+const titleCase = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1)
 
 /**
  * The server half. Each early return is a question for the welcome screen;
@@ -695,23 +751,23 @@ async function connectServer(set: Setter): Promise<void> {
       }
     }
 
-    await publishPrep(secret!, id, vault, store.campaign)
-    await store.connect(id, secret!)
-    const summary = await api.campaign(secret!, id)
+    mesaId = await resolveMesa(id)
+    if (fixtureSheets) await seatFixtureParty(mesaId)
+    await publishPrep(secret!, id, mesaId, vault, store.campaign)
+    await store.connect(id, mesaId, secret!)
+    const summary = await api.partida(secret!, id, mesaId)
 
     // The party's own faces are rows on the server, not files in the folder.
     // The link is only known once the summary is in, so anything asked for
     // before now was answered with a null the cache is still holding.
-    if (summary.exists) {
-      assetSource?.setFallback(new HttpAssetSource(summary.link))
-      dmAssets.clear()
-    }
+    assetSource?.setFallback(new HttpAssetSource(summary.link))
+    dmAssets.clear()
 
     set({
       phase: 'lista',
       ready: true,
       campaignId: id,
-      link: summary.exists ? summary.url : null,
+      link: summary.url,
       serverError: null,
     })
     syncFromStore(set)
@@ -735,10 +791,14 @@ async function connectServer(set: Setter): Promise<void> {
 async function fixtureIdentity(title: string): Promise<string> {
   await api.remove(FIXTURE_SECRET, FIXTURE_ID).catch(() => undefined)
   await api.reregister(FIXTURE_SECRET, FIXTURE_ID, title)
-  for (const { player, xml } of await fixtureSheets!()) {
-    await api.addCharacter(FIXTURE_SECRET, FIXTURE_ID, xml, player)
-  }
   return FIXTURE_ID
+}
+
+/** The demo party, seated once the fixture's mesa exists to seat it at. */
+async function seatFixtureParty(mesa: string): Promise<void> {
+  for (const { player, xml } of await fixtureSheets!()) {
+    await api.addCharacter(FIXTURE_SECRET, FIXTURE_ID, mesa, xml, player)
+  }
 }
 
 function detach(): void {

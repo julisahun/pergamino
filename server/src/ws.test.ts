@@ -7,12 +7,13 @@ import { WebSocket } from 'ws'
 import type { ClientMsg, ServerMsg } from '../../shared/protocol.ts'
 import { readEnv } from './env.ts'
 import { createHandler } from './http.ts'
-import { memoryWorld, TOLMO } from './fixtures.ts'
+import { memoryWorld, partida, TOLMO } from './fixtures.ts'
 import { attachWs } from './ws.ts'
 
 let server: Server
 let wsUrl: string
 let campaign: string
+let mesa: string
 let secret: string
 let link: string
 let pc: string
@@ -26,8 +27,9 @@ beforeAll(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   const { port } = server.address() as { port: number }
   wsUrl = `ws://127.0.0.1:${port}/ws`
-  const c = world.registry.register('x')
+  const c = partida(world.registry)
   campaign = c.id
+  mesa = c.mesaId
   secret = c.dmSecret
   link = c.link
   pc = c.addCharacter(TOLMO, 'Ana').id
@@ -54,7 +56,7 @@ async function client(hello: ClientMsg) {
 
 describe('the live channel', () => {
   it('greets the DM with the party and the whole state', async () => {
-    const dm = await client({ type: 'hello', role: 'dm', secret, campaign })
+    const dm = await client({ type: 'hello', role: 'dm', secret, campaign, mesa })
     await dm.until((m) => m.type === 'dm')
     expect(dm.heard.map((m) => m.type)).toEqual(['welcome', 'party', 'dm'])
     const party = dm.heard[1] as Extract<ServerMsg, { type: 'party' }>
@@ -63,14 +65,14 @@ describe('the live channel', () => {
   })
 
   it('refuses a wrong secret and an unknown link', async () => {
-    const bad = await client({ type: 'hello', role: 'dm', secret: 'nope', campaign })
+    const bad = await client({ type: 'hello', role: 'dm', secret: 'nope', campaign, mesa })
     await bad.until((m) => m.type === 'error')
     const badLink = await client({ type: 'hello', role: 'pc', link: 'nope', pc })
     await badLink.until((m) => m.type === 'error')
   })
 
   it('fans an action out: an ack to the sender, a snapshot to everyone, in role shape', async () => {
-    const dm = await client({ type: 'hello', role: 'dm', secret, campaign })
+    const dm = await client({ type: 'hello', role: 'dm', secret, campaign, mesa })
     const phone = await client({ type: 'hello', role: 'pc', link, pc })
     await dm.until((m) => m.type === 'dm')
     await phone.until((m) => m.type === 'pc')
@@ -93,10 +95,10 @@ describe('the live channel', () => {
   })
 
   it('sends only the welcome to a reconnect that missed nothing', async () => {
-    const first = await client({ type: 'hello', role: 'dm', secret, campaign })
+    const first = await client({ type: 'hello', role: 'dm', secret, campaign, mesa })
     const w = (await first.until((m) => m.type === 'welcome')) as Extract<ServerMsg, { type: 'welcome' }>
     first.ws.close()
-    const again = await client({ type: 'hello', role: 'dm', secret, campaign, since: w.rev })
+    const again = await client({ type: 'hello', role: 'dm', secret, campaign, mesa, since: w.rev })
     await again.until((m) => m.type === 'welcome')
     await new Promise((r) => setTimeout(r, 100))
     expect(again.heard.map((m) => m.type)).toEqual(['welcome'])

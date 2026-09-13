@@ -36,19 +36,31 @@ export interface RegisterBody {
   title: string
 }
 
-/** What registering (or re-registering) a campaign hands back. */
+/**
+ * What registering (or re-registering) a campaign hands back. No link: that
+ * belongs to the mesa now, and comes back from registering one.
+ */
 export interface Registered {
   id: string
-  /** The players' link secret — separate from `id`, so it can be rotated. */
-  link: string
-  /** The full URL to hand out, built from the server's own public address. */
-  url: string
   /**
    * The DM's credential for this campaign, and nothing else. The console
    * writes it to `.pergamino/campaign.json`: holding the folder is being the
    * DM, and no server-wide secret exists.
    */
   dmSecret: string
+}
+
+/**
+ * What registering a mesa hands back. The link is the group's and outlives any
+ * one campaign; the console keeps the id in `partidas/<mesa>/.pergamino/`.
+ */
+export interface MesaRegistered {
+  id: string
+  title: string
+  /** The players' link secret — separate from `id`, so it can be rotated. */
+  link: string
+  /** The full URL to hand out, built from the server's own public address. */
+  url: string
 }
 
 export interface PartyMember {
@@ -58,11 +70,25 @@ export interface PartyMember {
   hasPortrait: boolean
 }
 
-/** The DM's view of a campaign row. */
+/**
+ * What the DM sees of a campaign before picking a mesa: whether the server
+ * knows it, and which groups are around to sit at it.
+ */
+export interface CampaignRegistration {
+  exists: true
+  id: string
+  title: string
+  /** `playing` marks the group that has this campaign on the table right now. */
+  mesas: { id: string; title: string; playing: boolean }[]
+}
+
+/** The DM's view of one partida — a mesa at a campaign. */
 export interface CampaignSummary {
   exists: true
   id: string
   title: string
+  /** The group at this campaign. The party and the link are its, not the campaign's. */
+  mesa: { id: string; title: string }
   link: string
   url: string
   rev: number
@@ -120,7 +146,7 @@ export type Role = 'dm' | 'pc' | 'tv'
 
 /** The first message on a socket. `since` is the last revision the client saw. */
 export type ClientHello =
-  | { type: 'hello'; role: 'dm'; secret: string; campaign: string; since?: number }
+  | { type: 'hello'; role: 'dm'; secret: string; campaign: string; mesa: string; since?: number }
   | { type: 'hello'; role: 'pc'; link: string; pc: string; since?: number }
   | { type: 'hello'; role: 'tv'; link: string; since?: number }
 

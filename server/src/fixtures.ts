@@ -1,4 +1,5 @@
-/** Shared by the server's tests: a campaign in memory and a sheet to upload. */
+/** Shared by the server's tests: a partida in memory and a sheet to upload. */
+import type { CampaignSession } from './campaign.ts'
 import { Db } from './db.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
@@ -26,3 +27,25 @@ export function memoryWorld(now: () => number = () => 1_000) {
   const registry = new Registry(store, now)
   return { db, store, registry }
 }
+
+/**
+ * A campaign with a mesa sitting at it — the pair a partida is. Tests that
+ * only care about one table say `partida(registry)` and get the session back;
+ * the ids are there for the ones that open a second campaign for the same
+ * group, which is the case the whole design exists for.
+ */
+export function partida(
+  registry: Registry,
+  title = 'Marea Baja',
+  ids: { campaign?: string; mesa?: string } = {},
+): CampaignSession {
+  const campaign = registry.registerCampaign(title, ids.campaign)
+  const mesa = registry.registerMesa(ids.mesa ? titleOf(ids.mesa) : 'Last', ids.mesa)
+  const session = registry.get(campaign.id, mesa.id)!
+  // What the console does when it opens one: this is the table now, which is
+  // where a phone with the mesa's link lands.
+  session.takeTheTable()
+  return session
+}
+
+const titleOf = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1)

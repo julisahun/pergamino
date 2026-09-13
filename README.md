@@ -93,21 +93,36 @@ de tocar un byte, en vez de que una comprobación lo atrape.
 ## El servidor
 
 `server/` es Node con SQLite, y corre **el mismo reductor** que la consola
-corría antes en la pestaña y que las pruebas siguen conduciendo. Es el dueño
-de dos cosas: los personajes — la ficha que subió cada jugador y su estado
-vivo — y la sesión, con un número de revisión que crece con cada acción. La
-consola y los móviles le mandan acciones por WebSocket y reciben el estado
-entero de vuelta, cada uno en la forma que le toca: a la consola todo, a un
-móvil la proyección de su personaje.
+corría antes en la pestaña y que las pruebas siguen conduciendo. La consola y
+los móviles le mandan acciones por WebSocket y reciben el estado entero de
+vuelta, cada uno en la forma que le toca: a la consola todo, a un móvil la
+proyección de su personaje.
 
-Dos credenciales por campaña y ninguna cuenta. Dar de alta una campaña está
-abierto a cualquiera; lo que devuelve es la única puerta. El **secreto del
-DM**, que la consola guarda en `.pergamino/campaign.json` de la carpeta, abre
-todo lo que hay bajo `/api/dm/campaigns/<id>/` — sólo de esa campaña, así que
-un servidor sirve a tantos DM como se registren en él. El **enlace de la
-campaña** da acceso al selector de personajes y a la ficha propia, y permite
-crear o sustituir un personaje a quien lo tenga. Los dos se pueden renovar
-desde la consola; el secreto, desde el menú ⋯.
+Lo que guarda tiene **dos dueños**, y saber cuál es cuál es media app:
+
+| Es de la **campaña** | Es de la **mesa** |
+|---|---|
+| la preparación publicada y los retratos de PNJ | los personajes: la ficha que subió cada jugador |
+| el secreto del DM | el enlace de los jugadores |
+| | **lo que lleva cada PJ**: PG, oro, inventario, objetos, espacios |
+
+Y lo que es de los dos —los PNJ en la mesa, el combate, la escena, la
+bitácora de acciones— es la **partida**, una fila por par *(campaña, mesa)*.
+Un grupo dura más que una aventura: cuando la misma mesa se sienta a otra
+campaña se lleva su party, su enlace y lo que llevaba encima, y deja atrás la
+mesa que había montada. Por eso también **dos mesas pueden jugar la misma
+campaña a la vez**, que con una sesión por campaña no se podía.
+
+Dos credenciales y ninguna cuenta. Dar de alta una campaña está abierto a
+cualquiera; lo que devuelve es la única puerta. El **secreto del DM**, que la
+consola guarda en `.pergamino/campaign.json` de la carpeta, abre todo lo que
+hay bajo `/api/dm/campaigns/<id>/` — sólo de esa campaña, así que un servidor
+sirve a tantos DM como se registren en él. El **enlace de la mesa** da acceso
+al selector de personajes y a la ficha propia, y permite crear o sustituir un
+personaje a quien lo tenga; la consola lo guarda en
+`partidas/<mesa>/.pergamino/mesa.json`. Como es de la mesa y no de la campaña,
+**no hay que repartirlo otra vez** al empezar algo nuevo: el móvil sigue al
+grupo. Los dos se pueden renovar desde la consola; el secreto, desde el menú ⋯.
 
 Lo que **no** llega al servidor: `story/`, las notas, la prosa de un PNJ, la
 descripción de un objeto, la nota de lectura de una escena, ninguna carpeta.

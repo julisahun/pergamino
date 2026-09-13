@@ -1,6 +1,8 @@
 /**
- * One campaign, live: its party, the prep the console published, the state,
- * and everyone listening.
+ * One **partida**, live: a mesa sitting at a campaign. The prep and the DM's
+ * credential come from the campaign; the party, the players' link and what
+ * each PJ carries come from the mesa, because the group outlives the
+ * adventure. The state on the table belongs to the pair.
  *
  * This is where `reduce` runs now. The reducer is the same pure function the
  * tests drive and the console used to run in the tab; what changed is who
@@ -31,7 +33,7 @@ import { emptySession } from '../../shared/vault/session.ts'
 import { isFc5Sheet, parseSheet, type SheetStats } from '../../shared/vault/sheet.ts'
 import { badSheet, forbidden, notFound, stale } from './errors.ts'
 import { randomSecret } from './auth.ts'
-import { Store, toCharacter, type CampaignRow } from './store.ts'
+import { Store, toCharacter, type CampaignRow, type MesaRow } from './store.ts'
 
 export interface Subscriber {
   role: Role
@@ -43,8 +45,12 @@ const EMPTY_PREP: PrepBody = { pnjs: [], objects: [], scenes: [] }
 const MAX_XML = 1024 * 1024
 
 export class CampaignSession {
+  /** The campaign. */
   readonly id: string
+  /** The mesa playing it. Together they name the partida. */
+  readonly mesaId: string
   #row: CampaignRow
+  #mesa: MesaRow
   #rev: number
   #state: SessionState
   #characters: Character[] = []
@@ -56,14 +62,23 @@ export class CampaignSession {
   readonly #store: Store
   readonly #now: () => number
 
-  private constructor(store: Store, row: CampaignRow, now: () => number = Date.now) {
+  private constructor(
+    store: Store,
+    row: CampaignRow,
+    mesa: MesaRow,
+    now: () => number = Date.now,
+  ) {
     this.#store = store
     this.#now = now
     this.id = row.id
+    this.mesaId = mesa.id
     this.#row = row
-    const saved = store.session(row.id)
+    this.#mesa = mesa
+    const saved = store.partida(row.id, mesa.id)
     this.#rev = saved?.rev ?? 0
-    this.#state = saved?.state ?? emptySession()
+    // A mesa that has never played this campaign still arrives carrying what
+    // it earned in the last one: an empty table, and the same people on it.
+    this.#state = saved?.state ?? { ...emptySession(), play: store.play(mesa.id) }
     const prep = store.prep(row.id)
     if (prep) {
       this.#prep = prep.prep
@@ -83,9 +98,15 @@ export class CampaignSession {
     return this.#now
   }
 
-  static load(store: Store, id: string, now?: () => number): CampaignSession | null {
+  static load(
+    store: Store,
+    id: string,
+    mesaId: string,
+    now?: () => number,
+  ): CampaignSession | null {
     const row = store.campaign(id)
-    return row ? new CampaignSession(store, row, now) : null
+    const mesa = store.mesa(mesaId)
+    return row && mesa ? new CampaignSession(store, row, mesa, now) : null
   }
 
   // --- reading ------------------------------------------------------------------
@@ -99,8 +120,12 @@ export class CampaignSession {
   get title(): string {
     return this.#row.title
   }
+  /** The players' link. It is the mesa's, so it survives changing campaign. */
   get link(): string {
-    return this.#row.link_secret
+    return this.#mesa.link_secret
+  }
+  get mesaTitle(): string {
+    return this.#mesa.title
   }
   get dmSecret(): string {
     return this.#row.dm_secret
@@ -120,8 +145,9 @@ export class CampaignSession {
       exists: true,
       id: this.id,
       title: this.#row.title,
-      link: this.#row.link_secret,
-      url: linkUrl(publicUrl, this.#row.link_secret),
+      mesa: { id: this.#mesa.id, title: this.#mesa.title },
+      link: this.#mesa.link_secret,
+      url: linkUrl(publicUrl, this.#mesa.link_secret),
       rev: this.#rev,
       party: this.#characters.map((c) => ({
         id: c.id,
@@ -181,12 +207,16 @@ export class CampaignSession {
     return { rev: this.#rev, changed: true }
   }
 
-  /** The console published prep. Everything else stays as it was. */
-  setPrep(prep: PrepBody): number {
-    const now = this.now()
-    this.store.setPrep(this.id, prep, now)
+  /**
+   * The console published prep. Everything else stays as it was.
+   *
+   * Prep belongs to the campaign, not to this partida, so the row is written
+   * by the registry and handed to **every** mesa sitting at that campaign —
+   * otherwise the second table would go on playing yesterday's statblocks.
+   */
+  adoptPrep(prep: PrepBody, publishedAt: number): number {
     this.#prep = prep
-    this.#publishedAt = now
+    this.#publishedAt = publishedAt
     this.#rebuild()
     return this.#bump('system:prep')
   }
@@ -198,7 +228,7 @@ export class CampaignSession {
     const now = this.now()
     this.store.insertCharacter({
       id,
-      campaign: this.id,
+      mesa: this.mesaId,
       name: sheet.name ?? player ?? id,
       player: player.trim().slice(0, 80),
       sheet_xml: xml,
@@ -263,11 +293,19 @@ export class CampaignSession {
     return this.#bump('system:remove', state, { id })
   }
 
-  /** Nueva sesión: the current state is archived and everyone reseated. */
+  /**
+   * Nueva sesión: the table is put away and laid out again.
+   *
+   * What is cleared is the table — the NPCs on it, the encounter, the scene,
+   * the log. **What the party carries is not touched**: oro, inventario, PG y
+   * espacios are the people's, and a new session is not a thing that takes
+   * them away. That is also why they are still there when this mesa opens the
+   * next campaign.
+   */
   reset(): number {
-    this.store.archiveSession(this.id, this.now())
+    this.store.archivePartida(this.id, this.mesaId, this.now())
     this.#projection.release()
-    return this.#bump('system:reset', this.#seated(emptySession()))
+    return this.#bump('system:reset', this.#seated({ ...emptySession(), play: this.#state.play }))
   }
 
   setTitle(title: string): void {
@@ -276,19 +314,24 @@ export class CampaignSession {
     this.#rebuild()
   }
 
+  /** A new players' link. It belongs to the mesa, so every campaign it plays moves with it. */
   rotateLink(): string {
     const secret = randomSecret()
-    this.store.setLink(this.id, secret)
-    this.#row = { ...this.#row, link_secret: secret }
+    this.store.setMesaLink(this.mesaId, secret)
+    this.#mesa = { ...this.#mesa, link_secret: secret }
     return secret
   }
 
-  /** A new DM secret; the console rewrites `.pergamino/campaign.json` with it. */
-  rotateDmSecret(): string {
-    const secret = randomSecret()
-    this.store.setDmSecret(this.id, secret)
+  /** Point the mesa at this campaign, which is where a phone with its link lands. */
+  takeTheTable(): void {
+    if (this.#mesa.playing === this.id) return
+    this.store.setPlaying(this.mesaId, this.id)
+    this.#mesa = { ...this.#mesa, playing: this.id }
+  }
+
+  /** The registry rotated this campaign's DM secret; take the new one. */
+  adoptDmSecret(secret: string): void {
     this.#row = { ...this.#row, dm_secret: secret }
-    return secret
   }
 
   // --- listening ----------------------------------------------------------------
@@ -326,7 +369,7 @@ export class CampaignSession {
   }
 
   #loadParty(): void {
-    const rows = this.store.characters(this.id)
+    const rows = this.store.characters(this.mesaId)
     this.#characters = rows.map(toCharacter)
     this.#sheets = new Map(rows.map((r) => [r.id, parseSheet(r.sheet_xml)]))
   }
@@ -362,7 +405,7 @@ export class CampaignSession {
   #commit(state: SessionState, actor: string, action: unknown, party = false): void {
     this.#rev++
     this.#state = state
-    this.store.saveSession(this.id, this.#rev, state, actor, action, this.now())
+    this.store.savePartida(this.id, this.mesaId, this.#rev, state, actor, action, this.now())
     for (const sub of this.#subs) {
       try {
         if (party) sub.send(this.partyMessage(sub.role))

@@ -7,7 +7,9 @@
  */
 import type {
   CampaignPublic,
+  CampaignRegistration,
   CampaignSummary,
+  MesaRegistered,
   DispatchResult,
   ErrorCode,
   PrepBody,
@@ -86,12 +88,29 @@ export const api = {
     call<Registered>(`/api/dm/campaigns/${enc(id)}`, { secret, method: 'PUT', json: { title } }),
   rotateSecret: (secret: string, id: string) =>
     call<{ dmSecret: string }>(`/api/dm/campaigns/${enc(id)}/secret/rotate`, { secret, method: 'POST' }),
+  /** Is the server holding this campaign, and which mesas could sit at it. */
   campaign: (secret: string, id: string) =>
-    call<CampaignSummary | { exists: false }>(`/api/dm/campaigns/${enc(id)}`, { secret }),
+    call<CampaignRegistration | { exists: false }>(`/api/dm/campaigns/${enc(id)}`, { secret }),
+  /**
+   * The group, registered once and then good for every campaign it plays. The
+   * console keeps what comes back in `partidas/<mesa>/.pergamino/mesa.json`.
+   */
+  registerMesa: (secret: string, id: string, title: string, mesaId?: string) =>
+    call<MesaRegistered>(`/api/dm/campaigns/${enc(id)}/mesas`, {
+      secret,
+      json: { title, ...(mesaId ? { id: mesaId } : {}) },
+    }),
+  /** One partida: this mesa at this campaign. Asking also puts it on the table. */
+  partida: (secret: string, id: string, mesa: string) =>
+    call<CampaignSummary>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}`, { secret }),
   remove: (secret: string, id: string) =>
     call<void>(`/api/dm/campaigns/${enc(id)}`, { secret, method: 'DELETE' }),
-  prep: (secret: string, id: string, prep: PrepBody) =>
-    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/prep`, { secret, method: 'PUT', json: prep }),
+  prep: (secret: string, id: string, mesa: string, prep: PrepBody) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/prep`, {
+      secret,
+      method: 'PUT',
+      json: prep,
+    }),
   pnjPortrait: (secret: string, id: string, pnjId: string, blob: Blob) =>
     call<void>(`/api/dm/campaigns/${enc(id)}/portrait/pnj/${enc(pnjId)}`, {
       secret,
@@ -99,34 +118,34 @@ export const api = {
       body: blob,
       type: blob.type || 'image/jpeg',
     }),
-  party: (secret: string, id: string) =>
+  party: (secret: string, id: string, mesa: string) =>
     call<{ characters: Character[]; sheets: Record<string, SheetStats> }>(
-      `/api/dm/campaigns/${enc(id)}/party`,
+      `/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/party`,
       { secret },
     ),
-  addCharacter: (secret: string, id: string, xml: string, player: string) =>
+  addCharacter: (secret: string, id: string, mesa: string, xml: string, player: string) =>
     call<{ id: string; rev: number }>(
-      `/api/dm/campaigns/${enc(id)}/characters?player=${enc(player)}`,
+      `/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/characters?player=${enc(player)}`,
       { secret, method: 'POST', body: xml, type: 'application/xml' },
     ),
-  replaceSheet: (secret: string, id: string, pc: string, xml: string) =>
-    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/characters/${enc(pc)}/sheet`, {
+  replaceSheet: (secret: string, id: string, mesa: string, pc: string, xml: string) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/characters/${enc(pc)}/sheet`, {
       secret,
       method: 'PUT',
       body: xml,
       type: 'application/xml',
     }),
-  removeCharacter: (secret: string, id: string, pc: string) =>
-    call<void>(`/api/dm/campaigns/${enc(id)}/characters/${enc(pc)}`, { secret, method: 'DELETE' }),
-  rotateLink: (secret: string, id: string) =>
-    call<{ link: string; url: string }>(`/api/dm/campaigns/${enc(id)}/link/rotate`, {
+  removeCharacter: (secret: string, id: string, mesa: string, pc: string) =>
+    call<void>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/characters/${enc(pc)}`, { secret, method: 'DELETE' }),
+  rotateLink: (secret: string, id: string, mesa: string) =>
+    call<{ link: string; url: string }>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/link/rotate`, {
       secret,
       method: 'POST',
     }),
-  reset: (secret: string, id: string) =>
-    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/reset`, { secret, method: 'POST' }),
-  dispatch: (secret: string, id: string, action: unknown) =>
-    call<DispatchResult>(`/api/dm/campaigns/${enc(id)}/actions`, { secret, json: { action } }),
+  reset: (secret: string, id: string, mesa: string) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/reset`, { secret, method: 'POST' }),
+  dispatch: (secret: string, id: string, mesa: string, action: unknown) =>
+    call<DispatchResult>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/actions`, { secret, json: { action } }),
 
   // --- a player's link ---
   pj: {

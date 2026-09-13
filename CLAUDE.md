@@ -96,10 +96,13 @@ What falls out of that:
   within a folder. The old format had to ask for one in prose.
 - **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
   ~70 KB data URIs, which is exactly what a note cannot hold.
-- **A PJ is a row on the server**: the `-fc5.xml` its player uploaded through
-  the campaign's link, plus its live layer. The vault holds no party —
-  `personajes/<mesa>/`, if there is one, is ordinary material (trasfondos,
-  guías, the creator's json) reachable as notes and never read as characters. Level-up
+- **A PJ is a row on the server, owned by the mesa**: the `-fc5.xml` its
+  player uploaded through the **mesa's** link, plus its live layer — PG, oro,
+  inventario, espacios. Both belong to the group, not to the campaign, so the
+  same party walks into the next adventure carrying what it earned in the
+  last. The vault holds no party — `personajes/<mesa>/`, if there is one, is
+  ordinary material (trasfondos, guías, the creator's json) reachable as notes
+  and never read as characters. Level-up
   is the player uploading a new xml; the live layer survives it. The app still
   never reads a field of the creator's build recipe, and the xml says so
   itself — *"si algún número de la app no coincide con los de arriba, mandan

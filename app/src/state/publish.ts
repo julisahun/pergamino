@@ -38,10 +38,11 @@ async function portraitBlob(vault: CampaignVault, src: string | null, stamp: str
 export async function publishPrep(
   token: string,
   campaignId: string,
+  mesaId: string,
   vault: CampaignVault,
   campaign: CampaignData,
 ): Promise<void> {
-  await api.prep(token, campaignId, prepOf(campaign))
+  await api.prep(token, campaignId, mesaId, prepOf(campaign))
   const withArt = campaign.pnjs.filter((p) => p.portrait && (p.portrait.stamp || p.portrait.src))
   const queue = [...withArt]
   const worker = async () => {
