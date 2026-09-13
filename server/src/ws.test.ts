@@ -64,6 +64,32 @@ describe('the live channel', () => {
     dm.ws.close()
   })
 
+  it('refuses a hello from before mesas instead of dying on it', async () => {
+    // Exactly what a console left open across the deploy sends: no `mesa`.
+    // It used to reach SQLite as an undefined parameter and take the whole
+    // server down, restart loop and all — every other table with it.
+    const old = await client({ type: 'hello', role: 'dm', secret, campaign } as never)
+    await old.until((m) => m.type === 'error')
+    // And the server is still standing for everyone else.
+    const dm = await client({ type: 'hello', role: 'dm', secret, campaign, mesa })
+    await dm.until((m) => m.type === 'dm')
+    dm.ws.close()
+  })
+
+  it('refuses junk without falling over', async () => {
+    for (const junk of [
+      { type: 'hello', role: 'dm', secret, campaign, mesa: 42 },
+      { type: 'hello', role: 'pc', link: null, pc },
+      { type: 'hello', role: 'tv' },
+    ]) {
+      const bad = await client(junk as never)
+      await bad.until((m) => m.type === 'error')
+    }
+    const dm = await client({ type: 'hello', role: 'dm', secret, campaign, mesa })
+    await dm.until((m) => m.type === 'dm')
+    dm.ws.close()
+  })
+
   it('refuses a wrong secret and an unknown link', async () => {
     const bad = await client({ type: 'hello', role: 'dm', secret: 'nope', campaign, mesa })
     await bad.until((m) => m.type === 'error')

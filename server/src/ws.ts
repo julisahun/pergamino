@@ -7,7 +7,7 @@
  * caches for free and which nothing here has to frame.
  */
 import type { IncomingMessage, Server } from 'node:http'
-import { WebSocketServer, type WebSocket } from 'ws'
+import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import type { Actor, ClientMsg, ServerMsg } from '../../shared/protocol.ts'
 import { tokenMatches } from './auth.ts'
 import type { CampaignSession, Subscriber } from './campaign.ts'
@@ -54,6 +54,19 @@ export function attachWs(server: Server, ctx: ServerContext): WebSocketServer {
     const helloTimer = setTimeout(() => fail('Sin saludo', 4408), HELLO_TIMEOUT_MS)
 
     ws.on('message', (raw) => {
+      try {
+        handle(raw)
+      } catch (err) {
+        // A socket is anyone: an old bundle in a tab that has been open since
+        // before a deploy, a half-written message, a client from the future.
+        // Whatever it sends, the answer is this socket closing — never the
+        // server going down and taking every other table with it.
+        console.error('[ws] refused a message:', err)
+        fail('Mensaje ilegible')
+      }
+    })
+
+    const handle = (raw: RawData): void => {
       let msg: ClientMsg
       try {
         msg = JSON.parse(raw.toString()) as ClientMsg
@@ -110,7 +123,7 @@ export function attachWs(server: Server, ctx: ServerContext): WebSocketServer {
           }
         }
       }
-    })
+    }
 
     ws.on('close', () => {
       clearTimeout(helloTimer)
@@ -141,13 +154,20 @@ interface Resolved {
   actor: Actor
 }
 
+/** A credential off the wire is only usable if it is a non-empty string. */
+const id = (value: unknown): value is string => typeof value === 'string' && value !== ''
+
 /** Who a hello is from, or null when its credentials do not hold up. */
 function resolveHello(ctx: ServerContext, hello: ClientMsg & { type: 'hello' }): Resolved | null {
   if (hello.role === 'dm') {
+    // A console from before mesas existed says hello without one. It is not
+    // authorised rather than a crash: every id here is a string or nothing.
+    if (!id(hello.campaign) || !id(hello.mesa) || !id(hello.secret)) return null
     const session = ctx.registry.get(hello.campaign, hello.mesa)
     if (!session || !tokenMatches(hello.secret, session.dmSecret)) return null
     return { session, role: 'dm', actor: { kind: 'dm' } }
   }
+  if (!id(hello.link)) return null
   const session = ctx.registry.byLink(hello.link)
   if (!session) return null
   if (hello.role === 'tv') {
@@ -155,6 +175,6 @@ function resolveHello(ctx: ServerContext, hello: ClientMsg & { type: 'hello' }):
     // is spelled as a player with no character.
     return { session, role: 'tv', actor: { kind: 'pc', pcId: '' } }
   }
-  if (!session.hasCharacter(hello.pc)) return null
+  if (!id(hello.pc) || !session.hasCharacter(hello.pc)) return null
   return { session, role: 'pc', pcId: hello.pc, actor: { kind: 'pc', pcId: hello.pc } }
 }
