@@ -56,14 +56,14 @@ export async function openFixture(): Promise<Fixture> {
 /**
  * The demo party's sheets, to be uploaded to the dev server on boot.
  *
- * The app no longer reads `players/` as a party — a character is a row on the
- * server — but the snapshot keeps `players/<pj>/<pj>-fc5.xml` as *material*,
+ * The app no longer reads the PJ folders as a party — a character is a row on
+ * the server — but the snapshot keeps `personajes/<mesa>/<pj>/<pj>-fc5.xml` as *material*,
  * which is exactly what a player would upload. The fixture boot does that
  * upload, so every driver starts with the same party the way the DM's own
  * campaign starts with the one the players created.
  */
 export async function fixtureSheets(vault: CampaignVault): Promise<{ player: string; xml: string }[]> {
-  const players = await dirAt(vault.campaignDir, 'players')
+  const players = await dirAt(vault.notesRoot, 'personajes/la-quesera')
   if (!players) return []
   const out: { player: string; xml: string }[] = []
   for (const sub of (await players.list()).dirs.sort()) {

@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { openWorld } from '../../test/fixture.ts'
-import { RUNS_DIR } from './binding.ts'
+import { PERSONAJES_DIR } from './binding.ts'
 import { dirAt, fileAt, type VaultDir } from './source.ts'
 import { abilityMod, emptySheet, parseSheet, type SheetStats } from './sheet.ts'
 
 const vault = await openWorld()
 
-/** The `players/` folder of a run, as the loader receives it. */
+/** The PJ folder of a mesa, as the loader receives it. */
 const playersOf = async (mesa: string) => {
-  const dir = await dirAt(vault.campaignDir, `${RUNS_DIR}/${mesa}/players`)
-  if (!dir) throw new Error(`No players folder for ${mesa}`)
+  const dir = await dirAt(vault.notesRoot, `${PERSONAJES_DIR}/${mesa}`)
+  if (!dir) throw new Error(`No PJ folder for ${mesa}`)
   return dir
 }
 const last = await playersOf('last')
 
 /**
- * The DM keeps each PJ's xml at `players/<pj>/<pj>-fc5.xml`. The app no longer
+ * The DM keeps each PJ's xml at `personajes/<mesa>/<pj>/<pj>-fc5.xml`. The app no longer
  * reads that folder — a character is what its player uploaded — but these are
  * the real sheets of a real party, so they are what the parser is pinned to.
  */

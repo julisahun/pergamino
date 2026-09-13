@@ -15,7 +15,7 @@ import { VaultWriteError } from './source.ts'
 const vault = await openWorld()
 
 const sessionFile = nodePath.join(
-  worldRootAbs(), 'campaigns', campaign, 'runs', MESA, 'session.json',
+  worldRootAbs(), 'partidas', MESA, campaign, 'session.json',
 )
 const backupFile = `${sessionFile}.bak`
 
@@ -41,7 +41,7 @@ describe('the suite cannot write to the vault', () => {
   })
 
   it('makes no backup the vault did not already have', () => {
-    // `runs/last/` ships a `session.json.bak` of its own, from a real
+    // The partida ships a `session.json.bak` of its own, from a real
     // migration the DM's app did at the table. What must not happen is the
     // suite adding one, or rewriting that one — asserted above.
     const stray = fs

@@ -19,7 +19,7 @@ import type { PcInfo } from '../shared/session/project.ts'
 import { pcInfoOf } from '../shared/session/projection.ts'
 import { seatParty } from '../shared/session/seat.ts'
 import type { Character, SessionState } from '../shared/types.ts'
-import { CampaignVault, RUNS_DIR } from '../shared/vault/binding.ts'
+import { CampaignVault, PERSONAJES_DIR } from '../shared/vault/binding.ts'
 import { emptySession } from '../shared/vault/session.ts'
 import { openNodeVault } from '../shared/vault/node.ts'
 import { parseSheet, type SheetStats } from '../shared/vault/sheet.ts'
@@ -66,7 +66,8 @@ export interface PartyData {
 
 /**
  * The four PJs of the mesa, read straight from the `-fc5.xml` files the DM
- * keeps in `runs/<mesa>/players/<pj>/`.
+ * keeps in `personajes/<mesa>/<pj>/` — beside the campaigns, not inside one,
+ * because a PJ outlives the adventure being played.
  *
  * The app no longer reads that folder — a character is a row on the server,
  * made from the xml its player uploaded — but the files are still the real
@@ -74,8 +75,8 @@ export interface PartyData {
  * The id is the folder name; the name is the sheet's own.
  */
 export async function loadParty(vault: CampaignVault, mesa = MESA): Promise<PartyData> {
-  const players = await dirAt(vault.campaignDir, `${RUNS_DIR}/${mesa}/players`)
-  if (!players) throw new Error(`No players folder in ${RUNS_DIR}/${mesa}/`)
+  const players = await dirAt(vault.notesRoot, `${PERSONAJES_DIR}/${mesa}`)
+  if (!players) throw new Error(`No PJ folder in ${PERSONAJES_DIR}/${mesa}/`)
   const characters: Character[] = []
   const sheets = new Map<string, SheetStats>()
   for (const id of (await players.list()).dirs.filter((d) => !d.startsWith('.')).sort()) {

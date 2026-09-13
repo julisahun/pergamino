@@ -44,7 +44,7 @@ Ask all of it in one message, then wait.
 | **Where does the new campaign go?** Propose `campaigns/<slug>/` beside the existing ones, in the world folder the DM points you at. | The DM may want it outside the vault entirely until it is ready. |
 | **World or flat campaign?** | Decides whether the notes index spans `mundo/` (§10). A campaign inside `campaigns/` is a world member; a standalone folder is flat. |
 | **Campaign slug** — the folder name, kebab-case ASCII. | It is the display name (`titleCase`) when nothing else is on screen. |
-| **Mesa name** for `runs/<mesa>/`, or "none yet". | Without a run folder there is nothing to play; see §8. |
+| **Mesa name** for `partidas/<mesa>/`, or "none yet". | Without a mesa folder there is nothing to play; see §8. |
 | **Feet or metres in the source?** | The app is metric: `speed` renders as `<n> m`, one grid square is 1.5 m. A 30 ft speed is `speed: 9`. Confirm before converting a single number. |
 | **Which parts of the source become what** — an inventory. List every NPC, creature, item, location and map you found, and say what each will become: a `pnj/` note, an `objects/` note, a scene, a story note, or prose inside another note. | This is the one decision that shapes everything else, and it is entirely the DM's. |
 
@@ -87,10 +87,15 @@ combatant — never decide it yourself.
   scenarios/<id>.json    scenes: art, grid, roster, reading note
   story/**.md            free notes, any depth
   assets/                art, handouts, ambience
-  runs/<mesa>/           one folder per table — bitácora and estado.md
   .pergamino/            the app's own folder; it writes it, you never do
   README.md              optional, for a human
 ```
+
+The tables are **not** in there. `partidas/<mesa>/<campaña>/` sits beside
+`campaigns/` — a mesa outlives the adventure it is playing — so a world holds
+`partidas/last/marea-baja/` and a flat campaign holds `partidas/` in its own
+folder. The PJ are one more step out, in `personajes/<mesa>/`, and the app
+never reads them.
 
 **There is no `players/` to write.** The party lives on the server: each
 player uploads a `-fc5.xml` through the campaign's link, and the app never
@@ -483,23 +488,25 @@ tells whoever opens the file next which numbers are authoritative.
 
 ---
 
-## 9. `runs/<mesa>/` — the tables
+## 9. `partidas/<mesa>/<campaña>/` — the tables
 
-One folder per table. **This is the only place the app is allowed to write**,
-and the rule the whole design exists to keep is that a session never edits
-prep. You are writing prep. Keep out of the way.
+One folder per table, and inside it one per campaign that table has played.
+**This is the only place the app is allowed to write**, and the rule the whole
+design exists to keep is that a session never edits prep. You are writing prep.
+Keep out of the way.
 
 | Path | Write it? | Note |
 |---|---|---|
-| `runs/<mesa>/` | **yes**, if the DM named a mesa | The folder must exist or opening that mesa throws. Empty is fine — a mesa with no session is *sin empezar*. |
-| `runs/<mesa>/session.json` | **never** | There is none any more: live state lives on the server. An old one is dead weight the DM can delete. |
-| `runs/<mesa>/estado.md` | optional | Free markdown with `## ` headings. Closing a session appends bullets under headings that already exist. A short `# Estado` plus a paragraph is a good seed. |
-| `runs/<mesa>/bitacora/00-plantilla.md` | optional | The template a session note is drafted from. Give it `## Qué pasó` and `## Cambios de mundo` — those two headings are the ones the draft appends facts under. |
-| `runs/<mesa>/bitacora/NN-*.md` | no | Session notes, written on close. Numbering comes from the highest `NN` prefix present. |
-| `runs/<mesa>/players/` | **no** | Not read. The party is on the server (§7). Material a DM keeps there stays material. |
+| `partidas/<mesa>/` | **yes**, if the DM named a mesa | The mesa is what the picker lists; every mesa is offered for every campaign. |
+| `partidas/<mesa>/<campaña>/` | optional | Created on the first session close. Empty or absent is fine — a mesa that has not played this campaign is *sin empezar*. |
+| `partidas/<mesa>/<campaña>/session.json` | **never** | There is none any more: live state lives on the server. An old one is dead weight the DM can delete. |
+| `partidas/<mesa>/<campaña>/estado.md` | optional | Free markdown with `## ` headings. Closing a session appends bullets under headings that already exist. A short `# Estado` plus a paragraph is a good seed. |
+| `partidas/<mesa>/<campaña>/bitacora/00-plantilla.md` | optional | The template a session note is drafted from. Give it `## Qué pasó` and `## Cambios de mundo` — those two headings are the ones the draft appends facts under. |
+| `partidas/<mesa>/<campaña>/bitacora/NN-*.md` | no | Session notes, written on close. Numbering comes from the highest `NN` prefix present. |
+| `personajes/<mesa>/` | **no** | Not read. The party is on the server (§7). Material a DM keeps there stays material. |
 | `.pergamino/` | **never** | The app's own folder — the campaign's id, written by the console on registration. Not yours. |
-| `runs/<mesa>/<mesa>.md` | optional | A note about the table, for Obsidian. **Not read by the app.** |
-| `runs/<mesa>/pnj/`, `objects/`, `scenarios/` | **no** | `runs/README.md` in some vaults says a run can override these. **The app does not read them.** Writing them creates files that look meaningful and do nothing. |
+| `partidas/<mesa>/<mesa>.md` | optional | A note about the table, for Obsidian, good for every campaign it plays. **Not read by the app.** |
+| `partidas/<mesa>/<campaña>/pnj/`, `objects/`, `scenarios/` | **no** | Some vaults say a partida can override these. **The app does not read them.** Writing them creates files that look meaningful and do nothing. |
 
 ---
 

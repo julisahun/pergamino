@@ -59,12 +59,18 @@ La carpeta que elijas se detecta por su forma:
 | `campaigns/` | un **mundo** (`talasia/`) | varias campañas, y el índice de notas abarca todo el mundo, así que la lore de `mundo/` se alcanza desde una nota de campaña |
 | `scenarios/` o `story/` | una **campaña suelta** | una sola campaña; las notas se direccionan desde su propia carpeta |
 
+Las partidas no cuelgan de la campaña: **`partidas/<mesa>/<campaña>/`**, al
+lado de `campaigns/`. Una mesa dura más que una aventura, así que `partidas/last/`
+es el grupo y `partidas/last/marea-baja/` es lo que ese grupo le hizo a esa
+campaña. En una campaña suelta, `partidas/` cuelga de la propia carpeta.
+
 ## La regla que lo sostiene
 
-`runs/README.md` del vault dice:
+`partidas/README.md` del vault dice:
 
 > **La preparación no se toca durante el juego; una partida sólo acumula.**
-> Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`.
+> Nada de `partidas/` edita `campaigns/` — ni `story/`, ni `pnj/`, ni
+> `objects/`, ni `scenarios/`.
 
 Antes eso era una comparación de rutas (`assertWritable`). Ahora es la **forma
 de los tipos**. Los cargadores reciben un `VaultDir`, que no tiene `write`, y
@@ -72,7 +78,7 @@ un handle no puede nombrar a su padre — así que escribir fuera de una partida
 no es algo que se rechace en tiempo de ejecución: es un error de compilación.
 Sólo tres descensos resuelven un `WritableVaultDir`:
 
-- `runs/<mesa>/` — la bitácora y el `estado.md` al cerrar sesión
+- `partidas/<mesa>/<campaña>/` — la bitácora y el `estado.md` al cerrar sesión
 - `scenarios/` desde **Preparación**, cerrada mientras haya partida en marcha
 - `.pergamino/` — la carpeta propia de la app, con el identificador de la
   campaña; se escribe una vez al registrarla
@@ -317,7 +323,7 @@ la hay, manda.
 ### Ya no hay `session.json`
 
 El estado vivo está en el servidor, con un número de revisión por acción, y
-la carpeta de la mesa no guarda ninguno. `runs/<mesa>/` conserva la bitácora,
+la carpeta de la mesa no guarda ninguno. La partida conserva la bitácora,
 el `estado.md` y la plantilla; un `session.json` viejo se puede borrar. «Nueva
 sesión» archiva el estado en el servidor y vuelve a sentar a la party.
 
@@ -392,14 +398,14 @@ mesa **no hace ninguna petición de red por contenido de campaña**.
 ### La comprobación que ya no es un script
 
 `acceptance-writes.mjs` jugaba una sesión contra una copia del vault y
-comprobaba por hash que nada fuera de `runs/<mesa>/` había cambiado. Sin
+comprobaba por hash que nada fuera de la partida había cambiado. Sin
 servidor no hay nada que conducir desde fuera, así que esa garantía vive ahora
 en `scope.test.ts` — y, contra el vault de verdad, se hace a mano:
 
 ```bash
 # juega un rato con la carpeta real abierta, cierra la sesión, y:
 git -C ~/Documents/juli/dnd status
-# sólo pueden aparecer ficheros bajo runs/<mesa>/
+# sólo pueden aparecer ficheros bajo partidas/<mesa>/<campaña>/
 ```
 
 ## Estructura

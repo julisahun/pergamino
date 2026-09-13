@@ -10,7 +10,7 @@ const linkFrom = (from: string, target: string) =>
 
 const VANN = 'campaigns/marea-baja/pnj/vann.md'
 const STORY_README = 'campaigns/marea-baja/story/README.md'
-const RUNS_README = 'campaigns/marea-baja/runs/README.md'
+const PARTIDAS_README = 'partidas/README.md'
 
 describe('the index covers the whole world', () => {
   it('reaches both the campaign notes and the world lore', () => {
@@ -61,16 +61,18 @@ describe('wikilink resolution, against the real notes', () => {
     expect(linkFrom(STORY_README, 'maraia')).toBe('campaigns/marea-baja/pnj/maraia.md')
   })
 
-  it('resolves a path link written relative to the campaign folder', () => {
-    expect(linkFrom(STORY_README, 'runs/README')).toBe(RUNS_README)
+  it('resolves a path link written against the vault root', () => {
+    // `partidas/` is a sibling of `campaigns/`, so this one only resolves once
+    // the ancestor walk reaches the world folder.
+    expect(linkFrom(STORY_README, 'partidas/README')).toBe(PARTIDAS_README)
   })
 
   it('will not let a path link settle for the wrong README', () => {
-    expect(linkFrom(STORY_README, 'runs/README')).not.toBe(STORY_README)
+    expect(linkFrom(STORY_README, 'partidas/README')).not.toBe(STORY_README)
   })
 
   it('disambiguates [[README]] to the nearest one', () => {
-    // Both story/README.md and runs/README.md exist. story/README.md links to
+    // Both story/README.md and partidas/README.md exist. story/README.md links to
     // [[README|Marea Baja — Arco de la sequía]] from inside story/.
     const fromStory = index.notes.get('campaigns/marea-baja/story/mapa-del-pueblo.md')
     const link = fromStory?.links.find((l) => l.target === 'README')

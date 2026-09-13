@@ -50,21 +50,24 @@ console reads pnj, objects, scenes, notes and assets from the folder and
 *publishes* to the server only what `reduce` needs of them — statblocks,
 object rules, scene rosters, never prose (`app/src/state/publish.ts` is where
 the cutting happens). The server owns the party and the session. The folder
-holds `runs/<mesa>/` for bitácora and estado, and `.pergamino/campaign.json`
-with the campaign's id, and no `session.json` any more.
+holds `partidas/<mesa>/<campaña>/` for bitácora and estado — beside
+`campaigns/`, not inside one, because a mesa outlives the adventure it is
+playing — and `.pergamino/campaign.json` with the campaign's id, and no
+`session.json` any more.
 
 ## The rule this app exists to keep
 
-`runs/README.md` in a campaign says:
+`partidas/README.md` in the vault says:
 
 > La preparación no se toca durante el juego; una partida sólo acumula.
-> Nada de `runs/` edita `story/`, `pnj/`, `objects/` ni `scenarios/`.
+> Nada de `partidas/` edita `campaigns/` — ni `story/`, ni `pnj/`, ni
+> `objects/`, ni `scenarios/`.
 
 It is enforced by **types**, not by a check. Loaders take `VaultDir`, which has
 no `write`. A handle cannot address its parent. Exactly three descents in
 `shared/vault/binding.ts` resolve a `WritableVaultDir`:
 
-- `CampaignVault.run(mesa)` — `runs/<mesa>/`, for bitácora and estado.md
+- `CampaignVault.run(mesa)` — `partidas/<mesa>/<campaña>/`, for bitácora and estado.md
 - `CampaignVault.scenarios()` — `scenarios/`, from Preparación, which the UI
   refuses while a run is live
 - `CampaignVault.pergamino()` — `.pergamino/`, the app's own dotdir, written
@@ -94,9 +97,9 @@ What falls out of that:
 - **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
   ~70 KB data URIs, which is exactly what a note cannot hold.
 - **A PJ is a row on the server**: the `-fc5.xml` its player uploaded through
-  the campaign's link, plus its live layer. The vault holds no party — a
-  `players/` folder, if there is one, is ordinary material (trasfondos, guías,
-  the creator's json) reachable as notes and never read as characters. Level-up
+  the campaign's link, plus its live layer. The vault holds no party —
+  `personajes/<mesa>/`, if there is one, is ordinary material (trasfondos,
+  guías, the creator's json) reachable as notes and never read as characters. Level-up
   is the player uploading a new xml; the live layer survives it. The app still
   never reads a field of the creator's build recipe, and the xml says so
   itself — *"si algún número de la app no coincide con los de arriba, mandan
@@ -317,7 +320,7 @@ anyway. Deciding whether to port or drop it is still open — see
 `lint/README.md`.
 
 The vault tests read the DM's live campaign — the prep, and the four real
-`-fc5.xml` files still kept under `runs/last/players/`, which the app no longer
+`-fc5.xml` files still kept under `personajes/last/`, which the app no longer
 reads as a party but which are the real sheets of a real one (`loadParty()` in
 `test/fixture.ts`). Nothing reads live state from the folder; there is none.
 A test that needs someone at the table **builds** the state — `seated()`, plus
@@ -334,7 +337,7 @@ They open the app on `?fixture=example`, which mounts
 `app/src/fixtures/example.json` in memory — the native folder picker cannot be
 driven from a script — and registers it on the dev server under one fixed id,
 wiped and rebuilt on every boot, uploading the sheet the snapshot keeps under
-`players/`. The fixture registers under a fixed id *and* a fixed DM secret,
+`personajes/<mesa>/`. The fixture registers under a fixed id *and* a fixed DM secret,
 which stands in for the `.pergamino/campaign.json` a real folder holds; there
 is no test door in the app. The fixture is dev-only; `import.meta.env.DEV`
 keeps it out of the production bundle. It is the *only* copy of the demo

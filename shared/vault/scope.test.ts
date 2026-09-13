@@ -2,15 +2,19 @@
  * The write guard, now that it is structural.
  *
  * `paths.test.ts` used to assert that `resolveWritable` refused a path outside
- * `runs/<mesa>/`. There is no path to refuse any more: the loaders are handed
+ * the partida. There is no path to refuse any more: the loaders are handed
  * `VaultDir`, which has no `write`, and a handle cannot address its parent —
  * so the equivalent question is *which handles ever become writable at all*.
  * The memory vault records that, and this is the file that reads the record.
  *
- * `runs/README.md` is still the rule being kept:
+ * `partidas/README.md` is still the rule being kept:
  *
  *   "La preparación no se toca durante el juego; una partida sólo acumula.
- *    Nada de `runs/` edita `story/`, `pnjs/`, `objects/` ni `scenarios/`."
+ *    Nada de `partidas/` edita `campaigns/` — ni `story/`, ni `pnj/`, ni
+ *    `objects/`, ni `scenarios/`."
+ *
+ * Which is now a fact about the tree and not only about handles: a partida is
+ * a sibling of `campaigns/`, so every write lands in a different subtree.
  */
 import { describe, expect, it } from 'vitest'
 import { openMemoryVault } from '../../test/memory.ts'
@@ -18,13 +22,13 @@ import { PLANTILLA } from '../../test/memory.ts'
 import { VaultWriteError } from './source.ts'
 
 const CAMPAIGN = 'campaigns/marea-chica'
-const RUN = `${CAMPAIGN}/runs/guils`
+const RUN = 'partidas/guils/marea-chica'
 
 /** Every prep folder that a live session must never be able to write. */
 const PREP = ['story', 'pnjs', 'objects', 'assets', 'pregenerados', 'players']
 
 describe('what a session can write', () => {
-  it('lands every write inside runs/<mesa>/', async () => {
+  it('lands every write inside partidas/<mesa>/<campaña>/', async () => {
     const { vault, memory } = await openMemoryVault()
     await vault.writeBitacora('guils', '01-2026-08-27.md', '# Sesión 1\n')
     await vault.writeEstado('guils', '# Estado\n')
@@ -95,7 +99,7 @@ describe('what a session can write', () => {
     await expect(cast.createDir('nuevo')).rejects.toThrow(VaultWriteError)
   })
 
-  it('refuses a run name that tries to leave runs/', async () => {
+  it('refuses a run name that tries to leave partidas/', async () => {
     const { vault } = await openMemoryVault()
     for (const bad of ['..', '.', '', 'guils/../../story']) {
       await expect(vault.run(bad)).rejects.toThrow()

@@ -255,7 +255,7 @@ export const es = {
   registro: 'Registro de la sesión',
   sinRegistro: 'Todavía no ha pasado nada en esta sesión.',
   fecha: 'Fecha',
-  avisoEscritura: 'Se escriben dos ficheros dentro de runs/. Nada de la preparación se toca.',
+  avisoEscritura: 'Se escriben dos ficheros dentro de partidas/. Nada de la preparación se toca.',
 
   // preparación
   rosters: 'Reparto de las escenas',

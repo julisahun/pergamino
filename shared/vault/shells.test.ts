@@ -12,7 +12,7 @@ import { reduce } from '../session/reducer.ts'
 import { emptySession } from './session.ts'
 import { applyDeviations, draftBitacora, proposeDeviations } from './writeback.ts'
 
-const RUN = 'campaigns/marea-chica/runs/guils'
+const RUN = 'partidas/guils/marea-chica'
 
 describe('closing a session', () => {
   it('numbers the note past the template and no further', async () => {

@@ -79,12 +79,16 @@ export function exampleTree(): MemoryTree {
           'README.md': '# Marea Chica\n\n#sequia\n\nEl [[faro]] y [[Ossian]].\n',
           'faro.md': '---\nficha: El faro\n---\n\n# El faro\n\n#lugar\n',
         },
-        runs: {
-          'README.md': '# runs/\n\nUna carpeta por mesa.\n',
-          guils: {
-            'estado.md': ESTADO,
-            bitacora: { '00-plantilla.md': PLANTILLA },
-          },
+      },
+    },
+    // Beside `campaigns/`, not inside one: a mesa outlives the adventure it is
+    // playing, so `partidas/<mesa>/<campaña>/` is what it did to each of them.
+    partidas: {
+      'README.md': '# partidas/\n\nUna carpeta por mesa.\n',
+      guils: {
+        'marea-chica': {
+          'estado.md': ESTADO,
+          bitacora: { '00-plantilla.md': PLANTILLA },
         },
       },
     },

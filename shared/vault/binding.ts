@@ -5,10 +5,17 @@
  * means. There are no path strings to compare and no `assertWritable`: the
  * campaign, the world and every prep folder are handed out as `VaultDir`,
  * which has no `write`, and exactly three descents resolve a
- * `WritableVaultDir` — `runs/<mesa>/` while playing, `scenarios/` from
- * Preparación, and `.pergamino/`, the app's own folder, which holds the
- * campaign's id and nothing a human edits. Writing anywhere else is not
- * refused at runtime; there is nothing to write it with.
+ * `WritableVaultDir` — `partidas/<mesa>/<campaña>/` while playing,
+ * `scenarios/` from Preparación, and `.pergamino/`, the app's own folder,
+ * which holds the campaign's id and nothing a human edits. Writing anywhere
+ * else is not refused at runtime; there is nothing to write it with.
+ *
+ * A partida hangs off the **picked folder**, not off the campaign: a mesa
+ * outlives any one adventure, so `partidas/last/` is the group and
+ * `partidas/last/marea-baja/` is what that group did to that campaign. In a
+ * world that puts it beside `campaigns/`, which is also why nothing a live
+ * session writes can land inside prep any more — it is a different subtree,
+ * not a checked path.
  *
  * The picked folder is shape-detected, so both layouts the format allows are
  * readable:
@@ -41,7 +48,14 @@ import {
 export type VaultShape = 'world' | 'campaign'
 
 export const CAMPAIGNS_DIR = 'campaigns'
-export const RUNS_DIR = 'runs'
+/** Sibling of `campaigns/`: one folder per mesa, one folder per campaign inside it. */
+export const PARTIDAS_DIR = 'partidas'
+/**
+ * Sibling of `partidas/`: the PJ folders, one level per mesa. The app never
+ * reads it — a character is a row on the server, made from the xml its player
+ * uploaded — but the suite builds its party from the DM's real sheets there.
+ */
+export const PERSONAJES_DIR = 'personajes'
 export const ASSETS_DIR = 'assets'
 /** The app's own folder inside a campaign. Skipped by every note walk, being a dotdir. */
 export const PERGAMINO_DIR = '.pergamino'
@@ -159,11 +173,17 @@ export class CampaignVault {
     return (await detectShape(this.notesRoot)).campaigns
   }
 
-  /** The run folders (`guils`, `last`, …) present for the campaign. */
+  /**
+   * The mesas (`guils`, `last`, …) under `partidas/`.
+   *
+   * Every mesa is listed, not only the ones that already played this
+   * campaign: a group that exists can sit down to any adventure, and its
+   * folder for this one is created when the first session closes.
+   */
   async listRuns(): Promise<string[]> {
-    const runs = await this.campaignDir.dir(RUNS_DIR)
-    if (!runs) return []
-    return (await runs.list()).dirs.filter((d) => !d.startsWith('.')).sort()
+    const partidas = await this.notesRoot.dir(PARTIDAS_DIR)
+    if (!partidas) return []
+    return (await partidas.list()).dirs.filter((d) => !d.startsWith('.')).sort()
   }
 
   loadCampaign(): Promise<CampaignData> {
@@ -246,27 +266,33 @@ export class CampaignVault {
 
   async writeBitacora(mesa: string, filename: string, content: string): Promise<string> {
     const written = await writeBitacora(await this.run(mesa), filename, content)
-    return `${RUNS_DIR}/${mesa}/${written}`
+    return `${this.runPath(mesa)}/${written}`
   }
 
   async writeEstado(mesa: string, content: string): Promise<string> {
     const written = await writeEstado(await this.run(mesa), content)
-    return `${RUNS_DIR}/${mesa}/${written}`
+    return `${this.runPath(mesa)}/${written}`
+  }
+
+  /** Where a mesa's partida for this campaign lives, relative to the picked folder. */
+  private runPath(mesa: string): string {
+    return `${PARTIDAS_DIR}/${mesa}/${this.campaignId}`
   }
 
   // --- the three writable descents -----------------------------------------
 
   /**
-   * `runs/<mesa>/` — the only place a live session may write.
+   * `partidas/<mesa>/<campaña>/` — the only place a live session may write.
    *
-   * `createDir` rather than `dir` so a run folder that exists in the campaign
-   * but has no session yet still opens; the run itself is checked by the
-   * caller through `listRuns`.
+   * `createDir` rather than `dir` so a mesa that has never played this
+   * campaign still opens on its first session; the mesa itself is checked by
+   * the caller through `listRuns`.
    */
   async run(mesa: string): Promise<WritableVaultDir> {
     assertRunName(mesa)
-    const runs = await this.campaignWritable.createDir(RUNS_DIR)
-    return runs.createDir(mesa)
+    const partidas = await this.rootWritable.createDir(PARTIDAS_DIR)
+    const grupo = await partidas.createDir(mesa)
+    return grupo.createDir(this.campaignId)
   }
 
   /**
@@ -285,10 +311,12 @@ export class CampaignVault {
     return this.campaignWritable.createDir(PERGAMINO_DIR)
   }
 
-  /** A read-only handle on a run, for everything that only reads one. */
-  private runRead(mesa: string): Promise<VaultDir | null> {
+  /** A read-only handle on a partida, for everything that only reads one. */
+  private async runRead(mesa: string): Promise<VaultDir | null> {
     assertRunName(mesa)
-    return this.campaignDir.dir(RUNS_DIR).then((runs) => (runs ? runs.dir(mesa) : null))
+    const partidas = await this.notesRoot.dir(PARTIDAS_DIR)
+    const grupo = partidas ? await partidas.dir(mesa) : null
+    return grupo ? grupo.dir(this.campaignId) : null
   }
 }
 

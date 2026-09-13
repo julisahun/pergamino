@@ -136,7 +136,7 @@ interface DmStore {
   campaign: string
   campaigns: string[]
   tab: Tab
-  /** The run folder bitácora and estado.md are written into. */
+  /** The mesas offered to play this campaign; the partida folder is created on close. */
   mesa: string
   runs: string[]
   scenes: Scene[]
@@ -476,7 +476,7 @@ export const useDm = create<DmStore>((set, get) => ({
 
   /**
    * The one place the app writes a scene. Refused while a run is live, so it
-   * can never be a *session* editing preparation — see `runs/README.md`.
+   * can never be a *session* editing preparation — see `partidas/README.md`.
    */
   saveRoster: async (sceneId, roster) => {
     const state = get().state
@@ -608,7 +608,7 @@ async function bringUp(opened: CampaignVault, set: Setter, name: string): Promis
     if (runs.length === 0) {
       set({
         phase: 'error',
-        error: `${name}: la campaña ${vault.campaignId} no tiene ninguna mesa en runs/.`,
+        error: `${name}: no hay ninguna mesa en partidas/.`,
       })
       return
     }
