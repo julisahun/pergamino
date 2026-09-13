@@ -96,10 +96,16 @@ describe('the DM', () => {
     expect(reg.dmSecret).toMatch(/^[A-Za-z0-9_-]{20}$/)
     const known = await (await reg.dm(`/api/dm/campaigns/${reg.id}`)).json()
     expect(known).toMatchObject({ exists: true, title: 'Marea Baja' })
-    expect(known.mesas).toContainEqual({ id: reg.mesa, title: 'Last', playing: true })
+    expect(known.mesas).toContainEqual({ id: reg.mesa, title: 'Last', playing: true, party: 0 })
     const summary = await (await reg.dm(reg.p())).json()
     expect(summary).toMatchObject({ title: 'Marea Baja', rev: 0, party: [] })
     expect(summary.mesa).toEqual({ id: reg.mesa, title: 'Last' })
+
+    // `party` counts, which is what tells a real group from the empty shell an
+    // upgrade leaves behind — the console adopts on it.
+    await reg.dm(reg.p('/characters?player=Ana'), { method: 'POST', body: TOLMO })
+    const counted = await (await reg.dm(`/api/dm/campaigns/${reg.id}`)).json()
+    expect(counted.mesas.find((m: { id: string }) => m.id === reg.mesa).party).toBe(1)
 
     for (const bad of [fetch(`${base}/api/dm/campaigns/${reg.id}`), as('nope')(`/api/dm/campaigns/${reg.id}`)]) {
       const res = await bad

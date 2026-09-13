@@ -78,8 +78,12 @@ export interface CampaignRegistration {
   exists: true
   id: string
   title: string
-  /** `playing` marks the group that has this campaign on the table right now. */
-  mesas: { id: string; title: string; playing: boolean }[]
+  /**
+   * `playing` marks the group that has this campaign on the table right now;
+   * `party` is how many people it has, which is what tells a real group from
+   * an empty shell left over by an upgrade.
+   */
+  mesas: { id: string; title: string; playing: boolean; party: number }[]
 }
 
 /** The DM's view of one partida — a mesa at a campaign. */

@@ -705,7 +705,16 @@ async function resolveMesa(campaign: string): Promise<string> {
 
 async function mesaAlreadyHere(campaign: string): Promise<string | undefined> {
   const known = await api.campaign(secret!, campaign)
-  return known.exists ? known.mesas.find((m) => m.playing)?.id : undefined
+  if (!known.exists) return undefined
+  // Prefer a mesa that actually has people on it. The upgrade turned **every**
+  // old campaign into a mesa of its own, but only the one whose party was
+  // uploaded holds anyone; adopting an empty shell — whichever campaign the DM
+  // happened to open first — strands the real party behind it.
+  const peopled = known.mesas.filter((m) => m.party > 0)
+  if (peopled.length === 1) return peopled[0]!.id
+  // Several groups with people is a server that really has several: guessing
+  // would be worse than starting a new one.
+  return peopled.find((m) => m.playing)?.id
 }
 
 const titleCase = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1)

@@ -189,9 +189,12 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
       exists: true,
       id: row.id,
       title: row.title,
-      mesas: ctx.registry
-        .mesas()
-        .map((m) => ({ id: m.id, title: m.title, playing: m.playing === row.id })),
+      mesas: ctx.registry.mesas().map((m) => ({
+        id: m.id,
+        title: m.title,
+        playing: m.playing === row.id,
+        party: ctx.store.characters(m.id).length,
+      })),
     })
   })
   route('DELETE', '/api/dm/campaigns/:id', (req, res, params) => {
