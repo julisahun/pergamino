@@ -407,4 +407,10 @@ export const es = {
   queHaceElRasgo: 'Qué hace, con las palabras que quieras leer en mesa.',
   competencias: 'Competencias y experticia',
   tocaParaCambiar: 'Toca para cambiar: nada → competente → experticia',
+  teLlevas: 'Te llevas',
+  mediaDe: 'media de',
+  faltaElegir: 'Falta elegir:',
+  sinConjurosQueOfrecer: 'No hay conjuros que ofrecer para esta clase y nivel.',
+  sinTabla: 'Nadie ha escrito todavía qué gana un',
+  sinTablaAyuda: 'Se rellena a mano, y sigue valiendo igual.',
 } as const

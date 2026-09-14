@@ -64,7 +64,7 @@ console.log('  console card agrees')
 await shot('pj-3-dano')
 
 console.log('curación desde la consola:')
-await dm.locator('.pc-card').first().getByRole('button', { name: 'Al máximo' }).click()
+await dm.locator('.pc-card', { hasText: 'Pip Nosewick' }).getByRole('button', { name: 'Al máximo' }).click()
 await phone.waitForFunction((before) => document.querySelector('.pj-hp-now')?.textContent === before, hpBefore)
 console.log(`  phone back to ${await phone.locator('.pj-hp-now').innerText()}`)
 

@@ -1082,3 +1082,9 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   cursor: pointer;
 }
 .button-like:hover { border-color: var(--accent-dim); background: #2f2820; }
+
+/* The ficha's traits. Added when a level-up started granting them: a feature
+   the DM handed over and could not then see was worse than no list at all. */
+.sheet .pc-traits { margin: 4px 0 12px; padding-left: 18px; }
+.sheet .pc-traits li { margin-bottom: 6px; line-height: 1.5; }
+.sheet .pc-traits b { color: var(--ink); }

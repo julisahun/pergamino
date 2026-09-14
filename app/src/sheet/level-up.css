@@ -131,3 +131,32 @@
   .lvl-row label > span { min-width: 76px; }
   .lvl-panel { padding: 16px; }
 }
+
+/* --- what the rules table proposes ------------------------------------- */
+
+.lvl-from { color: var(--ink-faint); font-size: 11px; }
+.lvl-manual { border: 1px dashed var(--line); }
+
+.lvl-granted {
+  margin: 6px 0; padding: 10px; border-radius: 6px;
+  background: var(--bg); border-left: 2px solid var(--accent);
+}
+.lvl-granted b { color: var(--ink); }
+.lvl-granted p { margin: 4px 0 0; color: var(--ink-dim); font-size: 12px; line-height: 1.5; }
+
+.lvl-choice { border-top: 1px solid var(--line); }
+.lvl-choice .lvl-toggle { border-top: 0; }
+.lvl-chosen { margin: -4px 0 8px; color: var(--accent); font-size: 12px; }
+.lvl-help { margin: 0 0 8px; color: var(--ink-faint); font-size: 12px; line-height: 1.5; }
+.lvl-pending { color: var(--ink-faint); }
+
+.lvl-spells { display: grid; gap: 6px; margin-bottom: 10px; max-height: 340px; overflow-y: auto; }
+.lvl-spell {
+  display: grid; gap: 3px; padding: 10px; text-align: left;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--ink-dim); font: inherit; cursor: pointer;
+}
+.lvl-spell.on { border-color: var(--accent); color: var(--ink); }
+.lvl-spell-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.lvl-spell-head b { color: var(--ink); font-size: 14px; }
+.lvl-spell-sum { font-size: 12px; line-height: 1.5; }

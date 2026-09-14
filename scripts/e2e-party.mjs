@@ -14,7 +14,8 @@ await dm.waitForSelector('.pc-card')
 console.log('party:')
 await shot('party-1-inicial')
 
-const card = dm.locator('.pc-card').first()
+// Named rather than first: the demo party has two people in it.
+const card = dm.locator('.pc-card', { hasText: 'Pip Nosewick' })
 await card.getByRole('button', { name: /Dar objeto/ }).click()
 await dm.getByRole('button', { name: 'Farol Enmohecido' }).click()
 await dm.waitForTimeout(300)

@@ -122,6 +122,20 @@ export function PcSheet({
           </div>
         )}
 
+        {sheet && sheet.traits.length > 0 && (
+          <>
+            <div className="carry-label">{es.rasgosTab}</div>
+            <ul className="pc-traits">
+              {sheet.traits.map((t) => (
+                <li key={t.id}>
+                  <b>{t.name}</b>
+                  {t.text && <span className="muted"> — {t.text}</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         <div className="carry-label">{es.habilidades}</div>
         <div className="skill-grid">
           {skills.map((s) => (
