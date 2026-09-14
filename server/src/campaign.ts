@@ -25,12 +25,14 @@ import type {
 import { allowed } from '../../shared/session/allow.ts'
 import { projectPlayer, type PlayerContext, type PlayerView } from '../../shared/session/player.ts'
 import type { PcInfo } from '../../shared/session/project.ts'
+import type { SheetPatch } from '../../shared/protocol.ts'
 import { LocalProjection, contextOf, pcInfoOf } from '../../shared/session/projection.ts'
 import { reduce } from '../../shared/session/reducer.ts'
 import { seatParty } from '../../shared/session/seat.ts'
 import type { Character, SessionState, TableView } from '../../shared/types.ts'
 import { emptySession } from '../../shared/vault/session.ts'
-import { isFc5Sheet, parseSheet, type SheetStats } from '../../shared/vault/sheet.ts'
+import { isFc5Sheet, parseSheet } from '../../shared/vault/sheet.ts'
+import { type Sheet } from '../../shared/character.ts'
 import { badSheet, forbidden, notFound, stale } from './errors.ts'
 import { randomSecret } from './auth.ts'
 import { Store, toCharacter, type CampaignRow, type MesaRow } from './store.ts'
@@ -54,7 +56,7 @@ export class CampaignSession {
   #rev: number
   #state: SessionState
   #characters: Character[] = []
-  #sheets = new Map<string, SheetStats>()
+  #sheets = new Map<string, Sheet>()
   #prep: PrepBody = EMPTY_PREP
   #publishedAt: number | null = null
   #projection = new LocalProjection()
@@ -133,7 +135,7 @@ export class CampaignSession {
   get characters(): Character[] {
     return this.#characters
   }
-  get sheets(): Map<string, SheetStats> {
+  get sheets(): Map<string, Sheet> {
     return this.#sheets
   }
   get prep(): PrepBody {
@@ -229,8 +231,9 @@ export class CampaignSession {
     this.store.insertCharacter({
       id,
       mesa: this.mesaId,
-      name: sheet.name ?? player ?? id,
+      name: sheet.name || player || id,
       player: player.trim().slice(0, 80),
+      sheet: JSON.stringify(sheet),
       sheet_xml: xml,
       created_at: now,
       updated_at: now,
@@ -241,21 +244,67 @@ export class CampaignSession {
     return { id, rev }
   }
 
-  /** A level-up: the sheet changes, the live layer is kept. */
+  /**
+   * A re-import: a fresh xml replaces the record wholesale.
+   *
+   * This is not the level-up any more — `editSheet` is — and what it is for is
+   * starting over: a character rebuilt in the creator, or a bad import. The
+   * live layer survives, and **anything edited in the app since the last
+   * import is lost**, because the document the caller just handed over is a
+   * complete character and cannot be merged with one.
+   */
   replaceSheet(id: string, xml: string): number {
     if (!this.hasCharacter(id)) throw notFound('Ese personaje no está en la campaña')
     const sheet = this.#parse(xml)
-    this.store.setSheet(id, xml, sheet.name ?? id, this.now())
+    const before = this.#sheets.get(id)
+    this.store.setSheet(id, JSON.stringify(sheet), xml, sheet.name || id, this.now())
     this.#loadParty()
     this.#rebuild()
     // HP above the new maximum is capped; anything else the player typed stays.
+    // A re-import is not a level-up, so nothing is granted upward here.
     const live = this.#state.play[id]
     const cap = sheet.hpMax
     const state =
       live && cap !== null && live.hp !== null && live.hp > cap
         ? { ...this.#state, play: { ...this.#state.play, [id]: { ...live, hp: cap } } }
         : this.#state
-    return this.#bump('system:sheet', this.#seated(state), { id })
+    return this.#bump('system:sheet', this.#seated(state), { id, before })
+  }
+
+  /**
+   * An edit to a character: a level-up, a correction, a new trait.
+   *
+   * The patch is merged shallowly — see `SheetPatch`. Two things happen around
+   * it that a caller should not have to remember:
+   *
+   * - **Hit points follow their maximum.** Raising `hpMax` raises the current
+   *   total by the same amount, which is what levelling up does and is the one
+   *   piece of this that a re-upload always got wrong: a character at 11/11
+   *   who gained 8 used to come back 11/19, hurt without being hit. Lowering
+   *   it caps, as before.
+   * - **The previous record is written to the log.** `action_log` already
+   *   keeps one row per revision, so an edit that went wrong can be read back
+   *   and re-applied without a column to store it in.
+   *
+   * Spell slots need no such care: `LiveState.spent` counts what is gone, so a
+   * new slot arrives unspent on its own.
+   */
+  editSheet(id: string, patch: SheetPatch): number {
+    const before = this.#sheets.get(id)
+    if (!before) throw notFound('Ese personaje no está en la campaña')
+    const sheet: Sheet = { ...before, ...patch }
+    this.store.updateSheet(id, JSON.stringify(sheet), sheet.name || id, this.now())
+    this.#loadParty()
+    this.#rebuild()
+
+    const live = this.#state.play[id]
+    let state = this.#state
+    if (live && live.hp !== null && sheet.hpMax !== null) {
+      const gained = before.hpMax === null ? 0 : sheet.hpMax - before.hpMax
+      const hp = Math.max(0, Math.min(sheet.hpMax, live.hp + Math.max(0, gained)))
+      if (hp !== live.hp) state = { ...state, play: { ...state.play, [id]: { ...live, hp } } }
+    }
+    return this.#bump('system:levelup', this.#seated(state), { id, before })
   }
 
   setPortrait(id: string, mime: string, bytes: Uint8Array): number {
@@ -362,7 +411,7 @@ export class CampaignSession {
 
   // --- internals ----------------------------------------------------------------
 
-  #parse(xml: string): SheetStats {
+  #parse(xml: string): Sheet {
     if (xml.length > MAX_XML) throw badSheet('La ficha es demasiado grande')
     if (!isFc5Sheet(xml)) throw badSheet('Eso no es una ficha de Fight Club 5')
     return parseSheet(xml)
@@ -371,7 +420,9 @@ export class CampaignSession {
   #loadParty(): void {
     const rows = this.store.characters(this.mesaId)
     this.#characters = rows.map(toCharacter)
-    this.#sheets = new Map(rows.map((r) => [r.id, parseSheet(r.sheet_xml)]))
+    // The record, read back. Nothing is re-derived from the xml here: that
+    // ran once, when the character was created.
+    this.#sheets = new Map(rows.map((r) => [r.id, JSON.parse(r.sheet) as Sheet]))
   }
 
   #seated(state: SessionState): SessionState {

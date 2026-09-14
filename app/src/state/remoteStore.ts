@@ -20,7 +20,7 @@ import type { PcInfo, ProjectContext } from '../../../shared/session/project.ts'
 import { LocalProjection, contextOf, pcInfoOf } from '../../../shared/session/projection.ts'
 import type { CampaignData } from '../../../shared/vault/campaign.ts'
 import { emptySession } from '../../../shared/vault/session.ts'
-import type { SheetStats } from '../../../shared/vault/sheet.ts'
+import type { Sheet } from '../../../shared/character.ts'
 import { LiveSocket, type SocketStatus } from '../net/ws.ts'
 import { wsUrl } from '../net/api.ts'
 
@@ -35,7 +35,7 @@ export class RemoteSessionStore {
   #state: SessionState = emptySession()
   #campaign: CampaignData = EMPTY_CAMPAIGN
   #characters: Character[] = []
-  #sheets = new Map<string, SheetStats>()
+  #sheets = new Map<string, Sheet>()
   #projection = new LocalProjection()
   #listeners = new Set<() => void>()
   #socket: LiveSocket | null = null
@@ -59,7 +59,7 @@ export class RemoteSessionStore {
   get characters(): Character[] {
     return this.#characters
   }
-  get sheets(): Map<string, SheetStats> {
+  get sheets(): Map<string, Sheet> {
     return this.#sheets
   }
   get ctx(): ProjectContext {

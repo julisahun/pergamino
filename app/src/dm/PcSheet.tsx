@@ -12,7 +12,18 @@
  */
 import { useEffect } from 'react'
 import { ABILITY_LABEL, skillRows } from '../../../shared/skills.ts'
-import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
+import {
+  abilityMod,
+  formatMod,
+  passivePerceptionOf,
+  sheetSaveRows,
+  spellAttackOf,
+  spellDcOf,
+  summaryOf,
+  ABILITY_LABEL as ABILITY_NAME,
+  type Abilities,
+  type Sheet,
+} from '../../../shared/character.ts'
 import { es } from '../strings/es.ts'
 import { Face } from './Face.tsx'
 import type { Combatant } from './combat.ts'
@@ -25,7 +36,7 @@ export function PcSheet({
   onClose,
 }: {
   c: Combatant
-  sheet: SheetStats | undefined
+  sheet: Sheet | undefined
   onClose: () => void
 }) {
   useEffect(() => {
@@ -34,21 +45,20 @@ export function PcSheet({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const passive = sheet ? passivePerceptionOf(sheet) : null
+  const dc = sheet ? spellDcOf(sheet) : null
+  const spellAttack = sheet ? spellAttackOf(sheet) : null
   const rolls = [
-    sheet?.initMod != null ? [es.iniciativaLarga, formatMod(sheet.initMod)] : null,
+    sheet?.initiative != null ? [es.iniciativaLarga, formatMod(sheet.initiative)] : null,
     sheet?.proficiency != null ? [es.competencia, formatMod(sheet.proficiency)] : null,
-    sheet?.passivePerception != null
-      ? [es.percepcionPasiva, String(sheet.passivePerception)]
-      : null,
-    sheet?.spellDc != null ? [es.cdConjuros, String(sheet.spellDc)] : null,
-    sheet?.spellAttack != null ? [es.ataqueConjuros, formatMod(sheet.spellAttack)] : null,
-    sheet?.spellAbility ? [es.conjurosPor, sheet.spellAbility] : null,
+    passive != null ? [es.percepcionPasiva, String(passive)] : null,
+    dc != null ? [es.cdConjuros, String(dc)] : null,
+    spellAttack != null ? [es.ataqueConjuros, formatMod(spellAttack)] : null,
+    sheet?.spellcasting ? [es.conjurosPor, ABILITY_NAME[sheet.spellcasting.ability]] : null,
   ].filter(Boolean) as [string, string][]
 
   const skills = skillRows(sheet)
-  // A sheet that quotes none tells us nothing about proficiency, so every row
-  // is a bare ability modifier and the reader has to be told.
-  const anyStated = skills.some((s) => s.stated)
+  const saves = sheetSaveRows(sheet)
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -57,7 +67,7 @@ export function PcSheet({
           <Face src={c.portrait} name={c.name} className="crow-face" />
           <div style={{ flex: 1 }}>
             <h2>{c.name}</h2>
-            {sheet?.summary && <div className="sub">{sheet.summary}</div>}
+            {sheet && summaryOf(sheet) && <div className="sub">{summaryOf(sheet)}</div>}
             <div className="sub">
               {[
                 c.hpMax !== null && `${es.pg} ${c.live.hp ?? 0}/${c.hpMax}`,
@@ -99,24 +109,23 @@ export function PcSheet({
           </div>
         )}
 
-        {sheet?.saves.length ? (
+        {sheet && (
           <div className="pc-field">
             <span>{es.tiradasSalvacion}</span>
             <div className="rolls">
-              {sheet.saves.map((s) => (
-                <span className="roll" key={s.name}>
-                  {s.name} <b>{formatMod(s.mod)}</b>
+              {saves.map((s) => (
+                <span className={`roll${s.proficient ? ' stated' : ''}`} key={s.ability}>
+                  {s.label} <b>{s.mod === null ? '—' : formatMod(s.mod)}</b>
                 </span>
               ))}
             </div>
           </div>
-        ) : null}
+        )}
 
         <div className="carry-label">{es.habilidades}</div>
-        {!anyStated && <p className="muted skill-note">{es.habilidadesSinDeclarar}</p>}
         <div className="skill-grid">
           {skills.map((s) => (
-            <div className={`skill${s.stated ? ' stated' : ''}`} key={s.name}>
+            <div className={`skill${s.proficient ? ' stated' : ''}`} key={s.key}>
               <span className="skill-name">{s.name}</span>
               <span className="skill-ability">{ABILITY_LABEL[s.ability]}</span>
               <span className="skill-mod">{s.mod === null ? '—' : formatMod(s.mod)}</span>

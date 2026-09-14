@@ -13,7 +13,7 @@
 import type { PublishedObject } from '../protocol.ts'
 import type { LiveState, Ref, SessionState, TableCombatant } from '../types.ts'
 import { makeRef, refKind } from '../types.ts'
-import { emptySheet, type SheetStats } from '../vault/sheet.ts'
+import { emptySheet, type Sheet } from '../character.ts'
 import { projectTable, type ProjectContext } from './project.ts'
 
 /** A campaign object the character is carrying, with its charges. */
@@ -32,7 +32,7 @@ export type PlayerLive = Omit<LiveState, 'note'>
 export interface PlayerView {
   campaign: { id: string; title: string }
   pc: { id: string; name: string; player: string; portrait: string | null }
-  sheet: SheetStats
+  sheet: Sheet
   live: PlayerLive
   objects: PlayerObject[]
   party: TableCombatant[]
@@ -43,7 +43,7 @@ export interface PlayerView {
 /** The table's context plus what only a player's own page needs. */
 export interface PlayerContext extends ProjectContext {
   campaignId: string
-  sheets: Map<string, SheetStats>
+  sheets: Map<string, Sheet>
   objects: Map<string, PublishedObject>
 }
 

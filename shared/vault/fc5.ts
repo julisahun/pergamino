@@ -5,16 +5,19 @@
  * exports and are the same ones the DM's own generator writes with
  * (`pregenerados/fightclub.py`: `SKILL_IX`, `ESCUELA`, `TIPO_*`, `SLOT_*`,
  * `CAT_EXPERTICIA`). They decode ids into names — a lookup, not a rule.
+ *
+ * They belong to the **import** path and nowhere else. Once a character is in
+ * the database it is a `Sheet` (`shared/character.ts`), whose skills are ascii
+ * keys and whose items say what kind they are; no integer from this file
+ * survives the trip in.
  */
-import type { Abilities } from './sheet.ts'
-
-/** The order `<abilities>` writes the six, and the index a save id names. */
-export const ABILITY_KEYS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const satisfies readonly (keyof Abilities)[]
+import type { ItemKind, ItemSlot } from '../character.ts'
 
 /**
  * Skill ids are `100 + i`, with `i` the skill's position in **English**
  * alphabetical order (Acrobatics 0 … Survival 17) — not the Spanish one the
- * sheet lists them in. Names are the ones `shared/skills.ts` uses.
+ * sheet lists them in. The names are the Spanish ones, which `skillKeyOf`
+ * turns into the key the record stores.
  */
 export const SKILL_FC5_ORDER: readonly string[] = [
   'Acrobacias',
@@ -51,8 +54,6 @@ export const SPELL_SCHOOLS: Record<number, string> = {
   8: 'Transmutación',
 }
 
-export type ItemKind = 'light' | 'medium' | 'heavy' | 'shield' | 'melee' | 'ranged' | 'ammo'
-
 /** `<item><type>` */
 export const ITEM_KIND: Record<number, ItemKind> = {
   1: 'light',
@@ -63,8 +64,6 @@ export const ITEM_KIND: Record<number, ItemKind> = {
   6: 'ranged',
   7: 'ammo',
 }
-
-export type ItemSlot = 'weapon' | 'shield' | 'armor'
 
 /** `<item><slot>` — where an equipped item sits. Anything else is carried. */
 export const ITEM_SLOT: Record<number, ItemSlot> = {

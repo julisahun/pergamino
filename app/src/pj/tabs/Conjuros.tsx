@@ -1,5 +1,6 @@
 import type { PlayerView } from '../../../../shared/session/player.ts'
 import { makeRef } from '../../../../shared/types.ts'
+import { slotsOf } from '../../../../shared/character.ts'
 import { es } from '../../strings/es.ts'
 import { usePj } from '../../state/pjStore.ts'
 import { Expandable } from '../ui/Expandable.tsx'
@@ -10,7 +11,8 @@ export function Conjuros({ view, disabled }: { view: PlayerView; disabled: boole
   const dispatch = usePj((s) => s.dispatch)
   const ref = makeRef('pc', view.pc.id)
   const { sheet, live } = view
-  const levels = Object.keys(sheet.slots).sort()
+  const slots = slotsOf(sheet)
+  const levels = Object.keys(slots).sort()
   const byLevel = new Map<number, typeof sheet.spells>()
   for (const s of sheet.spells) byLevel.set(s.level, [...(byLevel.get(s.level) ?? []), s])
 
@@ -26,7 +28,7 @@ export function Conjuros({ view, disabled }: { view: PlayerView; disabled: boole
                   {es.nivelN} {level}
                 </span>
                 <Pips
-                  total={sheet.slots[level]!}
+                  total={slots[level]!}
                   used={live.spent[level] ?? 0}
                   label={`${es.nivelN} ${level}`}
                   onChange={(spent) => !disabled && dispatch({ type: 'slots/set', ref, level, spent })}

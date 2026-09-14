@@ -16,7 +16,7 @@ import type {
   Registered,
 } from '../../../shared/protocol.ts'
 import type { Character } from '../../../shared/types.ts'
-import type { SheetStats } from '../../../shared/vault/sheet.ts'
+import type { Sheet } from '../../../shared/character.ts'
 
 export class ApiError extends Error {
   constructor(
@@ -119,7 +119,7 @@ export const api = {
       type: blob.type || 'image/jpeg',
     }),
   party: (secret: string, id: string, mesa: string) =>
-    call<{ characters: Character[]; sheets: Record<string, SheetStats> }>(
+    call<{ characters: Character[]; sheets: Record<string, Sheet> }>(
       `/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/party`,
       { secret },
     ),

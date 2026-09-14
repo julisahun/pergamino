@@ -138,6 +138,89 @@ describe('a campaign on the server', () => {
     expect(c.state.play[id]).toMatchObject({ hp: 9, gold: 42 })
   })
 
+  /**
+   * The level-up. This is what the whole record refactor is for, and the case
+   * it fixes is the third one: hit points used to be capped down and never
+   * granted upward, so a character who levelled came back hurt.
+   */
+  describe('editSheet', () => {
+    const levelled = () => {
+      const { store, registry } = memoryWorld()
+      const c = partida(registry)
+      const { id } = c.addCharacter(TOLMO, 'Ana')
+      return { c, id, store }
+    }
+
+    it('merges only the fields it is given', () => {
+      const { c, id } = levelled()
+      c.editSheet(id, { level: 2, hpMax: 20 })
+      const sheet = c.sheets.get(id)!
+      expect(sheet).toMatchObject({ level: 2, hpMax: 20 })
+      // Untouched, and still there: a patch is not a replacement.
+      expect(sheet.name).toBe('Tolmo')
+      expect(sheet.ac).toBe(19)
+      expect(sheet.abilities).toMatchObject({ str: 17 })
+      expect(sheet.weapons.map((w) => w.name)).toEqual(['Hacha'])
+    })
+
+    it('gives the new hit points to a character who had lost none', () => {
+      const { c, id } = levelled()
+      expect(c.state.play[id]).toMatchObject({ hp: 13 })
+      c.editSheet(id, { level: 2, hpMax: 20 })
+      expect(c.state.play[id]).toMatchObject({ hp: 20 })
+    })
+
+    it('gives them to a wounded character too, without healing the wound', () => {
+      const { c, id } = levelled()
+      c.dispatch({ type: 'hp/damage', ref: `pc:${id}`, amount: 5 }, { kind: 'dm' })
+      expect(c.state.play[id]).toMatchObject({ hp: 8 })
+      c.editSheet(id, { hpMax: 20 })
+      // 8 + 7, not 20: levelling up grants the die, it does not rest.
+      expect(c.state.play[id]).toMatchObject({ hp: 15 })
+    })
+
+    it('still caps when the maximum comes down', () => {
+      const { c, id } = levelled()
+      c.editSheet(id, { hpMax: 9 })
+      expect(c.state.play[id]).toMatchObject({ hp: 9 })
+    })
+
+    it('leaves the rest of the live layer exactly where it was', () => {
+      const { c, id } = levelled()
+      c.dispatch({ type: 'gold/set', ref: `pc:${id}`, gold: 115 }, { kind: 'dm' })
+      c.dispatch({ type: 'slots/set', ref: `pc:${id}`, level: '1', spent: 1 }, { kind: 'dm' })
+      c.editSheet(id, { level: 2, spellcasting: { ability: 'wis', slots: { '1': 3 } } })
+      // `spent` counts what is gone, so a new slot arrives unspent by itself.
+      expect(c.state.play[id]).toMatchObject({ gold: 115, spent: { '1': 1 } })
+    })
+
+    it('renames the row when the record is renamed', () => {
+      const { c, id } = levelled()
+      c.editSheet(id, { name: 'Tolmo el Viejo' })
+      expect(c.characters[0]!.name).toBe('Tolmo el Viejo')
+    })
+
+    it('writes the previous record to the log, so an edit can be undone', () => {
+      const { c, id, store } = levelled()
+      const before = c.editSheet(id, { level: 2, hpMax: 20 }) - 1
+      const [entry] = store.log(c.id, c.mesaId, before)
+      const action = entry!.action as { type: string; id: string; before: { level: number; hpMax: number } }
+      expect(entry!.actor).toBe('system:levelup')
+      expect(action.id).toBe(id)
+      // The whole previous record, which is what makes this reversible with
+      // no column of its own: read it back and patch it in again.
+      expect(action.before).toMatchObject({ level: 1, hpMax: 13 })
+      c.editSheet(id, action.before)
+      expect(c.sheets.get(id)).toMatchObject({ level: 1, hpMax: 13 })
+      expect(c.state.play[id]).toMatchObject({ hp: 13 })
+    })
+
+    it('refuses a character that is not in the campaign', () => {
+      const { c } = levelled()
+      expect(() => c.editSheet('nope', { level: 2 })).toThrow(HttpError)
+    })
+  })
+
   it('takes a removed character out of the fight, the board and the party', () => {
     const c = partida(memoryWorld().registry)
     const { id } = c.addCharacter(TOLMO, 'Ana')

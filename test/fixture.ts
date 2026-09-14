@@ -22,7 +22,8 @@ import type { Character, SessionState } from '../shared/types.ts'
 import { CampaignVault, PERSONAJES_DIR } from '../shared/vault/binding.ts'
 import { emptySession } from '../shared/vault/session.ts'
 import { openNodeVault } from '../shared/vault/node.ts'
-import { parseSheet, type SheetStats } from '../shared/vault/sheet.ts'
+import { parseSheet } from '../shared/vault/sheet.ts'
+import { type Sheet } from '../shared/character.ts'
 import { dirAt, fileAt, type WritableVaultDir } from '../shared/vault/source.ts'
 import { CAMPAIGN, WORLD, worldRootPath } from './roots.ts'
 
@@ -61,7 +62,7 @@ export const MESA = 'last'
 /** The party as the suite sees it: who, and the sheet each one uploaded. */
 export interface PartyData {
   characters: Character[]
-  sheets: Map<string, SheetStats>
+  sheets: Map<string, Sheet>
 }
 
 /**
@@ -78,7 +79,7 @@ export async function loadParty(vault: CampaignVault, mesa = MESA): Promise<Part
   const players = await dirAt(vault.notesRoot, `${PERSONAJES_DIR}/${mesa}`)
   if (!players) throw new Error(`No PJ folder in ${PERSONAJES_DIR}/${mesa}/`)
   const characters: Character[] = []
-  const sheets = new Map<string, SheetStats>()
+  const sheets = new Map<string, Sheet>()
   for (const id of (await players.list()).dirs.filter((d) => !d.startsWith('.')).sort()) {
     const file = await fileAt(players, `${id}/${id}-fc5.xml`)
     if (!file) continue

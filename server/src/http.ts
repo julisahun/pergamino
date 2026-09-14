@@ -13,12 +13,13 @@
  */
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ActionRequest, PrepBody, RegisterBody } from '../../shared/protocol.ts'
+import type { ActionRequest, PrepBody, RegisterBody, SheetPatch } from '../../shared/protocol.ts'
+import { sheetPatchError } from '../../shared/character.ts'
 import { revealFor } from '../../shared/session/project.ts'
 import { bearer, tokenMatches } from './auth.ts'
 import { linkUrl, type CampaignSession } from './campaign.ts'
 import type { Env } from './env.ts'
-import { HttpError, badRequest, notFound, unauthorized } from './errors.ts'
+import { HttpError, badRequest, badSheet, notFound, unauthorized } from './errors.ts'
 import type { Registry } from './registry.ts'
 import { CACHE_NEVER, sendBytes, sendJson, serveStatic } from './static.ts'
 import type { CampaignRow, MesaRow, Store } from './store.ts'
@@ -84,6 +85,20 @@ async function readJson<T>(req: IncomingMessage): Promise<T> {
   } catch {
     throw badRequest('JSON ilegible')
   }
+}
+
+/**
+ * The body of a sheet edit, checked before it can reach a character.
+ *
+ * Both callers — the DM's route and the player's — go through here, so the
+ * rule about what a character may hold lives in one place and is the same
+ * whoever is typing.
+ */
+async function patchBody(req: IncomingMessage): Promise<SheetPatch> {
+  const body = await readJson<unknown>(req)
+  const wrong = sheetPatchError(body)
+  if (wrong) throw badSheet(wrong)
+  return body as SheetPatch
 }
 
 const etagOf = (bytes: Uint8Array): string => `"${createHash('sha1').update(bytes).digest('hex')}"`
@@ -266,6 +281,10 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
     const xml = (await readBody(req, LIMIT_XML)).toString('utf8')
     sendJson(res, 200, { rev: session.replaceSheet(characterOf(session, params.pc!), xml) })
   })
+  route('PATCH', '/api/dm/campaigns/:id/mesas/:mesa/characters/:pc/sheet', async (req, res, params) => {
+    const session = dmOf(req, params)
+    sendJson(res, 200, { rev: session.editSheet(characterOf(session, params.pc!), await patchBody(req)) })
+  })
   route('PUT', '/api/dm/campaigns/:id/mesas/:mesa/characters/:pc/portrait', async (req, res, params) => {
     const session = dmOf(req, params)
     const mime = imageType(req)
@@ -315,6 +334,14 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
     const session = linkOf(params)
     const xml = (await readBody(req, LIMIT_XML)).toString('utf8')
     sendJson(res, 200, { rev: session.replaceSheet(characterOf(session, params.pc!), xml) })
+  })
+  // A player edits their own character and nobody else's — `characterOf` is
+  // what ties `:pc` to this link, the same check every route here makes. The
+  // allowlist in `shared/session/allow.ts` is untouched: that is the live
+  // layer, and a sheet is not one of its actions.
+  route('PATCH', '/api/pj/:link/characters/:pc/sheet', async (req, res, params) => {
+    const session = linkOf(params)
+    sendJson(res, 200, { rev: session.editSheet(characterOf(session, params.pc!), await patchBody(req)) })
   })
   route('PUT', '/api/pj/:link/characters/:pc/portrait', async (req, res, params) => {
     const session = linkOf(params)

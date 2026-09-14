@@ -36,7 +36,10 @@ export interface CharacterRow {
   mesa: string
   name: string
   player: string
-  sheet_xml: string
+  /** A `Sheet` as json. The character itself. */
+  sheet: string
+  /** The `-fc5.xml` it was imported from, if any. Provenance; never read. */
+  sheet_xml: string | null
   portrait_mime: string | null
   portrait: Uint8Array | null
   created_at: number
@@ -154,22 +157,36 @@ export class Store {
 
   insertCharacter(row: Omit<CharacterRow, 'portrait_mime' | 'portrait'>): void {
     this.db.run(
-      `INSERT INTO character (id, mesa, name, player, sheet_xml, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO character (id, mesa, name, player, sheet, sheet_xml, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       row.id,
       row.mesa,
       row.name,
       row.player,
+      row.sheet,
       row.sheet_xml,
       row.created_at,
       row.updated_at,
     )
   }
 
-  setSheet(id: string, xml: string, name: string, now: number): void {
+  /** A re-import: a new xml replaces the record and is kept beside it. */
+  setSheet(id: string, sheet: string, xml: string, name: string, now: number): void {
     this.db.run(
-      'UPDATE character SET sheet_xml = ?, name = ?, updated_at = ? WHERE id = ?',
+      'UPDATE character SET sheet = ?, sheet_xml = ?, name = ?, updated_at = ? WHERE id = ?',
+      sheet,
       xml,
+      name,
+      now,
+      id,
+    )
+  }
+
+  /** An edit: the record changes and whatever xml it came from stays as it was. */
+  updateSheet(id: string, sheet: string, name: string, now: number): void {
+    this.db.run(
+      'UPDATE character SET sheet = ?, name = ?, updated_at = ? WHERE id = ?',
+      sheet,
       name,
       now,
       id,

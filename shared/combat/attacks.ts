@@ -28,8 +28,9 @@
  * be decoration that reads like a mechanic.
  */
 import type { Ability, Pnj } from '../types.ts'
-import type { SheetSpell, SheetStats, SheetWeapon } from '../vault/sheet.ts'
+import { castingModifier, spellAttackOf, spellDcOf, type Sheet, type Spell, type Weapon } from '../character.ts'
 import { parseDice, withMod, type Dice } from './dice.ts'
+import { damageDice, HIT_MOD, signed } from './prose.ts'
 
 /**
  * How an action lands — which is what the line about it has to say.
@@ -64,45 +65,11 @@ export interface Attack {
 }
 
 // --- the prose ------------------------------------------------------------
-
-/**
- * Both languages, because a campaign folder is written in whichever the DM
- * writes in. `marea-baja` says «+3 al ataque, 1d6+1 de daño cortante»; the
- * demo campaign says «+4 to hit, 1d4+2 piercing damage». That is one format in
- * two languages, not two formats, so it is one pattern with an alternation
- * rather than a setting somebody has to get right.
- *
- * «a impactar» is the third spelling because `instructions.md` writes it that
- * way, and a statblock converted by following the contract has to parse. The
- * alternation is the cheap half of that agreement; `attacks.test.ts` pins all
- * three so the next phrasing added is a deliberate one.
- */
-const HIT_MOD = /([+-]\s*\d+)\s*(?:al\s+ataque|a\s+impactar|to\s+hit)/i
-/** `Ataque +4,` — how the sheet generator states it. */
-const SHEET_MOD = /\b(?:ataque|attack)\s*([+-]\s*\d+)/i
-
-const signed = (raw: string): number => Number.parseInt(raw.replace(/\s+/g, ''), 10)
-
-const DIE = String.raw`\d+\s*d\s*\d+(?:\s*[+-]\s*\d+)?`
-
-/**
- * The dice that are *damage*, not some other number in the same sentence.
- *
- * Anchored on the word every format puts beside them — `1d6+1 de daño`,
- * `1d4+2 piercing damage`, `daño 1d4 +2` — so that «munición 24/96», «a 1,5 m»
- * and a spell's range cannot be mistaken for a roll. The optional word in
- * between is the damage type, which English writes there and Spanish writes
- * after; either way nothing here keeps it.
- */
-function damageDice(text: string): Dice | null {
-  const before = new RegExp(
-    String.raw`(${DIE})\s*(?:de\s+)?(?:[\wáéíóúñ]+\s+)?(?:daño|damage)`,
-    'i',
-  ).exec(text)
-  if (before) return parseDice(before[1]!)
-  const after = new RegExp(String.raw`(?:daño|damage)\s*:?\s*(${DIE})`, 'i').exec(text)
-  return after ? parseDice(after[1]!) : null
-}
+//
+// `HIT_MOD`, `damageDice` and `signed` moved to `./prose.ts` when a player's
+// weapon stopped being prose. They are still what reads a **pnj**, whose
+// statblock is a note a human wrote; the importer uses them once, on the way
+// in, for the sheet a generator wrote.
 
 // --- pnj ------------------------------------------------------------------
 
@@ -145,18 +112,21 @@ export const attacksOfPnj = (pnj: Pick<Pnj, 'abilities'>): Attack[] =>
 
 // --- players --------------------------------------------------------------
 
-/** `Ataque +5, daño 1d6 +3 perforante.` — the first line of a weapon's text. */
-function weaponAttack(weapon: SheetWeapon): Attack | null {
-  const mod = SHEET_MOD.exec(weapon.text)
-  // `<damage1H>` is what marked this item a weapon in the first place, so it
-  // is the fallback when the generated line is worded some other way.
-  const dice = damageDice(weapon.text) ?? (weapon.damage ? parseDice(weapon.damage) : null)
+/**
+ * A weapon, which arrives already read.
+ *
+ * This used to run `SHEET_MOD` and `damageDice` over the generated line on
+ * every load. The numbers are on the record now — taken out of that prose once,
+ * by the importer — so all that is left is the shape change.
+ */
+function weaponAttack(weapon: Weapon): Attack | null {
+  const dice = parseDice(weapon.dice)
   if (!dice) return null
   return {
-    id: `weapon:${weapon.name}`,
+    id: `weapon:${weapon.id}`,
     name: weapon.name,
     kind: 'attack',
-    mod: mod ? signed(mod[1]!) : null,
+    mod: weapon.mod,
     dice,
     save: null,
     level: null,
@@ -176,53 +146,49 @@ const SPELL_HEAL = /\bcuras?\s+\d+\s*d\s*\d+/i
  * Susurros Disonantes mentions *tiradas de ataque* in its, so «ataque de
  * conjuro» is asked for as a phrase and asked for first.
  */
-function spellAction(spell: SheetSpell, sheet: SheetStats): Attack | null {
+function spellAction(spell: Spell, sheet: Sheet): Attack | null {
   // No dice, no action. This is the whole reason Misil Mágico («no fallan
   // nunca», three darts, one `<roll>` that describes none of that) and Grasa
   // stay off the list instead of being offered as something they are not.
   const rolled = parseDice(spell.roll ?? '')
   if (!rolled) return null
 
+  const dc = spellDcOf(sheet)
   const base = {
-    id: `spell:${spell.name}`,
+    id: `spell:${spell.id}`,
     name: spell.name,
     level: spell.level,
     origin: 'spell' as const,
   }
 
   if (SPELL_ATTACK.test(spell.text)) {
-    return { ...base, kind: 'attack', mod: sheet.spellAttack, dice: rolled, save: null }
+    return { ...base, kind: 'attack', mod: spellAttackOf(sheet), dice: rolled, save: null }
   }
 
   const save = SPELL_SAVE.exec(spell.text)
-  if (save && sheet.spellDc !== null) {
+  if (save && dc !== null) {
     return {
       ...base,
       kind: 'save',
       mod: null,
       dice: rolled,
-      save: { dc: sheet.spellDc, ability: save[1]!, half: SPELL_HALF.test(spell.text) },
+      save: { dc, ability: save[1]!, half: SPELL_HALF.test(spell.text) },
     }
   }
 
   if (SPELL_HEAL.test(spell.text)) {
     // «Curas 2d8 + tu modificador de lanzamiento» — the modifier is never
-    // written as a number, but the sheet states both numbers it falls out of:
-    // an attack bonus is that modifier plus proficiency. Arithmetic on two
-    // stated numbers, the same kind `abilityMod` already does — not a rule
-    // being re-derived from a build.
-    const casting =
-      sheet.spellAttack !== null && sheet.proficiency !== null
-        ? sheet.spellAttack - sheet.proficiency
-        : 0
-    return { ...base, kind: 'heal', mod: null, dice: withMod(rolled, casting), save: null }
+    // written as a number. The record says which of the six the spells key
+    // off, so it comes straight off that score; the old projection had to
+    // work it back out of the attack bonus minus proficiency.
+    return { ...base, kind: 'heal', mod: null, dice: withMod(rolled, castingModifier(sheet)), save: null }
   }
 
   return null
 }
 
 /** Everything a player's sheet can actually resolve: weapons, then spells. */
-export function attacksOfSheet(sheet: SheetStats | undefined): Attack[] {
+export function attacksOfSheet(sheet: Sheet | undefined): Attack[] {
   if (!sheet) return []
   const out: Attack[] = []
   for (const weapon of sheet.weapons) {

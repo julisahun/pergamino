@@ -1,20 +1,28 @@
 import { attacksOfSheet } from '../../../../shared/combat/attacks.ts'
 import { formatDice } from '../../../../shared/combat/dice.ts'
 import type { PlayerView } from '../../../../shared/session/player.ts'
-import { formatMod } from '../../../../shared/vault/sheet.ts'
+import {
+  formatMod,
+  passivePerceptionOf,
+  spellAttackOf,
+  spellDcOf,
+} from '../../../../shared/character.ts'
 import { es } from '../../strings/es.ts'
 
 /** The numbers read out loud in a fight, and what the character swings. */
 export function Combate({ view }: { view: PlayerView }) {
   const { sheet } = view
+  const passive = passivePerceptionOf(sheet)
+  const dc = spellDcOf(sheet)
+  const attack = spellAttackOf(sheet)
   const stats: [string, string | null][] = [
     [es.ca, sheet.ac !== null ? String(sheet.ac) : null],
-    [es.iniciativaLarga, sheet.initMod !== null ? formatMod(sheet.initMod) : null],
+    [es.iniciativaLarga, sheet.initiative !== null ? formatMod(sheet.initiative) : null],
     [es.velocidadLabel, sheet.speed !== null ? String(sheet.speed) : null],
     [es.competencia, sheet.proficiency !== null ? formatMod(sheet.proficiency) : null],
-    [es.percepcionPasiva, sheet.passivePerception !== null ? String(sheet.passivePerception) : null],
-    [es.cdConjuros, sheet.spellDc !== null ? String(sheet.spellDc) : null],
-    [es.ataqueConjuros, sheet.spellAttack !== null ? formatMod(sheet.spellAttack) : null],
+    [es.percepcionPasiva, passive !== null ? String(passive) : null],
+    [es.cdConjuros, dc !== null ? String(dc) : null],
+    [es.ataqueConjuros, attack !== null ? formatMod(attack) : null],
   ]
   const attacks = attacksOfSheet(sheet)
 
@@ -55,8 +63,8 @@ export function Combate({ view }: { view: PlayerView }) {
       {sheet.weapons.length > 0 && (
         <ul className="pj-list muted small">
           {sheet.weapons.map((w) => (
-            <li key={w.name}>
-              <b>{w.name}</b> — {w.text || w.damage}
+            <li key={w.id}>
+              <b>{w.name}</b> — {w.text || w.dice}
             </li>
           ))}
         </ul>

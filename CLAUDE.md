@@ -96,17 +96,23 @@ What falls out of that:
   within a folder. The old format had to ask for one in prose.
 - **No inline base64.** A portrait is `assets/pnj/<id>.jpg`. The json carried
   ~70 KB data URIs, which is exactly what a note cannot hold.
-- **A PJ is a row on the server, owned by the mesa**: the `-fc5.xml` its
-  player uploaded through the **mesa's** link, plus its live layer — PG, oro,
-  inventario, espacios. Both belong to the group, not to the campaign, so the
-  same party walks into the next adventure carrying what it earned in the
-  last. The vault holds no party — `personajes/<mesa>/`, if there is one, is
-  ordinary material (trasfondos, guías, the creator's json) reachable as notes
-  and never read as characters. Level-up
-  is the player uploading a new xml; the live layer survives it. The app still
-  never reads a field of the creator's build recipe, and the xml says so
-  itself — *"si algún número de la app no coincide con los de arriba, mandan
-  los de arriba"*.
+- **A PJ is a row on the server, owned by the mesa**: a `Sheet`
+  (`shared/character.ts`) as json, plus its live layer — PG, oro, inventario,
+  espacios. Both belong to the group, not to the campaign, so the same party
+  walks into the next adventure carrying what it earned in the last. The vault
+  holds no party — `personajes/<mesa>/`, if there is one, is ordinary material
+  (trasfondos, guías, the creator's json) reachable as notes and never read as
+  characters.
+
+  **The record is the source of truth, and a `-fc5.xml` is an importer.** It is
+  read once, when the character is created (`shared/vault/sheet.ts`), and kept
+  in `character.sheet_xml` as provenance that nothing reads again — which is
+  why that column is nullable. Levelling up is `PATCH …/characters/:pc/sheet`,
+  a shallow merge, from the DM's route or the player's own; `replaceSheet` is
+  still there but is now *starting over*, not a level-up, and says so.
+  Hit points follow their maximum on an edit — raising `hpMax` by 8 raises the
+  current total by 8 — which is the bug the re-upload path always had: a
+  character at 11/11 who levelled came back 11/19, hurt without being hit.
 - **`scenarios/` stays json**, because it is the one prep folder the app writes
   back to. Round-tripping a scene through the markdown renderer would cost the
   DM their formatting every time they moved a token.
@@ -289,13 +295,26 @@ and the server runs the *same* reducer the tests do. The Pi now runs Node — on
 bundled file, no `node_modules` — because the alternative was a party that
 lived in four places.
 
-**The app does not implement 5e rules.** It reads the derived numbers out of
-the `-fc5.xml` a player uploaded, precisely so it never re-derives hit points
-from class, CON and species traits and gets them subtly wrong at the table.
-The one addition (`shared/skills.ts`) is arithmetic on stated numbers: a skill
-the sheet marks proficient but does not quote shows ability plus the sheet's
-own proficiency bonus, flagged `derived`, and a stated line always wins. The
-rules code under `lint/` belongs to `check-campaign.js`, not to the app.
+**The app does not implement 5e rules — it stores what the rules make messy
+and works out what is a clean formula.** The line is drawn in
+`shared/character.ts` and it is the one decision the rest follows:
+
+- **Stored**: `hpMax`, `ac`, `initiative`, `abilities`, `proficiency`. A suit
+  of armour, a Dex cap, *Armadura de Mago*, *Alerta*, dwarven toughness — the
+  number a sheet quotes for these ends an argument this app is not having, and
+  re-deriving it is how you get a subtly wrong number in front of the players.
+- **Worked out**: the eighteen skills, the six saves, passive perception, the
+  spell save DC and the spell attack bonus. Each is one line of arithmetic over
+  numbers that *are* stored, so bumping `proficiency` at level 5 moves all of
+  them at once instead of asking someone to retype twenty-five numbers.
+
+Every worked-out number has an override beside it (`SkillEntry.mod`,
+`SaveEntry.mod`, `passivePerception`, `spellcasting.dc`/`.attack`), because a
+formula that cannot be overruled is a rule this app is enforcing. The importer
+only leaves one behind **when the sheet disagrees with the formula**: all four
+real characters in `personajes/last/` import with none at all, which
+`sheet.vault.test.ts` pins. The rules code under `lint/` belongs to
+`check-campaign.js`, not to the app.
 
 **Rules content is paraphrased from the SRD 5.2** (CC-BY-4.0, © Wizards of the
 Coast). No text is copied from the Player's Handbook.

@@ -7,6 +7,7 @@
  * few rows per campaign; a WAL write is milliseconds even on an SD card.
  */
 import { randomBytes, randomUUID } from 'node:crypto'
+import { parseSheet } from '../../shared/vault/sheet.ts'
 import fs from 'node:fs'
 import nodePath from 'node:path'
 import type { DatabaseSync as DatabaseSyncType, SQLInputValue } from 'node:sqlite'
@@ -16,7 +17,7 @@ import type { DatabaseSync as DatabaseSyncType, SQLInputValue } from 'node:sqlit
 // called `sqlite`. `getBuiltinModule` (Node ≥ 22.3) sidesteps every bundler.
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite')
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS campaign (
@@ -42,12 +43,17 @@ CREATE TABLE IF NOT EXISTS mesa_play (
   play       TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+-- sheet is the character: a Sheet (shared/character.ts) as json, edited in
+-- place. sheet_xml is the -fc5.xml it was imported from and is provenance
+-- only: nullable, because a character need not have come from one, and never
+-- read after the import that created it.
 CREATE TABLE IF NOT EXISTS character (
   id            TEXT PRIMARY KEY,
   mesa          TEXT NOT NULL REFERENCES mesa(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   player        TEXT NOT NULL,
-  sheet_xml     TEXT NOT NULL,
+  sheet         TEXT NOT NULL,
+  sheet_xml     TEXT,
   portrait_mime TEXT,
   portrait      BLOB,
   created_at    INTEGER NOT NULL,
@@ -132,6 +138,48 @@ export class Db {
   #migrate(): void {
     this.#toPerCampaignSecrets()
     if (this.#columns('character').includes('campaign')) this.#toMesas()
+    if (!this.#columns('character').includes('sheet')) this.#toStoredSheets()
+  }
+
+  /**
+   * v3 -> v4: the character stops being a projection of its xml and becomes a
+   * record.
+   *
+   * Until now the only thing stored was `sheet_xml`, re-parsed on every load,
+   * and the numbers on screen were whatever that parse produced. They are
+   * written down now, so they can be edited -- which is what makes levelling
+   * up an edit rather than a re-upload.
+   *
+   * This is the one place `parseSheet` runs over a row that already existed.
+   * The table is rebuilt rather than altered because `sheet_xml` has to lose
+   * its NOT NULL on the way: a character no longer has to have come from a
+   * file.
+   */
+  #toStoredSheets(): void {
+    const rows = this.all<{ id: string; sheet_xml: string }>('SELECT id, sheet_xml FROM character')
+    this.#db.exec(`
+      CREATE TABLE character_v4 (
+        id            TEXT PRIMARY KEY,
+        mesa          TEXT NOT NULL REFERENCES mesa(id) ON DELETE CASCADE,
+        name          TEXT NOT NULL,
+        player        TEXT NOT NULL,
+        sheet         TEXT NOT NULL,
+        sheet_xml     TEXT,
+        portrait_mime TEXT,
+        portrait      BLOB,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      )`)
+    this.#db.exec(`
+      INSERT INTO character_v4
+        (id, mesa, name, player, sheet, sheet_xml, portrait_mime, portrait, created_at, updated_at)
+      SELECT id, mesa, name, player, '', sheet_xml, portrait_mime, portrait, created_at, updated_at
+      FROM character`)
+    for (const row of rows) {
+      this.run('UPDATE character_v4 SET sheet = ? WHERE id = ?', JSON.stringify(parseSheet(row.sheet_xml)), row.id)
+    }
+    this.#db.exec('DROP TABLE character')
+    this.#db.exec('ALTER TABLE character_v4 RENAME TO character')
   }
 
   /**

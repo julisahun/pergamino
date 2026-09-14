@@ -224,6 +224,61 @@ describe("a player's link", () => {
     expect(state.state.play[tal].hp).toBe(10)
   })
 
+  /**
+   * Both halves of the decision that a sheet is editable: the DM's route and
+   * the player's, with the same validator behind them and the same rule about
+   * whose character you may touch.
+   */
+  it('levels a character up from either side, and only their own', async () => {
+    const { link, dm, p } = await campaign()
+    const { id: tal } = await (await dm(p('/characters?player=Ana'), { method: 'POST', body: TOLMO })).json()
+    const { id: nel } = await (await dm(p('/characters?player=Bea'), { method: 'POST', body: NEL })).json()
+
+    const patch = (path: string, body: unknown, init: RequestInit = {}) =>
+      fetch(base + path, {
+        ...init,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+        body: JSON.stringify(body),
+      })
+
+    // The player levels themself up from their phone.
+    const up = await patch(`/api/pj/${link}/characters/${tal}/sheet`, { level: 2, hpMax: 20 })
+    expect(up.status).toBe(200)
+    let party = await (await dm(p('/party'))).json()
+    expect(party.sheets[tal]).toMatchObject({ level: 2, hpMax: 20, name: 'Tolmo' })
+    // And the hit points came with the level.
+    let state = await (await dm(p('/state'))).json()
+    expect(state.state.play[tal].hp).toBe(20)
+
+    // The DM can do it too, on anyone at the table.
+    const dmUp = await dm(p(`/characters/${nel}/sheet`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level: 2 }),
+    })
+    expect(dmUp.status).toBe(200)
+    party = await (await dm(p('/party'))).json()
+    expect(party.sheets[nel]).toMatchObject({ level: 2, name: 'Nel' })
+
+    // A character that is not this link's is not this link's to edit.
+    const other = await campaign('y')
+    const { id: theirs } = await (
+      await other.dm(other.p('/characters?player=Cid'), { method: 'POST', body: TOLMO })
+    ).json()
+    expect((await patch(`/api/pj/${link}/characters/${theirs}/sheet`, { level: 9 })).status).toBe(404)
+
+    // And the record only holds what a character can hold.
+    for (const bad of [{ level: 99 }, { hpMax: 'muchos' }, { fuerzaBruta: 3 }, [1, 2, 3]]) {
+      const res = await patch(`/api/pj/${link}/characters/${tal}/sheet`, bad)
+      expect(res.status, JSON.stringify(bad)).toBe(422)
+      expect((await res.json()).code).toBe('bad-sheet')
+    }
+    // Nothing of the failed ones landed.
+    state = await (await dm(p('/state'))).json()
+    expect(state.state.play[tal].hp).toBe(20)
+  })
+
   it('is refused when unknown, and dies when rotated', async () => {
     const miss = await fetch(`${base}/api/pj/nope`)
     expect(miss.status).toBe(404)

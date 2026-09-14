@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import { CONDITIONS } from '../../../shared/conditions.ts'
+import { summaryOf } from '../../../shared/character.ts'
 import type { PlayerView } from '../../../shared/session/player.ts'
 import { makeRef } from '../../../shared/types.ts'
 import { es } from '../strings/es.ts'
@@ -42,7 +43,7 @@ export function HpHeader({
         <Face src={view.pc.portrait} name={view.pc.name} size={48} />
         <div className="pj-head-name">
           <h1>{view.pc.name}</h1>
-          <div className="muted small">{sheet.summary ?? [sheet.race, sheet.className].filter(Boolean).join(' ')}</div>
+          <div className="muted small">{summaryOf(sheet) ?? ''}</div>
         </div>
         <button className="pj-icon" aria-label={es.ajustes} onClick={onMenu}>
           ⋯

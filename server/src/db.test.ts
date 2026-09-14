@@ -7,6 +7,7 @@ import nodePath from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Db, SCHEMA_VERSION } from './db.ts'
 import { Store } from './store.ts'
+import type { Sheet } from '../../shared/character.ts'
 
 describe('the schema', () => {
   it('gives a v1 campaign a DM secret of its own and stamps the version', () => {
@@ -125,8 +126,76 @@ describe('v2 → v3: the party stops belonging to the campaign', () => {
     expect(db.get<{ mesa: string }>('SELECT mesa FROM session_archive')!.mesa).toBe(mesa.id)
     expect(db.all<{ name: string }>('PRAGMA table_info(campaign)').map((c) => c.name)).not.toContain('link_secret')
     expect(db.all(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual([])
-    expect(db.get<{ value: string }>(`SELECT value FROM meta WHERE key = 'schema_version'`)?.value).toBe('3')
+    expect(db.get<{ value: string }>(`SELECT value FROM meta WHERE key = 'schema_version'`)?.value).toBe(
+      String(SCHEMA_VERSION),
+    )
     db.close()
+  })
+
+  /**
+   * The migration that makes levelling up possible: a character stops being a
+   * projection of its xml and becomes a row that can be edited.
+   */
+  it('v3 → v4: the xml is read once into a record, and kept as provenance', () => {
+    const file = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'dm-db-')), 'v3.sqlite')
+    const v3 = new Db(file)
+    v3.exec('DROP TABLE character')
+    v3.exec(`CREATE TABLE character (
+      id TEXT PRIMARY KEY, mesa TEXT NOT NULL, name TEXT NOT NULL, player TEXT NOT NULL,
+      sheet_xml TEXT NOT NULL, portrait_mime TEXT, portrait BLOB,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`)
+    v3.run('INSERT INTO mesa (id, title, link_secret, created_at) VALUES (?, ?, ?, ?)', 'm1', 'Last', 'l1', 1)
+    v3.run(
+      `INSERT INTO character (id, mesa, name, player, sheet_xml, portrait, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      'pc-1', 'm1', 'Tolmo', 'Juli',
+      `<pc version="5"><character><name>Tolmo</name>
+        <race><name>Enano</name><speed>30</speed></race>
+        <class><name>Guerrero</name><level>1</level></class>
+        <note><text>Enano guerrero de nivel 1 (Guardia).
+
+CA 19 · PG 13 · Iniciativa +2 · Percepción pasiva 12 · Competencia +2</text></note>
+        <abilities>17,10,14,8,14,12,</abilities><hpMax>13</hpMax></character></pc>`,
+      new Uint8Array([1, 2, 3]), 1, 1,
+    )
+    v3.run(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`)
+    v3.close()
+
+    const db = new Db(file)
+    const row = db.get<{ sheet: string; sheet_xml: string | null; name: string; player: string; portrait: Uint8Array }>(
+      'SELECT * FROM character WHERE id = ?',
+      'pc-1',
+    )!
+    const sheet = JSON.parse(row.sheet) as Sheet
+    expect(sheet).toMatchObject({
+      name: 'Tolmo',
+      species: 'Enano',
+      className: 'Guerrero',
+      level: 1,
+      hpMax: 13,
+      ac: 19,
+      initiative: 2,
+      proficiency: 2,
+      abilities: { str: 17, dex: 10, con: 14, int: 8, wis: 14, cha: 12 },
+    })
+    // Everything around the character survives the table being rebuilt.
+    expect([row.name, row.player]).toEqual(['Tolmo', 'Juli'])
+    expect([...row.portrait]).toEqual([1, 2, 3])
+    // The xml is still there, and is now allowed not to be: a character need
+    // not have come from a file any more.
+    expect(row.sheet_xml).toContain('<name>Tolmo</name>')
+    const columns = db.all<{ name: string; notnull: number }>('PRAGMA table_info(character)')
+    expect(columns.find((c) => c.name === 'sheet')!.notnull).toBe(1)
+    expect(columns.find((c) => c.name === 'sheet_xml')!.notnull).toBe(0)
+    expect(db.get<{ value: string }>(`SELECT value FROM meta WHERE key = 'schema_version'`)?.value).toBe(
+      String(SCHEMA_VERSION),
+    )
+
+    // Opening it again re-reads nothing: the record is the source now.
+    db.close()
+    const again = new Db(file)
+    expect(again.get<{ sheet: string }>('SELECT sheet FROM character WHERE id = ?', 'pc-1')!.sheet).toBe(row.sheet)
+    again.close()
   })
 
   it('is idempotent: opening the migrated database again changes nothing', () => {

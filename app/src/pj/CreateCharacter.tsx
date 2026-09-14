@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { isFc5Sheet, parseSheet, type SheetStats } from '../../../shared/vault/sheet.ts'
+import { isFc5Sheet, parseSheet } from '../../../shared/vault/sheet.ts'
+import { type Sheet } from '../../../shared/character.ts'
 import { es } from '../strings/es.ts'
 import { usePj } from '../state/pjStore.ts'
 
@@ -8,7 +9,7 @@ export function CreateCharacter() {
   const { create, cancelCreate, busy, error } = usePj()
   const [player, setPlayer] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<SheetStats | null>(null)
+  const [preview, setPreview] = useState<Sheet | null>(null)
   const [bad, setBad] = useState(false)
 
   const pick = async (f: File | null) => {
@@ -52,13 +53,12 @@ export function CreateCharacter() {
         {bad && <p className="pj-error">{es.fichaNoValida}</p>}
         {preview && (
           <div className="pj-card">
-            <b>{preview.name ?? '—'}</b>
+            <b>{preview.name || '—'}</b>
             <div className="muted small">
-              {[preview.race, preview.className, preview.level !== null ? `${es.nivel} ${preview.level}` : null]
+              {[preview.species, preview.className, preview.level !== null ? `${es.nivel} ${preview.level}` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </div>
-            {preview.summary && <div className="muted small">{preview.summary}</div>}
           </div>
         )}
         {error && <p className="pj-error">{error}</p>}

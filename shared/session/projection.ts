@@ -8,20 +8,20 @@
  */
 import type { FrozenSummary } from '../actions.ts'
 import type { Character, Pnj, Scene, SessionState, TableView } from '../types.ts'
-import type { SheetStats } from '../vault/sheet.ts'
+import type { Sheet } from '../character.ts'
 import { hasArt, pnjIndex } from './portraits.ts'
 import { projectTable, type PcInfo, type ProjectContext } from './project.ts'
 
 /** What a projection knows about one PC: the name, and the sheet's numbers. */
 export function pcInfoOf(
   character: Pick<Character, 'id' | 'name' | 'player' | 'portrait'>,
-  sheet: SheetStats | undefined,
+  sheet: Sheet | undefined,
 ): PcInfo {
   return {
     name: character.name || character.id,
     player: character.player,
     hpMax: sheet?.hpMax ?? null,
-    initMod: sheet?.initMod ?? null,
+    initMod: sheet?.initiative ?? null,
     ac: sheet?.ac ?? null,
     hasPortrait: hasArt(character.portrait),
   }

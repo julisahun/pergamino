@@ -17,7 +17,7 @@
  */
 import type { Attack } from '../../../shared/combat/attacks.ts'
 import { formatDice } from '../../../shared/combat/dice.ts'
-import { formatMod } from '../../../shared/vault/sheet.ts'
+import { formatMod } from '../../../shared/character.ts'
 import { es } from '../strings/es.ts'
 import type { Combatant } from './combat.ts'
 

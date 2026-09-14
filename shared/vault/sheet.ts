@@ -1,185 +1,62 @@
 /**
- * Derived character numbers.
+ * Reading a `-fc5.xml` **into** a character, once.
  *
- * The `-fc5.xml` a player uploads is the *computed* sheet — written by the
- * DM's own `pregenerados/fightclub.py`, or exported from Fight Club 5 — and it
- * is the only mechanical source there is. Reading `<hpMax>` from there beats
- * re-deriving hit points from class, CON and species traits (dwarven toughness
- * and the like) and getting it subtly wrong at the table — which is why the
- * creator's build recipe is not kept anywhere the app can see.
+ * This file used to be the character: `parseSheet` ran on every load and its
+ * output, `Sheet`, was what the app showed. The xml was the authority and
+ * said so in its own `<note>` — *«si algún número de la app no coincide con
+ * los de arriba, mandan los de arriba»*.
  *
- * The sheet says the same thing about itself, in its own `<note>`:
+ * That is over. `shared/character.ts` is the source of truth now, and this is
+ * an **adapter on the way in**: it runs when a character is created, its
+ * output is written to the database, and the xml is never consulted again.
+ * What the DM's `pregenerados/fightclub.py` and Fight Club 5 produce still
+ * gets a character into the app in one step, which is the whole reason it
+ * survives — but a level-up is an edit to the record, not a new document.
  *
- *   > Si algún número de la app no coincide con los de arriba, mandan los de
- *   > arriba.
+ * ## The one rule worth knowing
  *
- * "Los de arriba" is one generated line —
- *
- *   CA 19 · PG 13 · Iniciativa +2 · Percepción pasiva 14 · Competencia +2
- *
- * — so that line is what this reads, and it settles two things the tags alone
- * got wrong. AC used to be skipped entirely because `<ac>` is the armour's
- * base value rather than the number the sheet quotes; the note quotes the
- * final one. And initiative used to be DEX alone, which is short by the
- * proficiency bonus for anyone with *Alerta* — three of the six real sheets,
- * every one of them off by two in the turn order.
+ * The sheet quotes numbers that `Sheet` works out for itself: `Habilidades:
+ * Sigilo +7 · Percepción +5`, `Salvaciones: SAB +5`, `CD 13`, `ataque +5`.
+ * Each is compared against what the formula gives, and **stored as an override
+ * only when the two disagree**. A sheet whose numbers are ordinary imports
+ * with no overrides at all, so raising `proficiency` at level 5 moves every
+ * one of them; a sheet with something the app cannot see — a magic item, a
+ * feat, a house rule — pins that one number and leaves the rest alone.
  *
  * The scores in `<abilities>` are post-boost and stated, so their modifiers
- * are arithmetic on a given number rather than a rule being re-derived.
- *
- * `weapons` and `spells` are the raw blocks, not actions: this file knows the
- * xml, and `shared/combat/attacks.ts` knows what «Ataque +5, daño 1d6 +3» and
- * «Salvación de Destreza … la mitad si acierta» mean. An item counts as a
- * weapon because it has a `<damage1H>`, which is structural — «Bastón (foco
- * arcano)» and a túnica have none — rather than because its prose was read.
- *
- * The rest of the sheet — feats with their text, every item, the spells'
- * school and components, which skills and saves are proficient — is read too,
- * because the player's page is the whole character sheet and the xml already
- * carries all of it. Proficiency comes as numeric ids, decoded through the
- * tables in `fc5.ts`: a lookup, not a derivation.
+ * are arithmetic on a given number rather than a rule being re-derived. `ac`,
+ * `initiative` and `hpMax` are read and kept as-is, for the same reason they
+ * are stored rather than computed.
  */
 import {
   ABILITY_KEYS,
-  EXPERTISE_CATEGORY,
-  ITEM_KIND,
-  ITEM_SLOT,
-  SKILL_FC5_ORDER,
-  SPELL_SCHOOLS,
+  abilityMod,
+  emptySheet,
+  skillKeyOf,
+  skillRow,
+  spellAttackOf,
+  spellDcOf,
+  type AbilityKey,
+  type Abilities,
+  type Item,
   type ItemKind,
   type ItemSlot,
-} from './fc5.ts'
+  type SaveEntry,
+  type Sheet,
+  type SkillEntry,
+  type SkillKey,
+  type Spell,
+  type Trait,
+  type TraitSource,
+  type Weapon,
+} from '../character.ts'
+import { damageDice, damageType, SHEET_MOD, signed } from '../combat/prose.ts'
+import { formatDice } from '../combat/dice.ts'
+import { EXPERTISE_CATEGORY, ITEM_KIND, ITEM_SLOT, SKILL_FC5_ORDER, SPELL_SCHOOLS } from './fc5.ts'
 
-/** The six scores, in the order `<abilities>` writes them. */
-export interface Abilities {
-  str: number
-  dex: number
-  con: number
-  int: number
-  wis: number
-  cha: number
-}
+export { emptySheet }
 
-/**
- * One modifier the sheet states by name: `Sigilo +7`.
- *
- * Named rather than keyed, because the sheet is what decides which of these
- * are worth quoting — a rogue's two expertises and a cleric's none are the
- * same shape here.
- */
-export interface StatedMod {
-  name: string
-  mod: number
-}
-
-/** One item the sheet arms the character with: `<damage1H>` says it is one. */
-export interface SheetWeapon {
-  name: string
-  /** `<damage1H>` — the bare die, when the generated line is unreadable. */
-  damage: string | null
-  /** `Ataque +5, daño 1d6 +3 perforante.` plus whatever follows it. */
-  text: string
-}
-
-/** One spell as the sheet lists it. `roll` is `<roll>`; no roll, no numbers. */
-export interface SheetSpell {
-  name: string
-  /** `0` for a cantrip — `<level>` is absent on those. */
-  level: number
-  roll: string | null
-  text: string
-  /** `<school>` decoded: «Evocación». Null when unstated. */
-  school: string | null
-  time: string | null
-  range: string | null
-  duration: string | null
-  /** `V, S, M (un poco de lana)` — the way a sheet abbreviates them. */
-  components: string
-  ritual: boolean
-  /** `<sclass>` — the classes whose list it is on. */
-  classes: string[]
-}
-
-/** Where a feat came from — the section of the xml it sits in. */
-export type FeatSource = 'race' | 'class' | 'background' | 'feat'
-
-/** One trait, with the text the sheet gives it. */
-export interface SheetFeat {
-  name: string
-  text: string
-  source: FeatSource
-}
-
-/** Every `<item>`, weapon or not. */
-export interface SheetItem {
-  name: string
-  kind: ItemKind | null
-  /** Set when the sheet has it worn or in hand. */
-  equipped: ItemSlot | null
-  quantity: number
-  weight: number | null
-  /** The armour's base value — never the character's AC. */
-  ac: number | null
-  damage: string | null
-  text: string
-}
-
-/** What the sheet marks proficient, decoded from its ids. */
-export interface Proficient {
-  saves: (keyof Abilities)[]
-  skills: string[]
-  expertise: string[]
-}
-
-export interface SheetStats {
-  /** `<name>` — the character's name as the sheet writes it. */
-  name: string | null
-  race: string | null
-  /** `<class><name>`; `class` is a reserved word. */
-  className: string | null
-  background: string | null
-  /** `<race><speed>`, in the unit the sheet uses. */
-  speed: number | null
-  /** `<money>`, in gold pieces. */
-  money: number | null
-  hpMax: number | null
-  /** From the sheet's own line — DEX plus whatever else the build adds. */
-  initMod: number | null
-  level: number | null
-  /** Maximum spell slots by level: `{ "1": 2 }`. Empty for non-casters. */
-  slots: Record<string, number>
-  /** Post-boost scores. Null when the sheet does not state them. */
-  abilities: Abilities | null
-  /** The final number the sheet quotes, not the armour's base value. */
-  ac: number | null
-  passivePerception: number | null
-  proficiency: number | null
-  /** The casting ability the `Conjuros:` line names. Null for non-casters. */
-  spellAbility: string | null
-  /** `CD 13` — the save DC for this character's spells. */
-  spellDc: number | null
-  /** `ataque +5` — the spell attack bonus. */
-  spellAttack: number | null
-  /** What the `Habilidades:` line quotes, in the order it quotes it. */
-  skills: StatedMod[]
-  /** What the `Salvaciones:` line quotes. */
-  saves: StatedMod[]
-  /** The sheet's own first line: «Enano guerrero de nivel 1 (Guardia).» */
-  summary: string | null
-  /** Items with a damage die, in the order the sheet lists them. */
-  weapons: SheetWeapon[]
-  /** Spells that state a roll, in the order the sheet lists them. */
-  spells: SheetSpell[]
-  feats: SheetFeat[]
-  items: SheetItem[]
-  proficient: Proficient
-}
-
-/** The modifier for a stated score. */
-export const abilityMod = (score: number): number => Math.floor((score - 10) / 2)
-
-/** `+2` / `-1` / `+0`, the way a sheet writes a modifier. */
-export const formatMod = (mod: number): string => (mod < 0 ? `${mod}` : `+${mod}`)
+// --- reading the xml -------------------------------------------------------
 
 const tag = (xml: string, name: string): string | null => {
   const m = new RegExp(`<${name}>([^<]*)</${name}>`).exec(xml)
@@ -192,49 +69,14 @@ const int = (v: string | null): number | null => {
   return Number.isFinite(n) ? n : null
 }
 
-const EMPTY: SheetStats = {
-  name: null,
-  race: null,
-  className: null,
-  background: null,
-  speed: null,
-  money: null,
-  hpMax: null,
-  initMod: null,
-  level: null,
-  slots: {},
-  abilities: null,
-  ac: null,
-  passivePerception: null,
-  proficiency: null,
-  spellAbility: null,
-  spellDc: null,
-  spellAttack: null,
-  skills: [],
-  saves: [],
-  summary: null,
-  weapons: [],
-  spells: [],
-  feats: [],
-  items: [],
-  proficient: { saves: [], skills: [], expertise: [] },
+const float = (v: string | null): number | null => {
+  if (v === null) return null
+  const n = Number.parseFloat(v)
+  return Number.isFinite(n) ? n : null
 }
 
-export const emptySheet = (): SheetStats => ({
-  ...EMPTY,
-  slots: {},
-  skills: [],
-  saves: [],
-  weapons: [],
-  spells: [],
-  feats: [],
-  items: [],
-  proficient: { saves: [], skills: [], expertise: [] },
-})
-
 /** Does this look like a Fight Club 5 character at all? The upload path asks. */
-export const isFc5Sheet = (xml: string): boolean =>
-  /<pc\b[^>]*>[\s\S]*<character>/.test(xml)
+export const isFc5Sheet = (xml: string): boolean => /<pc\b[^>]*>[\s\S]*<character>/.test(xml)
 
 /** The prose the sheet declares authoritative, or '' when there is none. */
 function noteText(xml: string): string {
@@ -261,19 +103,10 @@ const statedLine = (text: string, label: string): string | null => {
   return m ? m[1]!.trim() : null
 }
 
-/**
- * `Sigilo +7 · Percepción +5` → the two of them, in that order.
- *
- * Nothing is computed here: a skill modifier is proficiency and expertise on
- * top of an ability, and this app does not re-derive that — the sheet says the
- * number or the app does not show one. Fight Club states skill proficiency as
- * opaque numeric ids (`<proficiency>104</proficiency>`), so deriving it would
- * mean guessing which skill each id is, and a guess here is a wrong number in
- * front of the players.
- */
-function statedMods(line: string | null): StatedMod[] {
+/** `Sigilo +7 · Percepción +5` → the two of them, by name. */
+function statedMods(line: string | null): { name: string; mod: number }[] {
   if (!line) return []
-  const out: StatedMod[] = []
+  const out: { name: string; mod: number }[] = []
   for (const part of line.split(/[·,]/)) {
     const m = /^\s*(.+?)\s*([+-]\d+)\s*$/.exec(part)
     if (m) out.push({ name: m[1]!.trim(), mod: Number.parseInt(m[2]!, 10) })
@@ -295,51 +128,70 @@ const inner = (block: string, name: string): string | null => {
   return m ? m[1]!.trim() : null
 }
 
-/** The first block of one kind, with where it sits — to place feats by section. */
+/** The first block of one kind, with where it sits — to place traits by section. */
 function section(xml: string, name: string): { inner: string; start: number; end: number } | null {
   const m = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(xml)
   return m ? { inner: m[1]!, start: m.index, end: m.index + m[0].length } : null
 }
 
 /**
- * A feat's or item's `<mod>` children carry their own `<name>` and `<type>`,
+ * A trait's or item's `<mod>` children carry their own `<name>` and `<type>`,
  * so the parent's are read with the mods cut out first.
  */
 const withoutMods = (block: string): string => block.replace(/<mod>[\s\S]*?<\/mod>/g, '')
 
-const float = (v: string | null): number | null => {
-  if (v === null) return null
-  const n = Number.parseFloat(v)
-  return Number.isFinite(n) ? n : null
+const dedupe = <T>(xs: T[]): T[] => [...new Set(xs)]
+
+/** `Juego de Manos` → `juego-de-manos`; unique within one list. */
+function ids<T extends { name: string }>(rows: T[]): (T & { id: string })[] {
+  const seen = new Map<string, number>()
+  return rows.map((row) => {
+    const base =
+      row.name
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'x'
+    const n = seen.get(base) ?? 0
+    seen.set(base, n + 1)
+    return { ...row, id: n === 0 ? base : `${base}-${n + 1}` }
+  })
 }
 
-const dedupe = <T>(xs: T[]): T[] => [...new Set(xs)]
+// --- the pieces ------------------------------------------------------------
+
+const TRAIT_SECTION: Record<string, TraitSource> = {
+  race: 'species',
+  class: 'class',
+  background: 'background',
+}
 
 /**
  * Every `<feat>`, attributed to the section it sits in — `<race>`, `<class>`,
  * `<background>` — or to the character itself when it sits in none.
  */
-function featsOf(xml: string): SheetFeat[] {
+function traitsOf(xml: string): Trait[] {
   const sections = (['race', 'class', 'background'] as const).map(
     (name) => [name, section(xml, name)] as const,
   )
-  const out: SheetFeat[] = []
+  const out: Omit<Trait, 'id'>[] = []
   const re = /<feat>([\s\S]*?)<\/feat>/g
   for (let m = re.exec(xml); m; m = re.exec(xml)) {
     const at = m.index
-    const source =
-      sections.find(([, s]) => s && at > s.start && at < s.end)?.[0] ?? ('feat' as const)
+    const found = sections.find(([, s]) => s && at > s.start && at < s.end)?.[0]
+    const source: TraitSource = found ? TRAIT_SECTION[found]! : 'feat'
     const block = withoutMods(m[1]!)
     const name = inner(block, 'name')
     if (!name) continue
     out.push({ name, text: inner(block, 'text') ?? '', source })
   }
-  return out
+  return ids(out)
 }
 
 /** Every `<item>`, decoded through the format's own enumerations. */
-function itemsOf(xml: string): SheetItem[] {
-  const out: SheetItem[] = []
+function itemsOf(xml: string): Item[] {
+  const out: Omit<Item, 'id'>[] = []
   for (const raw of blocks(xml, 'item')) {
     const block = withoutMods(raw)
     const name = inner(block, 'name')
@@ -348,8 +200,8 @@ function itemsOf(xml: string): SheetItem[] {
     const slot = int(inner(block, 'slot'))
     out.push({
       name,
-      kind: type === null ? null : (ITEM_KIND[type] ?? null),
-      equipped: slot === null ? null : (ITEM_SLOT[slot] ?? null),
+      kind: type === null ? null : ((ITEM_KIND[type] ?? null) as ItemKind | null),
+      equipped: slot === null ? null : ((ITEM_SLOT[slot] ?? null) as ItemSlot | null),
       quantity: int(inner(block, 'quantity')) ?? 1,
       weight: float(inner(block, 'weight')),
       ac: int(inner(block, 'ac')),
@@ -357,30 +209,37 @@ function itemsOf(xml: string): SheetItem[] {
       text: inner(block, 'text') ?? '',
     })
   }
-  return out
+  return ids(out)
 }
 
 /**
- * `<proficiency>` ids — `0..5` a save by ability index, `100 + i` a skill —
- * and expertise as `<mod>` blocks of the expertise category. A sheet can
- * state one twice (Toribio's does); each is listed once.
+ * The items that are weapons, with their numbers taken out of the prose here
+ * rather than on every read.
+ *
+ * `<damage1H>` is the marker, not the prose: the same character carries a
+ * «Bastón» that has one and a «Bastón (foco arcano)» that does not, and only
+ * the first is something to swing. The generated line («Ataque +5, daño 1d6 +3
+ * perforante») is where the bonus and the final dice are; `<damage1H>` is the
+ * fallback when that line is worded some other way.
  */
-function proficientOf(xml: string): Proficient {
-  const saves: (keyof Abilities)[] = []
-  const skills: string[] = []
-  for (const v of blocks(xml, 'proficiency')) {
-    const n = int(v)
-    if (n === null) continue
-    if (n >= 0 && n < ABILITY_KEYS.length) saves.push(ABILITY_KEYS[n]!)
-    else if (n >= 100 && SKILL_FC5_ORDER[n - 100]) skills.push(SKILL_FC5_ORDER[n - 100]!)
+function weaponsOf(xml: string): Weapon[] {
+  const out: Omit<Weapon, 'id'>[] = []
+  for (const block of blocks(xml, 'item')) {
+    const damage = inner(block, 'damage1H')
+    const name = inner(block, 'name')
+    if (!damage || !name) continue
+    const text = inner(block, 'text') ?? ''
+    const mod = SHEET_MOD.exec(text)
+    const dice = damageDice(text) ?? damageDice(damage)
+    out.push({
+      name,
+      mod: mod ? signed(mod[1]!) : null,
+      dice: dice ? formatDice(dice) : damage,
+      damageType: damageType(text),
+      text,
+    })
   }
-  const expertise: string[] = []
-  for (const mod of blocks(xml, 'mod')) {
-    if (int(inner(mod, 'category')) !== EXPERTISE_CATEGORY) continue
-    const skill = SKILL_FC5_ORDER[int(inner(mod, 'type')) ?? -1]
-    if (skill) expertise.push(skill)
-  }
-  return { saves: dedupe(saves), skills: dedupe(skills), expertise: dedupe(expertise) }
+  return ids(out)
 }
 
 /** `<v>1</v><s>1</s><m>1</m><materials>lana</materials>` → `V, S, M (lana)`. */
@@ -395,27 +254,9 @@ function componentsOf(block: string): string {
   return parts.join(', ')
 }
 
-/**
- * The items that are weapons.
- *
- * `<damage1H>` is the marker, not the prose: the same character carries a
- * «Bastón» that has one and a «Bastón (foco arcano)» that does not, and only
- * the first is something to swing.
- */
-function weaponsOf(xml: string): SheetWeapon[] {
-  const out: SheetWeapon[] = []
-  for (const block of blocks(xml, 'item')) {
-    const damage = inner(block, 'damage1H')
-    const name = inner(block, 'name')
-    if (!damage || !name) continue
-    out.push({ name, damage, text: inner(block, 'text') ?? '' })
-  }
-  return out
-}
-
 /** The spells, with `<level>` absent standing for a cantrip. */
-function spellsOf(xml: string): SheetSpell[] {
-  const out: SheetSpell[] = []
+function spellsOf(xml: string): Spell[] {
+  const out: Omit<Spell, 'id'>[] = []
   for (const block of blocks(xml, 'spell')) {
     const name = inner(block, 'name')
     if (!name) continue
@@ -434,11 +275,73 @@ function spellsOf(xml: string): SheetSpell[] {
       classes: blocks(block, 'sclass').map((c) => c.trim()),
     })
   }
-  return out
+  return ids(out)
 }
 
-/** The XML parsing on its own, so it can be tested without a vault. */
-export function parseSheet(xml: string): SheetStats {
+/**
+ * `<proficiency>` ids — `0..5` a save by ability index, `100 + i` a skill —
+ * and expertise as `<mod>` blocks of the expertise category. A sheet can state
+ * one twice (Toribio's does); each is listed once.
+ */
+function proficientOf(xml: string): {
+  saves: AbilityKey[]
+  skills: SkillKey[]
+  expertise: SkillKey[]
+} {
+  const saves: AbilityKey[] = []
+  const skills: SkillKey[] = []
+  for (const v of blocks(xml, 'proficiency')) {
+    const n = int(v)
+    if (n === null) continue
+    if (n >= 0 && n < ABILITY_KEYS.length) saves.push(ABILITY_KEYS[n]!)
+    else if (n >= 100) {
+      const key = skillKeyOf(SKILL_FC5_ORDER[n - 100] ?? '')
+      if (key) skills.push(key)
+    }
+  }
+  const expertise: SkillKey[] = []
+  for (const mod of blocks(xml, 'mod')) {
+    if (int(inner(mod, 'category')) !== EXPERTISE_CATEGORY) continue
+    const key = skillKeyOf(SKILL_FC5_ORDER[int(inner(mod, 'type')) ?? -1] ?? '')
+    if (key) expertise.push(key)
+  }
+  return { saves: dedupe(saves), skills: dedupe(skills), expertise: dedupe(expertise) }
+}
+
+/** `Conjuros: Inteligencia · …` — the word the sheet uses for one of the six. */
+const CASTING_ABILITY: Record<string, AbilityKey> = {
+  fuerza: 'str',
+  destreza: 'dex',
+  constitucion: 'con',
+  inteligencia: 'int',
+  sabiduria: 'wis',
+  carisma: 'cha',
+}
+
+const unaccent = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase()
+
+const castingAbilityOf = (word: string | null): AbilityKey | null =>
+  word ? (CASTING_ABILITY[unaccent(word)] ?? null) : null
+
+/** `Salvaciones: SAB +5` names them by label, not by key. */
+const SAVE_BY_LABEL: Record<string, AbilityKey> = {
+  fue: 'str',
+  des: 'dex',
+  con: 'con',
+  int: 'int',
+  sab: 'wis',
+  car: 'cha',
+}
+
+// --- the whole thing -------------------------------------------------------
+
+/** Read a `-fc5.xml` into a character. Runs once, when the character is created. */
+export function parseSheet(xml: string): Sheet {
   // `<abilities>` is the post-boost score line: FUE,DES,CON,INT,SAB,CAR
   const scores = (tag(xml, 'abilities') ?? '')
     .split(',')
@@ -465,46 +368,79 @@ export function parseSheet(xml: string): SheetStats {
   }
 
   const note = noteText(xml)
-  const stated = numberAfter(note, 'Iniciativa')
-
-  // `Conjuros: Inteligencia · CD 13 · ataque +5 · 2 espacios de nivel 1`.
-  // The slots are read off `<slots>` above; what only this line has is the
-  // ability the spells key off and the two numbers the DM reads out loud.
   const conjuros = statedLine(note, 'Conjuros')
-  const spellAbility = conjuros?.split(/[·,]/)[0]?.trim() || null
+  const proficient = proficientOf(xml)
 
-  // The character's own `<name>` is the document's first; a feat's or an
+  // The character's own `<name>` is the document's first; a trait's or an
   // item's comes later. The three sections each open with their own name too.
   const race = section(xml, 'race')
   const cls = section(xml, 'class')
   const background = section(xml, 'background')
 
-  return {
-    name: tag(xml, 'name'),
-    race: race ? inner(race.inner, 'name') : null,
+  const skills: Partial<Record<SkillKey, SkillEntry>> = {}
+  for (const key of proficient.skills) skills[key] = { prof: 'proficient' }
+  for (const key of proficient.expertise) skills[key] = { prof: 'expertise' }
+
+  const saves: Partial<Record<AbilityKey, SaveEntry>> = {}
+  for (const ability of proficient.saves) saves[ability] = { proficient: true }
+
+  const castingAbility = castingAbilityOf(conjuros?.split(/[·,]/)[0]?.trim() ?? null)
+
+  const sheet: Sheet = {
+    ...emptySheet(),
+    name: tag(xml, 'name') ?? '',
+    species: race ? inner(race.inner, 'name') : null,
     className: cls ? inner(cls.inner, 'name') : null,
+    subclass: null,
     background: background ? inner(background.inner, 'name') : null,
-    speed: race ? int(inner(race.inner, 'speed')) : null,
-    money: float(tag(xml, 'money')),
-    hpMax: int(tag(xml, 'hpMax')) ?? numberAfter(note, 'PG'),
-    // The sheet's line wins; DEX alone is the fallback when there is no line.
-    initMod: stated ?? (abilities ? abilityMod(abilities.dex) : null),
     level: int(tag(xml, 'level')),
-    slots,
     abilities,
-    ac: numberAfter(note, 'CA'),
-    passivePerception: numberAfter(note, 'Percepción pasiva'),
     proficiency: numberAfter(note, 'Competencia'),
-    spellAbility,
-    spellDc: conjuros ? numberAfter(conjuros, 'CD') : null,
-    spellAttack: conjuros ? numberAfter(conjuros, 'ataque') : null,
-    skills: statedMods(statedLine(note, 'Habilidades')),
-    saves: statedMods(statedLine(note, 'Salvaciones')),
-    summary: note.split('\n')[0]?.trim() || null,
+    hpMax: int(tag(xml, 'hpMax')) ?? numberAfter(note, 'PG'),
+    ac: numberAfter(note, 'CA'),
+    // The sheet's line wins; DEX alone is the fallback when there is no line.
+    initiative: numberAfter(note, 'Iniciativa') ?? (abilities ? abilityMod(abilities.dex) : null),
+    speed: race ? int(inner(race.inner, 'speed')) : null,
+    saves,
+    skills,
+    spellcasting: castingAbility ? { ability: castingAbility, slots } : null,
     weapons: weaponsOf(xml),
     spells: spellsOf(xml),
-    feats: featsOf(xml),
+    traits: traitsOf(xml),
     items: itemsOf(xml),
-    proficient: proficientOf(xml),
   }
+
+  // Every number the sheet quotes that this app can work out for itself is
+  // compared against the formula, and kept only when the two disagree. An
+  // ordinary character imports with no overrides at all; one with something
+  // the app cannot see pins that number and leaves the rest free to move.
+  for (const stated of statedMods(statedLine(note, 'Habilidades'))) {
+    const key = skillKeyOf(stated.name)
+    if (!key) continue
+    if (skillRow(sheet, key).mod !== stated.mod) skills[key] = { ...skills[key], mod: stated.mod }
+  }
+  for (const stated of statedMods(statedLine(note, 'Salvaciones'))) {
+    const ability = SAVE_BY_LABEL[unaccent(stated.name)]
+    if (!ability) continue
+    const entry: SaveEntry = saves[ability] ?? {}
+    const base = abilities ? abilityMod(abilities[ability]) : null
+    const bonus = sheet.proficiency
+    const computed = base === null ? null : entry.proficient && bonus !== null ? base + bonus : base
+    if (computed !== stated.mod) saves[ability] = { ...entry, mod: stated.mod }
+  }
+
+  const passive = numberAfter(note, 'Percepción pasiva')
+  if (passive !== null) {
+    const percepcion = skillRow(sheet, 'percepcion').mod
+    if (percepcion === null || 10 + percepcion !== passive) sheet.passivePerception = passive
+  }
+
+  if (sheet.spellcasting && conjuros) {
+    const dc = numberAfter(conjuros, 'CD')
+    if (dc !== null && spellDcOf(sheet) !== dc) sheet.spellcasting.dc = dc
+    const attack = numberAfter(conjuros, 'ataque')
+    if (attack !== null && spellAttackOf(sheet) !== attack) sheet.spellcasting.attack = attack
+  }
+
+  return sheet
 }

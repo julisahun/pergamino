@@ -1,6 +1,6 @@
 /** Shared helpers for the combat views. */
 import { attacksOfPnj, attacksOfSheet, type Attack } from '../../../shared/combat/attacks.ts'
-import type { SheetStats } from '../../../shared/vault/sheet.ts'
+import type { Sheet } from '../../../shared/character.ts'
 import type { LiveState, Npc, Portrait, Ref, SessionState } from '../../../shared/types.ts'
 import { makeRef, refId, refKind } from '../../../shared/types.ts'
 
@@ -45,14 +45,14 @@ export interface PcSheet {
  */
 export const pcSheets = (
   characters: { id: string; name: string; portrait: Portrait | null }[],
-  sheets: Record<string, SheetStats | undefined>,
+  sheets: Record<string, Sheet | undefined>,
 ): PcSheet[] =>
   characters.map((c) => ({
     id: c.id,
     name: c.name || c.id,
     hpMax: sheets[c.id]?.hpMax ?? null,
     ac: sheets[c.id]?.ac ?? null,
-    initMod: sheets[c.id]?.initMod ?? 0,
+    initMod: sheets[c.id]?.initiative ?? 0,
     hasPortrait: Boolean(c.portrait?.stamp || c.portrait?.src),
     attacks: attacksOfSheet(sheets[c.id]),
   }))

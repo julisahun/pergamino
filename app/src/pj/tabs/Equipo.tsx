@@ -26,11 +26,6 @@ export function Equipo({ view, disabled }: { view: PlayerView; disabled: boolean
         <span>{es.oro}</span>
         <input className="pj-input" inputMode="numeric" disabled={disabled} {...gold} />
         <span className="muted">po</span>
-        {sheet.money !== null && (
-          <span className="muted small">
-            ({es.monedas}: {sheet.money})
-          </span>
-        )}
       </div>
 
       {objects.length > 0 && (
@@ -73,8 +68,8 @@ export function Equipo({ view, disabled }: { view: PlayerView; disabled: boolean
       <h3>{es.equipoTab}</h3>
       {sheet.items.length === 0 && <p className="muted">{es.sinEquipo}</p>}
       <ul className="pj-list">
-        {sheet.items.map((it, i) => (
-          <li key={`${it.name}-${i}`} className="pj-row">
+        {sheet.items.map((it) => (
+          <li key={it.id} className="pj-row">
             <span className="pj-row-title">
               {it.name}
               {it.quantity > 1 && <span className="muted"> ×{it.quantity}</span>}

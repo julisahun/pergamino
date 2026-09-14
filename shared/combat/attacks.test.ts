@@ -5,15 +5,16 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Ability } from '../types.ts'
-import { emptySheet, type SheetSpell, type SheetStats } from '../vault/sheet.ts'
+import { emptySheet, type Spell, type Sheet } from '../character.ts'
 import { attacksOfAbilities, attacksOfSheet } from './attacks.ts'
 import { formatDice } from './dice.ts'
 
 const ability = (name: string, desc: string): Ability => ({ id: name, name, desc })
 
 /** The four fields an action is read from; the sheet's other spell fields are noise here. */
-type SpellSeed = Pick<SheetSpell, 'name' | 'level' | 'roll' | 'text'>
-const spell = (seed: SpellSeed): SheetSpell => ({
+type SpellSeed = Pick<Spell, 'name' | 'level' | 'roll' | 'text'>
+const spell = (seed: SpellSeed): Spell => ({
+  id: seed.name.toLowerCase().replace(/[^a-z]+/g, '-'),
   school: null,
   time: null,
   range: null,
@@ -24,13 +25,31 @@ const spell = (seed: SpellSeed): SheetSpell => ({
   ...seed,
 })
 
-const sheet = (over: Partial<Omit<SheetStats, 'spells'>> & { spells?: SpellSeed[] } = {}): SheetStats => ({
+/**
+ * A caster whose numbers come out as the ones these cases were written against:
+ * INT 17 is +3, competencia +2, so CD 13 and ataque +5 — and the casting
+ * modifier a heal folds in is that same +3, read off the score now rather than
+ * worked back out of the attack bonus.
+ */
+const sheet = (
+  over: Partial<Omit<Sheet, 'spells' | 'spellcasting'>> & { spells?: SpellSeed[] } = {},
+): Sheet => ({
   ...emptySheet(),
-  spellAttack: 5,
-  spellDc: 13,
   proficiency: 2,
+  abilities: { str: 10, dex: 10, con: 10, int: 17, wis: 10, cha: 10 },
   ...over,
+  spellcasting: { ability: 'int', slots: {} },
   spells: (over.spells ?? []).map(spell),
+})
+
+/** A weapon as the importer leaves it: numbers, not a sentence. */
+const weapon = (name: string, mod: number | null, dice: string): Sheet['weapons'][number] => ({
+  id: name.toLowerCase().replace(/[^a-z]+/g, '-'),
+  name,
+  mod,
+  dice,
+  damageType: null,
+  text: '',
 })
 
 describe('a pnj note', () => {
@@ -117,35 +136,26 @@ describe('a pnj note', () => {
 })
 
 describe('a player sheet', () => {
-  it('reads a weapon off the generated line', () => {
-    const [weapon] = attacksOfSheet(
-      sheet({
-        weapons: [
-          {
-            name: 'Espada corta',
-            damage: '1d6',
-            text: 'Ataque +5, daño 1d6 +3 perforante.\nPropiedades: sutil, ligera.',
-          },
-        ],
-      }),
-    )
-    expect(weapon).toMatchObject({ name: 'Espada corta', mod: 5, origin: 'weapon' })
-    expect(formatDice(weapon!.dice)).toBe('1d6+3')
+  it('offers a weapon as the record holds it', () => {
+    // Reading «Ataque +5, daño 1d6 +3 perforante» is the importer's job now,
+    // and is pinned in `vault/sheet.test.ts`. What is left here is the shape.
+    const [attack] = attacksOfSheet(sheet({ weapons: [weapon('Espada corta', 5, '1d6+3')] }))
+    expect(attack).toMatchObject({ name: 'Espada corta', mod: 5, origin: 'weapon' })
+    expect(formatDice(attack!.dice)).toBe('1d6+3')
   })
 
-  it('reads a negative modifier — Abraxas swinging a staff', () => {
-    const [weapon] = attacksOfSheet(
-      sheet({
-        weapons: [{ name: 'Bastón', damage: '1d6', text: 'Ataque +1, daño 1d6 -1 contundente.' }],
-      }),
-    )
-    expect(formatDice(weapon!.dice)).toBe('1d6-1')
+  it('carries a negative modifier through — Abraxas swinging a staff', () => {
+    const [attack] = attacksOfSheet(sheet({ weapons: [weapon('Bastón', 1, '1d6-1')] }))
+    expect(formatDice(attack!.dice)).toBe('1d6-1')
+  })
+
+  it('offers nothing for a weapon with no dice on it', () => {
+    expect(attacksOfSheet(sheet({ weapons: [weapon('Bastón (foco arcano)', null, '')] }))).toEqual([])
   })
 
   it('keys a spell attack to the bonus the sheet quotes, not the weapon', () => {
     const [spell] = attacksOfSheet(
       sheet({
-        spellAttack: 5,
         spells: [
           {
             name: 'Saeta de Fuego',
@@ -203,8 +213,6 @@ describe('a player sheet', () => {
     // a number, but an attack bonus is that modifier plus proficiency.
     const [heal] = attacksOfSheet(
       sheet({
-        spellAttack: 5,
-        proficiency: 2,
         spells: [
           {
             name: 'Curar Heridas',

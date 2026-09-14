@@ -1,12 +1,18 @@
 /**
- * `skillRows` merges what the sheet states with what the scores imply, and
- * marks which is which. Nothing here needs a vault.
+ * `skillRows` works every skill out of the record — scores, proficiency and
+ * expertise — and steps aside for an override. Nothing here needs a vault.
+ *
+ * The fixtures go through `parseSheet` because that is how these records are
+ * born, and it means these tests also pin the import rule from the other side:
+ * a quoted number that matches the formula leaves no override behind, so the
+ * row is still computed.
  */
 import { describe, expect, it } from 'vitest'
 import { SKILLS, saveRows, skillRows } from './skills.ts'
-import { emptySheet, parseSheet, type SheetStats } from './vault/sheet.ts'
+import { parseSheet } from './vault/sheet.ts'
+import { emptySheet, type Sheet } from './character.ts'
 
-const sheetWith = (lines: string): SheetStats =>
+const sheetWith = (lines: string): Sheet =>
   parseSheet(`<pc><character><abilities>8,16,14,10,12,17,</abilities>
   <note><text>Bardo de nivel 2.
 
@@ -14,7 +20,7 @@ CA 14 · PG 16 · Competencia +2
 ${lines}</text></note></character></pc>`)
 
 /** The same bard, with the class's proficiency ids and one expertise. */
-const proficientWith = (lines: string): SheetStats =>
+const proficientWith = (lines: string): Sheet =>
   parseSheet(`<pc><character><abilities>8,16,14,10,12,17,</abilities>
   <class><name>Bardo</name>
    <proficiency>112</proficiency><proficiency>116</proficiency><proficiency>111</proficiency>
@@ -33,73 +39,82 @@ describe('skillRows', () => {
     expect(rows.map((r) => r.name)).toEqual(SKILLS.map((s) => s.name))
   })
 
-  it('falls back to the ability modifier, and says it did', () => {
+  it('falls back to the ability modifier when nothing is proficient', () => {
     const rows = skillRows(sheetWith(''))
     const atletismo = rows.find((r) => r.name === 'Atletismo')!
     expect(atletismo.mod).toBe(-1) // FUE 8
-    expect(atletismo.stated).toBe(false)
+    expect(atletismo.override).toBe(false)
     const sigilo = rows.find((r) => r.name === 'Sigilo')!
     expect(sigilo.mod).toBe(3) // DES 16, no proficiency known
-    expect(sigilo.stated).toBe(false)
+    expect(sigilo.override).toBe(false)
   })
 
-  it("takes the sheet's number where the sheet quotes one", () => {
+  it("takes the sheet's number where the formula cannot reach it", () => {
     const rows = skillRows(sheetWith('Habilidades: Sigilo +7 · Interpretación +5'))
     const sigilo = rows.find((r) => r.name === 'Sigilo')!
-    // +7, not the +3 DES alone would give: that is the whole point.
+    // +7, not the +3 DES alone would give: this sheet states no proficiency
+    // ids, so the number is unreachable and is pinned as an override.
     expect(sigilo.mod).toBe(7)
-    expect(sigilo.stated).toBe(true)
+    expect(sigilo.override).toBe(true)
     // And the ones it does not quote stay the bare ability.
-    expect(rows.find((r) => r.name === 'Acrobacias')).toMatchObject({ mod: 3, stated: false })
+    expect(rows.find((r) => r.name === 'Acrobacias')).toMatchObject({ mod: 3, override: false })
   })
 
   it('matches a quoted name whatever its accents and case', () => {
     const rows = skillRows(sheetWith('Habilidades: percepcion +5 · ENGAÑO +6'))
-    expect(rows.find((r) => r.name === 'Percepción')).toMatchObject({ mod: 5, stated: true })
-    expect(rows.find((r) => r.name === 'Engaño')).toMatchObject({ mod: 6, stated: true })
+    expect(rows.find((r) => r.name === 'Percepción')).toMatchObject({ mod: 5, override: true })
+    expect(rows.find((r) => r.name === 'Engaño')).toMatchObject({ mod: 6, override: true })
   })
 
-  it('adds up a proficient skill the sheet does not quote, and says so', () => {
+  it('adds proficiency up, and doubles it for an expertise', () => {
     const rows = skillRows(proficientWith(''))
     // Interpretación: CAR 17 is +3, plus the sheet's +2 competencia.
     expect(rows.find((r) => r.name === 'Interpretación')).toMatchObject({
       mod: 5,
-      stated: false,
-      derived: true,
+      override: false,
       proficient: true,
       expertise: false,
     })
     // Sigilo with expertise: DES 16 is +3, plus twice the +2.
     expect(rows.find((r) => r.name === 'Sigilo')).toMatchObject({
       mod: 7,
-      derived: true,
+      override: false,
       proficient: true,
       expertise: true,
     })
     // Not proficient: the bare ability, and no claim otherwise.
     expect(rows.find((r) => r.name === 'Atletismo')).toMatchObject({
       mod: -1,
-      derived: false,
+      override: false,
       proficient: false,
     })
   })
 
-  it('lets a stated line win over the derived number', () => {
+  it('moves every computed row when the proficiency bonus does', () => {
+    // The reason the split exists. One edit at level 5, eighteen right numbers.
+    const sheet = proficientWith('')
+    expect(skillRows(sheet).find((r) => r.name === 'Sigilo')!.mod).toBe(7)
+    const atFive = skillRows({ ...sheet, proficiency: 3 })
+    expect(atFive.find((r) => r.name === 'Sigilo')!.mod).toBe(9) // +3 and twice +3
+    expect(atFive.find((r) => r.name === 'Interpretación')!.mod).toBe(6)
+    expect(atFive.find((r) => r.name === 'Atletismo')!.mod).toBe(-1) // untouched
+  })
+
+  it('lets an override win over the computed number, and stays put', () => {
     const rows = skillRows(proficientWith('Habilidades: Sigilo +9'))
     expect(rows.find((r) => r.name === 'Sigilo')).toMatchObject({
       mod: 9,
-      stated: true,
-      derived: false,
+      override: true,
       expertise: true,
     })
   })
 
-  it('derives nothing without a stated proficiency bonus', () => {
+  it('computes nothing without a stated proficiency bonus', () => {
     const noBonus = parseSheet(`<pc><character><abilities>8,16,14,10,12,17,</abilities>
       <class><proficiency>116</proficiency></class></character></pc>`)
     expect(skillRows(noBonus).find((r) => r.name === 'Sigilo')).toMatchObject({
       mod: 3,
-      derived: false,
+      override: false,
       proficient: true,
     })
   })
@@ -108,7 +123,7 @@ describe('skillRows', () => {
     for (const sheet of [undefined, emptySheet()]) {
       const rows = skillRows(sheet)
       expect(rows).toHaveLength(18)
-      expect(rows.every((r) => r.mod === null && !r.stated)).toBe(true)
+      expect(rows.every((r) => r.mod === null && !r.override)).toBe(true)
     }
   })
 })

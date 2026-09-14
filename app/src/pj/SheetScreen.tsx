@@ -22,7 +22,7 @@ export function SheetScreen() {
 
   if (!view) return <div className="pj-center muted">{es.cargando}</div>
 
-  const casts = Object.keys(view.sheet.slots).length > 0 || view.sheet.spells.length > 0
+  const casts = view.sheet.spellcasting !== null || view.sheet.spells.length > 0
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'combate', label: es.combate, icon: '◈' },
     { id: 'aptitudes', label: es.aptitudes, icon: '✥' },

@@ -11,7 +11,17 @@
 import type { Action } from './actions.ts'
 import type { PlayerView } from './session/player.ts'
 import type { Character, GameObject, Pnj, Scene, SessionState, TableView } from './types.ts'
-import type { SheetStats } from './vault/sheet.ts'
+import type { Sheet } from './character.ts'
+
+/**
+ * An edit to a character: the fields that change, and only those.
+ *
+ * Applied as a **shallow merge** — a key that is present replaces what was
+ * there, a key that is absent is left alone, and an array or a nested object
+ * arrives whole rather than being merged item by item. Levelling up is one of
+ * these: `{ level, hpMax, spellcasting, traits, skills }` and nothing else.
+ */
+export type SheetPatch = Partial<Sheet>
 
 // --- who is asking -----------------------------------------------------------
 
@@ -169,7 +179,7 @@ export type ServerMsg =
    * replaced or removed. The DM gets everyone's sheet; a phone gets the
    * signal only and refetches what its role may see.
    */
-  | { type: 'party'; rev: number; characters?: Character[]; sheets?: Record<string, SheetStats> }
+  | { type: 'party'; rev: number; characters?: Character[]; sheets?: Record<string, Sheet> }
   | { type: 'ack'; id: string; rev: number; changed: boolean }
   | { type: 'reject'; id: string; code: ErrorCode; reason: string }
   | { type: 'pong' }

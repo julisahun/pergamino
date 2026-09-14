@@ -29,7 +29,7 @@ import type { CampaignVault, AssetIndex } from '../../../shared/vault/binding.ts
 import type { NotesIndex } from '../../../shared/vault/notes.ts'
 import { search } from '../../../shared/vault/notes.ts'
 import { renderNote } from '../../../shared/vault/render.ts'
-import type { SheetStats } from '../../../shared/vault/sheet.ts'
+import type { Sheet } from '../../../shared/character.ts'
 import {
   applyDeviations,
   draftBitacora,
@@ -59,7 +59,7 @@ import { api, ApiError } from '../net/api.ts'
 import { publishPrep } from './publish.ts'
 import { RemoteSessionStore, type Connection } from './remoteStore.ts'
 
-export type { SheetStats }
+export type { Sheet }
 
 export type Tab = 'mesa' | 'party' | 'pnj' | 'objetos' | 'notas' | 'sesion' | 'preparacion'
 
@@ -147,7 +147,7 @@ interface DmStore {
   pnjs: (Pnj & { hasPortrait: boolean })[]
   objects: GameObject[]
   characters: Character[]
-  sheets: Record<string, SheetStats>
+  sheets: Record<string, Sheet>
   assets: AssetIndex
   state: SessionState | null
   /** Non-null while the table screen is holding an older frame. */

@@ -13,7 +13,14 @@ import { useMemo, useState } from 'react'
 import type { GameObject } from '../../../shared/types.ts'
 import { refId } from '../../../shared/types.ts'
 import { CONDITION_SHORT } from '../../../shared/conditions.ts'
-import { abilityMod, formatMod, type Abilities, type SheetStats } from '../../../shared/vault/sheet.ts'
+import {
+  abilityMod,
+  formatMod,
+  slotsOf,
+  summaryOf,
+  type Abilities,
+  type Sheet,
+} from '../../../shared/character.ts'
 import { es } from '../strings/es.ts'
 import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
@@ -218,7 +225,7 @@ function PcCard({
   onSheet,
 }: {
   c: Combatant
-  sheet: SheetStats | undefined
+  sheet: Sheet | undefined
   objects: GameObject[]
   everyone: Combatant[]
   usesOf: (id: string) => { uses: number; spent: boolean } | undefined
@@ -236,7 +243,7 @@ function PcCard({
   const { onKeyDown: _ignoreEnter, ...inventoryProps } = useDraft(c.live.inventory, (t) =>
     dispatch({ type: 'inventory/set', ref: c.ref, text: t }),
   )
-  const slots = sheet?.slots ?? {}
+  const slots = sheet ? slotsOf(sheet) : {}
   const carried = objects.filter((o) => c.live.objects.includes(o.id))
   const acBonus = carried.reduce((sum, o) => sum + (o.mods.ac ?? 0), 0)
   // Shown side by side rather than added up: the sheet's AC is the sheet's,
@@ -249,7 +256,7 @@ function PcCard({
         <Face src={c.portrait} name={c.name} />
         <div style={{ flex: 1 }}>
           <h3>{c.name}</h3>
-          {sheet?.summary && <div className="sub">{sheet.summary}</div>}
+          {sheet && summaryOf(sheet) && <div className="sub">{summaryOf(sheet)}</div>}
           <div className="sub">
             {c.hpMax !== null && `${es.pg} ${c.live.hp ?? 0}/${c.hpMax}`}
             {c.live.temp > 0 && ` +${c.live.temp}`}
@@ -299,7 +306,7 @@ function PcCard({
         <div className="pc-field">
           <span>{es.espacios}</span>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {Object.entries(slots).map(([level, max]) => {
+            {Object.entries(slots).map(([level, max]: [string, number]) => {
               const spent = c.live.spent[level] ?? 0
               return (
                 <div key={level} className="slot-row">
