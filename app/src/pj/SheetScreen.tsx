@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import { es } from '../strings/es.ts'
+import { LevelUp } from '../sheet/LevelUp.tsx'
 import { usePj } from '../state/pjStore.ts'
 import { HpHeader } from './HpHeader.tsx'
 import { Aptitudes } from './tabs/Aptitudes.tsx'
@@ -16,9 +17,10 @@ import { Rasgos } from './tabs/Rasgos.tsx'
 type Tab = 'combate' | 'aptitudes' | 'conjuros' | 'rasgos' | 'equipo' | 'mesa'
 
 export function SheetScreen() {
-  const { view, connection, reject, forget, replaceSheet, busy } = usePj()
+  const { view, connection, reject, forget, replaceSheet, editSheet, busy, error } = usePj()
   const [tab, setTab] = useState<Tab>('combate')
   const [menu, setMenu] = useState(false)
+  const [levelUp, setLevelUp] = useState(false)
 
   if (!view) return <div className="pj-center muted">{es.cargando}</div>
 
@@ -42,8 +44,24 @@ export function SheetScreen() {
         </div>
       )}
       {reject && <div className="pj-banner warn">{`${es.rechazado}: ${reject}`}</div>}
+      {levelUp && (
+        <LevelUp
+          sheet={view.sheet}
+          currentHp={view.live.hp}
+          busy={busy}
+          error={error}
+          onClose={() => setLevelUp(false)}
+          onApply={(patch) => {
+            void editSheet(patch)
+            setLevelUp(false)
+          }}
+        />
+      )}
       {menu && (
         <div className="pj-menu" onClick={() => setMenu(false)}>
+          <button className="pj-menu-item" onClick={() => setLevelUp(true)}>
+            {es.subirDeNivel}
+          </button>
           <label className="pj-menu-item">
             {es.sustituirFicha}
             <input

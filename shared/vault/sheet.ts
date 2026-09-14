@@ -34,6 +34,7 @@ import {
   emptySheet,
   skillKeyOf,
   skillRow,
+  slugId,
   spellAttackOf,
   spellDcOf,
   type AbilityKey,
@@ -142,20 +143,13 @@ const withoutMods = (block: string): string => block.replace(/<mod>[\s\S]*?<\/mo
 
 const dedupe = <T>(xs: T[]): T[] => [...new Set(xs)]
 
-/** `Juego de Manos` → `juego-de-manos`; unique within one list. */
+/** Every row of one list, slugged and unique — the same ids an edit will use. */
 function ids<T extends { name: string }>(rows: T[]): (T & { id: string })[] {
-  const seen = new Map<string, number>()
+  const taken = new Set<string>()
   return rows.map((row) => {
-    const base =
-      row.name
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') || 'x'
-    const n = seen.get(base) ?? 0
-    seen.set(base, n + 1)
-    return { ...row, id: n === 0 ? base : `${base}-${n + 1}` }
+    const id = slugId(row.name, taken)
+    taken.add(id)
+    return { ...row, id }
   })
 }
 

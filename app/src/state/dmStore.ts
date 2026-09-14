@@ -30,6 +30,7 @@ import type { NotesIndex } from '../../../shared/vault/notes.ts'
 import { search } from '../../../shared/vault/notes.ts'
 import { renderNote } from '../../../shared/vault/render.ts'
 import type { Sheet } from '../../../shared/character.ts'
+import type { SheetPatch } from '../../../shared/protocol.ts'
 import {
   applyDeviations,
   draftBitacora,
@@ -183,6 +184,7 @@ interface DmStore {
   rotateLink: () => Promise<void>
   addCharacter: (file: File, player: string) => Promise<void>
   replaceSheet: (pcId: string, file: File) => Promise<void>
+  editSheet: (pcId: string, patch: SheetPatch) => Promise<void>
   removeCharacter: (pcId: string) => Promise<void>
   resetSession: () => Promise<void>
 
@@ -423,6 +425,17 @@ export const useDm = create<DmStore>((set, get) => ({
     try {
       if (!mesaId) return
       await api.replaceSheet(secret, id, mesaId, pcId, await file.text())
+      set({ serverError: null })
+    } catch (err) {
+      set({ serverError: describe(err) })
+    }
+  },
+
+  editSheet: async (pcId, patch) => {
+    const id = get().campaignId
+    if (!secret || !id || !mesaId) return
+    try {
+      await api.editSheet(secret, id, mesaId, pcId, patch)
       set({ serverError: null })
     } catch (err) {
       set({ serverError: describe(err) })

@@ -394,4 +394,17 @@ export const es = {
   llevado: 'llevado',
   peso: 'Peso',
   velocidadLabel: 'Velocidad',
+
+  // subir de nivel
+  subirDeNivel: 'Subir de nivel',
+  subirA: 'Subir a nivel',
+  antes: 'antes',
+  pgMaximos: 'PG máximos',
+  pgActualesSuben: 'Sus PG actuales suben otro tanto:',
+  rasgosNuevos: 'Rasgos nuevos',
+  anadirRasgo: 'Añadir rasgo',
+  nombreDelRasgo: 'Nombre — «Astucia»',
+  queHaceElRasgo: 'Qué hace, con las palabras que quieras leer en mesa.',
+  competencias: 'Competencias y experticia',
+  tocaParaCambiar: 'Toca para cambiar: nada → competente → experticia',
 } as const

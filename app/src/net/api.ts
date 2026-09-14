@@ -17,6 +17,7 @@ import type {
 } from '../../../shared/protocol.ts'
 import type { Character } from '../../../shared/types.ts'
 import type { Sheet } from '../../../shared/character.ts'
+import type { SheetPatch } from '../../../shared/protocol.ts'
 
 export class ApiError extends Error {
   constructor(
@@ -135,6 +136,13 @@ export const api = {
       body: xml,
       type: 'application/xml',
     }),
+  /** A level-up, or any edit: the fields that change and nothing else. */
+  editSheet: (secret: string, id: string, mesa: string, pc: string, patch: SheetPatch) =>
+    call<{ rev: number }>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/characters/${enc(pc)}/sheet`, {
+      secret,
+      method: 'PATCH',
+      json: patch,
+    }),
   removeCharacter: (secret: string, id: string, mesa: string, pc: string) =>
     call<void>(`/api/dm/campaigns/${enc(id)}/mesas/${enc(mesa)}/characters/${enc(pc)}`, { secret, method: 'DELETE' }),
   rotateLink: (secret: string, id: string, mesa: string) =>
@@ -161,6 +169,11 @@ export const api = {
         method: 'PUT',
         body: xml,
         type: 'application/xml',
+      }),
+    editSheet: (link: string, pc: string, patch: SheetPatch) =>
+      call<{ rev: number }>(`/api/pj/${enc(link)}/characters/${enc(pc)}/sheet`, {
+        method: 'PATCH',
+        json: patch,
       }),
   },
 }

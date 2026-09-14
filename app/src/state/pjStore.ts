@@ -8,7 +8,7 @@
  */
 import { create } from 'zustand'
 import type { Action } from '../../../shared/actions.ts'
-import type { CampaignPublic, ClientHello, ServerMsg } from '../../../shared/protocol.ts'
+import type { CampaignPublic, ClientHello, ServerMsg, SheetPatch } from '../../../shared/protocol.ts'
 import type { PlayerView } from '../../../shared/session/player.ts'
 import { isFc5Sheet } from '../../../shared/vault/sheet.ts'
 import { AssetCache } from '../assets/cache.ts'
@@ -70,6 +70,7 @@ interface PjStore {
   cancelCreate: () => void
   create: (file: File, player: string) => Promise<void>
   replaceSheet: (file: File) => Promise<void>
+  editSheet: (patch: SheetPatch) => Promise<void>
   dispatch: (action: Action) => void
 }
 
@@ -131,6 +132,19 @@ export const usePj = create<PjStore>((set, get) => ({
       const { id } = await api.pj.create(link, xml, player)
       await loadParty(set, get)
       get().choose(id)
+    } catch (err) {
+      set({ error: describe(err) })
+    } finally {
+      set({ busy: false })
+    }
+  },
+
+  editSheet: async (patch) => {
+    const { link, pcId } = get()
+    if (!pcId) return
+    set({ busy: true, error: null })
+    try {
+      await api.pj.editSheet(link, pcId, patch)
     } catch (err) {
       set({ error: describe(err) })
     } finally {

@@ -29,6 +29,7 @@ const SCRIPTS = [
   'e2e-mascara.mjs',
   'e2e-preparacion.mjs',
   'e2e-pj.mjs',
+  'e2e-subir-nivel.mjs',
 ]
 
 try {

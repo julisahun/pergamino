@@ -415,6 +415,25 @@ export function spellAttackOf(sheet: Sheet): number | null {
  */
 export const castingModifier = (sheet: Sheet): number => castingMod(sheet) ?? 0
 
+/**
+ * `Juego de Manos` → `juego-de-manos`, unique among `taken`.
+ *
+ * Rows carry an id because the record is edited: a trait added at level 2 has
+ * to be addressable by something stabler than its position in the array.
+ */
+export function slugId(name: string, taken: Iterable<string> = []): string {
+  const base =
+    name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'x'
+  const used = new Set(taken)
+  if (!used.has(base)) return base
+  for (let n = 2; ; n++) if (!used.has(`${base}-${n}`)) return `${base}-${n}`
+}
+
 // --- checking one on the way in --------------------------------------------
 
 /**

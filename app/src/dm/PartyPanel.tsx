@@ -22,6 +22,7 @@ import {
   type Sheet,
 } from '../../../shared/character.ts'
 import { es } from '../strings/es.ts'
+import { LevelUp } from '../sheet/LevelUp.tsx'
 import { useDraft } from './useDraft.ts'
 import { useDm } from '../state/dmStore.ts'
 import { Face } from './Face.tsx'
@@ -234,8 +235,10 @@ function PcCard({
 }) {
   const dispatch = useDm((s) => s.dispatch)
   const replaceSheet = useDm((s) => s.replaceSheet)
+  const editSheet = useDm((s) => s.editSheet)
   const removeCharacter = useDm((s) => s.removeCharacter)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [levelUp, setLevelUp] = useState(false)
   const pcId = refId(c.ref)
   const gold = useDraft(c.live.gold, (t) =>
     dispatch({ type: 'gold/set', ref: c.ref, gold: Number(t.replace(/\D/g, '')) || 0 }),
@@ -390,7 +393,24 @@ function PcCard({
         <textarea placeholder={es.sinObjetos} {...inventoryProps} />
       </div>
 
+      {levelUp && sheet && (
+        <LevelUp
+          sheet={sheet}
+          currentHp={c.live.hp}
+          onClose={() => setLevelUp(false)}
+          onApply={(patch) => {
+            void editSheet(pcId, patch)
+            setLevelUp(false)
+          }}
+        />
+      )}
+
       <div className="row pc-server" style={{ marginTop: 8, gap: 6 }}>
+        {sheet && (
+          <button className="mini" onClick={() => setLevelUp(true)}>
+            {es.subirDeNivel}
+          </button>
+        )}
         <label className="mini button-like" title={es.sustituirFicha}>
           {es.sustituirFicha}
           <input
