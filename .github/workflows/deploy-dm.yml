@@ -1,19 +1,19 @@
-# Ships the app to the Pi (https://dm.sigint-pm.uk) over a Tailscale SSH link.
+# Ships the app to home-lab (https://dm.sigint-pm.uk) over a Tailscale SSH link.
 #
 # Vite emits the pages into dist/ and esbuild bundles the server into one file,
 # server/dist/index.mjs — `ws` and everything under shared/ inlined. That pair
 # plus deploy/dm-app.service, is the entire runtime set: no source, no
-# node_modules reach the Pi. It runs `node server/dist/index.mjs` under
+# node_modules reach home-lab. It runs `node server/dist/index.mjs` under
 # dm-app.service — the unit on the box is a `systemctl link` to the shipped
 # file, so a change to it deploys like any other and takes effect on the
 # `daemon-reload` before the restart — with DM_DB and PUBLIC_URL in
 # /opt/dm-app/.env.
 #
-# Two things on the Pi are never touched by this workflow: `.env`, and `data/`,
+# Two things on home-lab are never touched by this workflow: `.env`, and `data/`,
 # where the SQLite database and its backups live. Both are excluded from the
 # rsync — without that, `--delete` would take the database out with the
 # previous build.
-name: Deploy to Pi
+name: Deploy to home-lab
 
 on:
   push:
@@ -21,16 +21,16 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pi-dm-deploy
+  group: homelab-dm-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      PI_HOST: home-lab          # MagicDNS name of home-lab (all services moved here 2026-09-20)
-      PI_USER: sigint
-      PI_DIR: /opt/dm-app
+      DEPLOY_HOST: home-lab   # MagicDNS name of the host running the services
+      DEPLOY_USER: sigint
+      DEPLOY_DIR: /opt/dm-app
 
     steps:
       - uses: actions/checkout@v5
@@ -68,7 +68,7 @@ jobs:
       # the last build left — without the pair, the live server spends the
       # transfer serving a half-swapped tree. `--exclude` keeps the database
       # and the secrets out of the mirror's reach.
-      - name: Ship the build to the Pi
+      - name: Ship the build to home-lab
         run: |
           rm -rf /tmp/stage && mkdir -p /tmp/stage/server/dist
           cp -R dist /tmp/stage/dist
@@ -78,7 +78,7 @@ jobs:
           rsync -a --delete --delete-after --delay-updates \
             --exclude 'data/' --exclude '.env' \
             -e "ssh -o StrictHostKeyChecking=accept-new" \
-            /tmp/stage/ "$PI_USER@$PI_HOST:$PI_DIR/"
+            /tmp/stage/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
 
       # The pages *and everything they name*; the cache headers that once cost
       # four hours of blank page; and the properties that make public hosting
@@ -88,7 +88,7 @@ jobs:
       # database survived the deploy.
       - name: Restart & smoke test
         run: |
-          ssh -o StrictHostKeyChecking=accept-new "$PI_USER@$PI_HOST" \
+          ssh -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" \
             'set -e
              node --version
              sudo systemctl daemon-reload
