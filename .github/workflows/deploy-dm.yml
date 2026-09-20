@@ -28,7 +28,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      PI_HOST: sigint          # Tailscale MagicDNS name of the Pi
+      PI_HOST: home-lab          # MagicDNS name of home-lab (all services moved here 2026-09-20)
       PI_USER: sigint
       PI_DIR: /opt/dm-app
 
