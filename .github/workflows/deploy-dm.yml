@@ -1,4 +1,4 @@
-# Ships the app to home-lab (https://dm.sigint-pm.uk) over a Tailscale SSH link.
+# Ships the app to home-lab (https://dm.sigint.page) over a Tailscale SSH link.
 #
 # Vite emits the pages into dist/ and esbuild bundles the server into one file,
 # server/dist/index.mjs — `ws` and everything under shared/ inlined. That pair

@@ -17,7 +17,7 @@ export interface Env {
   /** Where Vite's build is: the three pages and `assets/`. */
   dist: string
   backupDir: string
-  /** The address players are handed — `https://dm.sigint-pm.uk`, no trailing slash. */
+  /** The address players are handed — `https://dm.sigint.page`, no trailing slash. */
   publicUrl: string
 }
 
