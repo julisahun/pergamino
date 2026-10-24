@@ -6,9 +6,16 @@
  * Cloudflare's idle window, and wakes on `visibilitychange` because a phone
  * that went to a pocket dropped the socket without saying so.
  */
-import type { ClientHello, ClientMsg, ServerMsg } from '../../../shared/protocol.ts'
+import { CLOSE_FOLLOW, CLOSE_MOVED, type ClientHello, type ClientMsg, type ServerMsg } from '../../../shared/protocol.ts'
 
-export type SocketStatus = 'conectando' | 'conectada' | 'sin-conexion' | 'sin-autorizar' | 'cerrada'
+export type SocketStatus =
+  | 'conectando'
+  | 'conectada'
+  | 'sin-conexion'
+  | 'sin-autorizar'
+  /** Another console took the group to a different campaign. */
+  | 'movida'
+  | 'cerrada'
 
 const PING_MS = 30_000
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000]
@@ -78,7 +85,7 @@ export class LiveSocket {
   }
 
   #connect(): void {
-    if (this.#closed || this.#status === 'sin-autorizar') return
+    if (this.#closed || this.#status === 'sin-autorizar' || this.#status === 'movida') return
     this.#set('conectando')
     let ws: WebSocket
     try {
@@ -113,6 +120,17 @@ export class LiveSocket {
       if (ev.code === 4401) {
         this.#set('sin-autorizar')
         return
+      }
+      // Reconnecting would take the group back and drop the other console.
+      if (ev.code === CLOSE_MOVED) {
+        this.#set('movida')
+        return
+      }
+      // The group sat down somewhere else: go straight there. The revision this
+      // socket saw belongs to the partida it left, so it means nothing now.
+      if (ev.code === CLOSE_FOLLOW) {
+        this.#since = undefined
+        this.#attempt = 0
       }
       this.#set('sin-conexion')
       this.#scheduleRetry()

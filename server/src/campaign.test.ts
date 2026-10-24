@@ -2,6 +2,7 @@
  * The session the server owns, driven without a socket or a request.
  */
 import { describe, expect, it } from 'vitest'
+import { CLOSE_FOLLOW, CLOSE_MOVED } from '../../shared/protocol.ts'
 import { HttpError } from './errors.ts'
 import { CampaignSession } from './campaign.ts'
 import { memoryWorld, partida, NEL, TOLMO } from './fixtures.ts'
@@ -63,6 +64,66 @@ describe('a campaign on the server', () => {
     expect(registry.byLink(marea.link)?.id).toBe('c-1')
     partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
     expect(registry.byLink(marea.link)?.id).toBe('c-2')
+  })
+
+  /*
+   * The night this was written for: a group opened at one campaign, levelled
+   * up at another, then went back to the first — which was still holding the
+   * party it loaded at the start of the evening, and fought at level one.
+   */
+  describe('one open campaign per mesa', () => {
+    it('drops the other campaign\'s copy when the group sits down elsewhere', () => {
+      const { registry } = memoryWorld()
+      const bandera = partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+      const { id } = bandera.addCharacter(TOLMO, 'Ana')
+      const marea = partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+      marea.editSheet(id, { level: 2, hpMax: 20 })
+
+      const again = partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+      expect(again).not.toBe(bandera)
+      expect(again.sheets.get(id)).toMatchObject({ level: 2, hpMax: 20 })
+      expect(again.state.play[id]).toMatchObject({ hp: 20 })
+    })
+
+    it('does not let the old copy save its live layer over the new one', () => {
+      const { registry } = memoryWorld()
+      const bandera = partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+      const { id } = bandera.addCharacter(TOLMO, 'Ana')
+      const marea = partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+      marea.dispatch({ type: 'gold/set', ref: `pc:${id}`, gold: 300 }, { kind: 'dm' })
+      // Whatever still holds the old object, the registry hands out a fresh one.
+      expect(registry.get('c-2', 'last')).not.toBe(bandera)
+      expect(registry.get('c-2', 'last')!.state.play[id]).toMatchObject({ gold: 300 })
+    })
+
+    it('hangs up on the old copy: the console stops, a phone follows', () => {
+      const { registry } = memoryWorld()
+      const bandera = partida(registry, 'Sin Bandera', { campaign: 'c-2', mesa: 'last' })
+      const { id } = bandera.addCharacter(TOLMO, 'Ana')
+      const closed: Record<string, number> = {}
+      bandera.subscribe({ role: 'dm', send: () => {}, close: (code) => (closed.dm = code) })
+      bandera.subscribe({ role: 'pc', pcId: id, send: () => {}, close: (code) => (closed.pc = code) })
+
+      partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+      expect(closed).toEqual({ dm: CLOSE_MOVED, pc: CLOSE_FOLLOW })
+      expect(registry.byLink(bandera.link)?.id).toBe('c-1')
+    })
+
+    it('leaves another mesa at the same campaign alone', () => {
+      const { registry } = memoryWorld()
+      const last = partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' })
+      partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'otra' })
+      expect(registry.get('c-1', 'last')).toBe(last)
+    })
+  })
+
+  it('lists only the mesas that have played a campaign', () => {
+    const { registry } = memoryWorld()
+    partida(registry, 'Marea Baja', { campaign: 'c-1', mesa: 'last' }).addCharacter(TOLMO, 'Ana')
+    registry.registerCampaign('Mundo de pruebas', 'c-2')
+    // The group playing elsewhere is not this new world's to adopt.
+    expect(registry.mesasAt('c-2')).toEqual([])
+    expect(registry.mesasAt('c-1').map((m) => m.id)).toEqual(['last'])
   })
 
   it('seats a new character at full HP and bumps the revision', () => {

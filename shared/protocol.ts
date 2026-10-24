@@ -158,6 +158,23 @@ export interface ApiError {
 
 export type Role = 'dm' | 'pc' | 'tv'
 
+/**
+ * Why the server closed a socket when its group moved to another campaign.
+ *
+ * A group has one campaign open on the server at a time — two open copies of
+ * the same party each kept their own sheets and live layer in memory and saved
+ * over each other, which is how a fight in one campaign showed the hit points
+ * of a level-up made in the other. When the group is seated somewhere else the
+ * old copy is dropped and its sockets are closed with one of these:
+ *
+ * - `CLOSE_MOVED` to a DM console: another console took the group elsewhere.
+ *   Reconnecting would take it back and drop that one, so the console stops.
+ * - `CLOSE_FOLLOW` to a phone or the television: reconnect, and the link lands
+ *   on wherever the group is now — the phone follows the table.
+ */
+export const CLOSE_MOVED = 4409
+export const CLOSE_FOLLOW = 4410
+
 /** The first message on a socket. `since` is the last revision the client saw. */
 export type ClientHello =
   | { type: 'hello'; role: 'dm'; secret: string; campaign: string; mesa: string; since?: number }

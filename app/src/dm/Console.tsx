@@ -252,7 +252,9 @@ export function Console() {
                 ? es.conectando
                 : connection === 'sin-autorizar'
                   ? es.sinAutorizar
-                  : es.sinConexion
+                  : connection === 'movida'
+                    ? es.mesaMovida
+                    : es.sinConexion
           }
         >
           <span
@@ -265,6 +267,7 @@ export function Console() {
             }`}
           />
           {connection === 'sin-conexion' && es.reconectando}
+          {connection === 'movida' && es.mesaMovidaCorto}
         </span>
         {serverError && (
           <span className="badge warn" title={serverError}>

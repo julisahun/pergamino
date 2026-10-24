@@ -13,6 +13,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import type { Action } from '../../shared/actions.ts'
+import { CLOSE_FOLLOW, CLOSE_MOVED } from '../../shared/protocol.ts'
 import type {
   Actor,
   CampaignPublic,
@@ -41,6 +42,8 @@ export interface Subscriber {
   role: Role
   pcId?: string
   send: (msg: ServerMsg) => void
+  /** Hang up with a close code; absent where there is no socket to close. */
+  close?: (code: number) => void
 }
 
 const EMPTY_PREP: PrepBody = { pnjs: [], objects: [], scenes: [] }
@@ -388,6 +391,23 @@ export class CampaignSession {
   subscribe(sub: Subscriber): () => void {
     this.#subs.add(sub)
     return () => this.#subs.delete(sub)
+  }
+
+  /**
+   * The group moved to another campaign: hang up on everyone listening here.
+   * The registry has already let go of this session, so whoever reconnects
+   * loads the partida fresh — sheets and live layer from the database, not
+   * from this copy.
+   */
+  close(): void {
+    for (const sub of this.#subs) {
+      try {
+        sub.close?.(sub.role === 'dm' ? CLOSE_MOVED : CLOSE_FOLLOW)
+      } catch {
+        /* already gone */
+      }
+    }
+    this.#subs.clear()
   }
 
   /** The party message for a role, with the DM's payload where it applies. */

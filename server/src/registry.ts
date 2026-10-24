@@ -30,9 +30,20 @@ export class Registry {
     return this.#now
   }
 
+  /**
+   * A partida, opened on first use.
+   *
+   * **One open campaign per mesa.** A session holds the party's sheets and
+   * live layer in memory and only reloads them on its own changes, so two
+   * open sessions of one mesa disagree from the first edit and save over each
+   * other — a level-up in one campaign, then a fight in the other with
+   * level-one hit points. Opening a mesa at a campaign closes whatever else it
+   * had open, and the next touch of that one loads it fresh.
+   */
   get(campaign: string, mesa: string): CampaignSession | null {
     const open = this.#open.get(key(campaign, mesa))
     if (open) return open
+    this.#closeMesa(mesa)
     const session = CampaignSession.load(this.store, campaign, mesa, this.now)
     if (session) this.#open.set(key(campaign, mesa), session)
     return session
@@ -47,6 +58,32 @@ export class Registry {
     const mesa = this.store.mesaByLink(secret)
     if (!mesa?.playing) return null
     return this.get(mesa.playing, mesa.id)
+  }
+
+  /**
+   * Sit a mesa at a campaign: phones on its link land here from now on, and
+   * any other campaign it had open is closed, its sockets told to follow.
+   *
+   * The console does this first thing when it opens a campaign, before any
+   * other call loads a session — otherwise a phone reconnecting in between
+   * would reopen the old campaign under it.
+   */
+  seat(campaign: string, mesa: string): void {
+    if (this.store.mesa(mesa)?.playing !== campaign) this.store.setPlaying(mesa, campaign)
+    this.#closeMesa(mesa, campaign)
+  }
+
+  /** The mesas that have a partida at a campaign, or have it on the table. */
+  mesasAt(campaign: string): MesaRow[] {
+    return this.store.mesasAt(campaign)
+  }
+
+  #closeMesa(mesa: string, keep?: string): void {
+    for (const [k, session] of [...this.#open]) {
+      if (session.mesaId !== mesa || session.id === keep) continue
+      this.#open.delete(k)
+      session.close()
+    }
   }
 
   campaign(id: string): CampaignRow | undefined {

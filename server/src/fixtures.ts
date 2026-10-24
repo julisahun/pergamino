@@ -41,11 +41,11 @@ export function partida(
 ): CampaignSession {
   const campaign = registry.registerCampaign(title, ids.campaign)
   const mesa = registry.registerMesa(ids.mesa ? titleOf(ids.mesa) : 'Last', ids.mesa)
-  const session = registry.get(campaign.id, mesa.id)!
   // What the console does when it opens one: this is the table now, which is
-  // where a phone with the mesa's link lands.
-  session.takeTheTable()
-  return session
+  // where a phone with the mesa's link lands — and any other campaign the
+  // group had open is closed.
+  registry.seat(campaign.id, mesa.id)
+  return registry.get(campaign.id, mesa.id)!
 }
 
 const titleOf = (name: string): string => name.charAt(0).toUpperCase() + name.slice(1)

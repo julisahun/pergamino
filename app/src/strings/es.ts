@@ -312,6 +312,8 @@ export const es = {
     'El secreto nuevo se guarda en .pergamino/campaign.json de esta carpeta. ' +
     'Cualquier otra copia de la carpeta dejará de poder dirigir la campaña. ¿Seguir?',
   sinConexion: 'Sin conexión con el servidor',
+  mesaMovida: 'Otra consola ha llevado esta mesa a otra campaña. Recarga para traerla de vuelta.',
+  mesaMovidaCorto: 'La mesa está en otra campaña',
   reconectando: 'Reconectando…',
   registrarCampana: 'Registrar la campaña en el servidor',
   registrarCampanaAyuda:

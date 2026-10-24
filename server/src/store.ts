@@ -106,6 +106,21 @@ export class Store {
     return this.db.all<MesaRow>('SELECT * FROM mesa ORDER BY created_at')
   }
 
+  /**
+   * The mesas that have played a campaign or have it on the table — not every
+   * mesa on the server, which is what the console's adoption once read and
+   * then sat a stranger's group at a brand-new world.
+   */
+  mesasAt(campaign: string): MesaRow[] {
+    return this.db.all<MesaRow>(
+      `SELECT * FROM mesa WHERE playing = ?
+         OR id IN (SELECT mesa FROM partida WHERE campaign = ?)
+       ORDER BY created_at`,
+      campaign,
+      campaign,
+    )
+  }
+
   mesa(id: string): MesaRow | undefined {
     return this.db.get<MesaRow>('SELECT * FROM mesa WHERE id = ?', id)
   }

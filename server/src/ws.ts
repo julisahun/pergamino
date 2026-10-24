@@ -88,7 +88,12 @@ export function attachWs(server: Server, ctx: ServerContext): WebSocketServer {
         }
         session = sub.session
         actor = sub.actor
-        const subscriber: Subscriber = { role: sub.role, pcId: sub.pcId, send }
+        const subscriber: Subscriber = {
+          role: sub.role,
+          pcId: sub.pcId,
+          send,
+          close: (code) => ws.close(code, 'La mesa se ha ido a otra campaña'),
+        }
         unsubscribe = session.subscribe(subscriber)
         send({ type: 'welcome', role: sub.role, campaign: session.id, rev: session.rev })
         // A reconnect that missed nothing gets the welcome and no more.

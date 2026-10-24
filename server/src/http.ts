@@ -204,7 +204,7 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
       exists: true,
       id: row.id,
       title: row.title,
-      mesas: ctx.registry.mesas().map((m) => ({
+      mesas: ctx.registry.mesasAt(row.id).map((m) => ({
         id: m.id,
         title: m.title,
         playing: m.playing === row.id,
@@ -244,7 +244,11 @@ export function createHandler(ctx: ServerContext): (req: IncomingMessage, res: S
     const body = await readJson<{ title?: unknown; id?: unknown }>(req)
     const title = String(body.title ?? '').trim()
     const id = body.id === undefined ? undefined : String(body.id)
-    sendJson(res, 201, mesaRegistered(ctx.registry.registerMesa(title, id)))
+    const mesa = ctx.registry.registerMesa(title, id)
+    // Registering is the console opening this campaign for the group, so it is
+    // also where the group sits down — before prep or the socket load anything.
+    ctx.registry.seat(params.id!, mesa.id)
+    sendJson(res, 201, mesaRegistered(mesa))
   })
   route('DELETE', '/api/dm/campaigns/:id/mesas/:mesa', (req, res, params) => {
     // The group leaves the server: its party, its link and what it carried.
