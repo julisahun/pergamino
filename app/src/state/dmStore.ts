@@ -816,8 +816,21 @@ async function fixtureIdentity(title: string): Promise<string> {
   return FIXTURE_ID
 }
 
-/** The demo party, seated once the fixture's mesa exists to seat it at. */
+/**
+ * The demo party, seated once the fixture's mesa exists to seat it at.
+ *
+ * **Cleared first.** Tearing down the campaign is not enough: a character
+ * belongs to the *mesa*, which outlives the campaign by design, so the mesa
+ * survived `fixtureIdentity` and every boot stacked another copy of the whole
+ * party on top of the last. Two page loads meant two Pip Nosewicks, eleven
+ * drivers in one `e2e.mjs` run meant eleven, and a locator that named one of
+ * them started failing halfway down the suite.
+ */
 async function seatFixtureParty(mesa: string): Promise<void> {
+  const { characters } = await api.party(FIXTURE_SECRET, FIXTURE_ID, mesa)
+  for (const pc of characters) {
+    await api.removeCharacter(FIXTURE_SECRET, FIXTURE_ID, mesa, pc.id)
+  }
   for (const { player, xml } of await fixtureSheets!()) {
     await api.addCharacter(FIXTURE_SECRET, FIXTURE_ID, mesa, xml, player)
   }
