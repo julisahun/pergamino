@@ -13,9 +13,11 @@
  *
  * ## Gaps are normal
  *
- * **Nothing depends on this being complete.** A class nobody has written, a
+ * **Nothing breaks when this is incomplete.** A class nobody has written, a
  * level nobody has reached, a homebrew — `grantFor` returns `null` and the
- * level-up form falls back to what it always was: type the numbers yourself.
+ * level-up form says the table does not know that level yet, and offers
+ * nothing to type. That is deliberate: a row is where the numbers are checked
+ * once, before a session, instead of typed under pressure at the table.
  * Filling a row in is content, never code, and no class is special.
  *
  * ## About the content below
@@ -61,6 +63,14 @@ export type Choice =
       pick: number
       /** The highest spell level that may be picked here. */
       maxLevel: number
+      /**
+       * Spell names (as `spells.ts` writes them) shown first; the rest of the
+       * pool stays one tap away. A name the pool does not hold is skipped,
+       * and so is one the character already knows — which, at level 1, is
+       * usually the obvious picks. Make the list long enough to survive that;
+       * `levelup.vault.test.ts` checks it against the real party.
+       */
+      recommended?: string[]
       help?: string
     }
   | {
@@ -143,6 +153,17 @@ export const PROGRESSION: Record<string, Record<number, LevelGrant>> = {
           label: 'Un conjuro más',
           pick: 1,
           maxLevel: 1,
+          recommended: [
+            'Palabra Curativa',
+            'Dormir',
+            'Susurros Disonantes',
+            'Fuego Feérico',
+            'Heroísmo',
+            'Hechizar Persona',
+            'Risa Horrible de Tasha',
+            'Onda Trueno',
+            'Curar Heridas',
+          ],
           help: 'Un bardo sólo cambia conjuros al subir de nivel, así que éste se queda una temporada.',
         },
       ],
@@ -166,6 +187,17 @@ export const PROGRESSION: Record<string, Record<number, LevelGrant>> = {
           label: 'Un conjuro más preparado',
           pick: 1,
           maxLevel: 1,
+          recommended: [
+            'Palabra Curativa',
+            'Bendición',
+            'Santuario',
+            'Escudo de Fe',
+            'Rayo Guía',
+            'Orden',
+            'Perdición',
+            'Protección contra el Bien y el Mal',
+            'Detectar Magia',
+          ],
           help: 'Se puede cambiar en cada descanso largo, así que no es una decisión cara.',
         },
       ],
@@ -192,6 +224,20 @@ export const PROGRESSION: Record<string, Record<number, LevelGrant>> = {
           label: 'Dos conjuros para el libro',
           pick: 2,
           maxLevel: 1,
+          recommended: [
+            'Escudo',
+            'Misil Mágico',
+            'Dormir',
+            'Detectar Magia',
+            'Armadura de Mago',
+            'Encontrar Familiar',
+            'Orbe Cromático',
+            'Cuchilla de Hielo',
+            'Retirada Rápida',
+            'Nube de Niebla',
+            'Comprender Idiomas',
+            'Identificar',
+          ],
           help: 'Los copia él, y son suyos para siempre.',
         },
       ],
