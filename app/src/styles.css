@@ -884,7 +884,8 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
 
 .irow {
   display: grid;
-  grid-template-columns: 34px 54px minmax(0, 1fr);
+  /* In a fight the face carries ⊗ and the in/out button, out of one only ⊗. */
+  grid-template-columns: 34px 78px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   background: var(--bg-raised);
@@ -908,6 +909,9 @@ input[type="checkbox"] { accent-color: var(--accent); margin-top: 3px; }
   border-color: transparent; background: transparent;
 }
 .irow-off:hover { color: var(--danger); border-color: var(--danger); }
+.irow-fight:hover { color: var(--accent); border-color: var(--accent); }
+/* On a row that is out, joining is the thing to find — the row is dimmed already. */
+.irow.out .irow-fight { color: var(--accent); font-size: 15px; line-height: 1; }
 .irow-init {
   font: 600 14px/1 var(--font-ui);
   text-align: center; color: var(--accent);

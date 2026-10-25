@@ -159,6 +159,8 @@ export const es = {
   cuantos: 'Cuántos',
   listo: 'Listo',
   quitarDeLaMesa: 'Quitar de la mesa',
+  entrarEnCombate: 'Entrar en el combate',
+  salirDelCombate: 'Sacar del combate (sigue en la mesa)',
   vaciarLaMesa: 'Vaciar la mesa',
   todosEnLaMesa: 'Ya está todo el mundo en la mesa.',
 

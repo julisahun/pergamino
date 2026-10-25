@@ -37,6 +37,7 @@ function RailRow({
   inEncounter,
   showInit,
   onRemove,
+  onFight,
   onSelect,
   bar,
 }: {
@@ -49,6 +50,8 @@ function RailRow({
   inEncounter: boolean
   showInit: boolean
   onRemove: () => void
+  /** In or out of the fight, staying on the board. Absent when no fight is on. */
+  onFight?: () => void
   onSelect: () => void
   /** The action bar, on the row whose turn it is and nowhere else. */
   bar?: React.ReactNode
@@ -99,6 +102,15 @@ function RailRow({
         <button className="mini irow-off" title={es.quitarDeLaMesa} onClick={stop(onRemove)}>
           ⊗
         </button>
+        {onFight && (
+          <button
+            className="mini irow-off irow-fight"
+            title={inEncounter ? es.salirDelCombate : es.entrarEnCombate}
+            onClick={stop(onFight)}
+          >
+            {inEncounter ? '⊖' : '⚔'}
+          </button>
+        )}
       </div>
 
       <div className="irow-main">
@@ -254,6 +266,17 @@ export function InitiativeRail() {
       inEncounter={inEncounter}
       showInit={encounter.on}
       onRemove={() => dispatch({ type: 'token/remove', ref: c.ref })}
+      onFight={
+        encounter.on
+          ? () =>
+              dispatch({
+                type: 'encounter/members',
+                members: inEncounter
+                  ? encounter.members.filter((m) => m !== c.ref)
+                  : [...encounter.members, c.ref],
+              })
+          : undefined
+      }
       onSelect={() => setSelected(c.ref)}
     />
   )

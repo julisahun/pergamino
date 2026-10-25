@@ -91,4 +91,35 @@ console.log(`  turn order: ${order.join(' → ')}`)
 if (order.join() !== '18,7') fail('the order is not what was typed')
 await shot('combate-3-en-marcha')
 
+// Seated mid-fight is in the fight — the second wave used to land under
+// «Fuera» with no way in.
+const out = () => dm.locator('.rail-body .irow.out').count()
+console.log('añadir en pleno combate:')
+await dm.locator('.rail-foot').getByRole('button', { name: /Añadir/ }).click()
+await dm.waitForSelector('.add-list')
+// The campaign's rat, not the one taken off earlier: that row seats an
+// existing ficha and has no hit-point box.
+await dm
+  .locator('.add-row', { hasText: 'Sewer Cheese-Rat', has: dm.locator('.hp-input') })
+  .getByRole('button', { name: 'Añadir' })
+  .click()
+await dm.getByRole('button', { name: 'Listo' }).click()
+await dm.waitForTimeout(500)
+console.log(`  on the rail: ${await rows()} · fuera: ${await out()}`)
+if ((await rows()) !== 3 || (await out()) !== 0) fail('a PNJ added mid-fight should join it')
+
+console.log('sacar y meter en el combate:')
+const newcomer = dm.locator('.irow', { hasText: 'Sewer Cheese-Rat' }).last()
+await newcomer.getByTitle(/Sacar del combate/).click()
+await dm.waitForTimeout(500)
+console.log(`  fuera: ${await out()} · fichas: ${await tokens()}`)
+if ((await out()) !== 1) fail('⊖ should leave them out of the fight')
+if ((await tokens()) !== 3) fail('⊖ must keep them on the board')
+await shot('combate-4-fuera')
+
+await dm.locator('.irow.out').getByTitle('Entrar en el combate').click()
+await dm.waitForTimeout(500)
+console.log(`  fuera: ${await out()}`)
+if ((await out()) !== 0) fail('⚔ should bring them back into the fight')
+
 await finish()
