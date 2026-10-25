@@ -462,9 +462,74 @@ describe('tablero', () => {
     expect(state.play[PC1]).toBeDefined()
     expect(state.encounter.init[A]).toBe(15)
 
-    // Somebody who was only watching leaves nothing behind in the encounter.
-    const watcher = run(before, { type: 'token/place', ref: C })
+    // Somebody who was only watching — on the board, left out when the fight
+    // started — leaves nothing behind in the encounter.
+    const watcher = run(
+      clearBoard(),
+      { type: 'token/place', ref: A },
+      { type: 'token/place', ref: C },
+      { type: 'encounter/start', members: [A] },
+    )
     expect(run(watcher, { type: 'token/remove', ref: C }).encounter).toBe(watcher.encounter)
+  })
+
+  describe('seating someone mid-fight puts them in it', () => {
+    const fighting = (): SessionState =>
+      run(
+        clearBoard(),
+        { type: 'token/place', ref: A },
+        { type: 'token/place', ref: B },
+        { type: 'encounter/start', members: [A, B], init: { [A]: 15, [B]: 9 } },
+        { type: 'encounter/advance', delta: 1 },
+      )
+    const newcomers = (before: SessionState, after: SessionState): Ref[] =>
+      after.npcs
+        .filter((n) => !before.npcs.some((o) => o.id === n.id))
+        .map((n): Ref => `npc:${n.id}`)
+
+    it('a PNJ added from the rail or the bestiary', () => {
+      const before = fighting()
+      const state = run(before, { type: 'npc/add', pnjId: 'asaltante', count: 2 })
+      const added = newcomers(before, state)
+      expect(added).toHaveLength(2)
+      expect(state.encounter.members).toEqual([A, B, ...added])
+      // The turn stays where it was, and nobody is handed an initiative.
+      expect(state.encounter.activeRef).toBe(A)
+      for (const ref of added) expect(state.encounter.init[ref]).toBeUndefined()
+    })
+
+    it('a scene roster loaded during the fight', () => {
+      const before = fighting()
+      const { state } = reduce(before, { type: 'roster/load', sceneId: 'abordaje' }, 1_000, {
+        ...opts(),
+        scene: () => ({ roster: [{ pnjId: 'asaltante', count: 3 }] }),
+      })
+      expect(state.encounter.members).toEqual([A, B, ...newcomers(before, state)])
+    })
+
+    it('someone put back on the board', () => {
+      const state = run(fighting(), { type: 'token/place', ref: C })
+      expect(state.encounter.members).toEqual([A, B, C])
+    })
+
+    it('and nobody joins a fight that is not on', () => {
+      const before = run(fighting(), { type: 'encounter/end' })
+      const state = run(before, { type: 'npc/add', pnjId: 'asaltante', count: 1 })
+      expect(state.encounter.members).toEqual([A, B])
+    })
+
+    it('gives the newcomer a turn once the DM types their initiative', () => {
+      const before = fighting()
+      const added = run(before, { type: 'npc/add', pnjId: 'asaltante', count: 1 })
+      const [D] = newcomers(before, added)
+      let s = run(added, { type: 'encounter/init', ref: D!, value: 12 })
+      const turns: (string | null)[] = []
+      for (let i = 0; i < 3; i++) {
+        s = run(s, { type: 'encounter/advance', delta: 1 })
+        turns.push(s.encounter.activeRef)
+      }
+      expect(turns).toEqual([D, B, A])
+    })
   })
 
   it('never gives the turn to a member whose ficha is gone', () => {

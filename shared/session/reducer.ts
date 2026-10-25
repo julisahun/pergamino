@@ -199,6 +199,26 @@ function withTokens(
 }
 
 /**
+ * Whoever is seated during a fight joins it — the mirror of `token/remove`
+ * taking a member out. The rail has no other way to bring someone in: before
+ * this, a PNJ added mid-fight sat under «Fuera de combate» for good, and the
+ * second wave of a boarding never got a turn. Joining carries no initiative;
+ * the DM types it on the row, and until then they act last.
+ */
+/** The refs of `added` that found a square — a full board seats nobody. */
+function seatedRefs(tokens: Record<string, Token>, added: { id: string }[]): Ref[] {
+  return added.map((npc) => makeRef('npc', npc.id)).filter((ref) => tokens[ref])
+}
+
+function joinFight(encounter: Encounter, refs: Ref[]): Encounter {
+  if (!encounter.on) return encounter
+  const joining = refs.filter((ref) => !encounter.members.includes(ref))
+  return joining.length === 0
+    ? encounter
+    : { ...encounter, members: [...encounter.members, ...joining] }
+}
+
+/**
  * The first empty square, scanning in from one edge — PCs from the left and
  * PNJ from the right, so a roster dropped onto the board does not stack up in
  * one corner. Null when the board is full.
@@ -410,7 +430,12 @@ export function reduce(
       const added = instantiate(state, [{ pnjId: action.pnjId, count: action.count }], opts, newId)
       if (added.length === 0) return { state, log }
       field.tokens = withTokens(field, added)
-      next = { ...state, npcs: [...state.npcs, ...added], field }
+      next = {
+        ...state,
+        npcs: [...state.npcs, ...added],
+        field,
+        encounter: joinFight(state.encounter, seatedRefs(field.tokens, added)),
+      }
       log.push({ kind: 'encounter', text: `Añadidos: ${added.map((n) => n.name).join(', ')}` })
       break
     }
@@ -419,7 +444,12 @@ export function reduce(
       const added = instantiate(state, roster, opts, newId)
       if (added.length === 0) return { state, log }
       field.tokens = withTokens(field, added)
-      next = { ...state, npcs: [...state.npcs, ...added], field }
+      next = {
+        ...state,
+        npcs: [...state.npcs, ...added],
+        field,
+        encounter: joinFight(state.encounter, seatedRefs(field.tokens, added)),
+      }
       log.push({ kind: 'encounter', text: `Reparto cargado: ${added.map((n) => n.name).join(', ')}` })
       break
     }
@@ -625,7 +655,7 @@ export function reduce(
           : freeSquare(field.tokens, field.cols, field.rows, action.ref.startsWith('npc:'))
       if (!spot) return { state, log }
       field.tokens = { ...field.tokens, [action.ref]: spot }
-      next = { ...state, field }
+      next = { ...state, field, encounter: joinFight(state.encounter, [action.ref]) }
       break
     }
     case 'token/placeAll': {
