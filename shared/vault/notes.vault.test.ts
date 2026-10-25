@@ -10,6 +10,7 @@ const linkFrom = (from: string, target: string) =>
 
 const VANN = 'campaigns/marea-baja/pnj/vann.md'
 const STORY_README = 'campaigns/marea-baja/story/README.md'
+const ARCO_1_README = 'campaigns/marea-baja/story/arco-1/README.md'
 const PARTIDAS_README = 'partidas/README.md'
 
 describe('the index covers the whole world', () => {
@@ -53,12 +54,12 @@ describe('parseNote', () => {
 describe('wikilink resolution, against the real notes', () => {
   it('resolves a bare basename whose file is lowercase', () => {
     // vann.md writes [[faro|El faro]] and [[Vann]] appears capitalised elsewhere
-    expect(linkFrom(VANN, 'faro')).toBe('campaigns/marea-baja/story/lugares/faro.md')
-    expect(linkFrom(STORY_README, 'Raimo')).toBe('campaigns/marea-baja/pnj/raimo.md')
+    expect(linkFrom(VANN, 'faro')).toBe('campaigns/marea-baja/story/arco-1/lugares/faro.md')
+    expect(linkFrom(ARCO_1_README, 'Raimo')).toBe('campaigns/marea-baja/pnj/raimo.md')
   })
 
   it('resolves an aliased link by its target, not its alias', () => {
-    expect(linkFrom(STORY_README, 'maraia')).toBe('campaigns/marea-baja/pnj/maraia.md')
+    expect(linkFrom(ARCO_1_README, 'maraia')).toBe('campaigns/marea-baja/pnj/maraia.md')
   })
 
   it('resolves a path link written against the vault root', () => {
@@ -72,11 +73,12 @@ describe('wikilink resolution, against the real notes', () => {
   })
 
   it('disambiguates [[README]] to the nearest one', () => {
-    // Both story/README.md and partidas/README.md exist. story/README.md links to
-    // [[README|Marea Baja — Arco de la sequía]] from inside story/.
-    const fromStory = index.notes.get('campaigns/marea-baja/story/mapa-del-pueblo.md')
-    const link = fromStory?.links.find((l) => l.target === 'README')
-    expect(link?.resolved).toBe(STORY_README)
+    // story/, story/arco-1/ and partidas/ each have a README.md.
+    // arco-1/mapa-del-pueblo.md links [[README|Marea Baja — Arco de la sequía]]
+    // from inside arco-1/, and means that arc's.
+    const fromArco = index.notes.get('campaigns/marea-baja/story/arco-1/mapa-del-pueblo.md')
+    const link = fromArco?.links.find((l) => l.target === 'README')
+    expect(link?.resolved).toBe(ARCO_1_README)
   })
 
   it('leaves a dangling link unresolved instead of throwing', () => {
@@ -99,8 +101,8 @@ describe('wikilink resolution, against the real notes', () => {
 describe('backlinks', () => {
   it('lists the notes that point at Vann', () => {
     const back = index.backlinks.get(VANN) ?? []
-    expect(back).toContain('campaigns/marea-baja/story/mapa-del-pueblo.md')
-    expect(back).toContain(STORY_README)
+    expect(back).toContain('campaigns/marea-baja/story/arco-1/mapa-del-pueblo.md')
+    expect(back).toContain(ARCO_1_README)
   })
 
   it('a note with no inbound links has no backlinks entry', () => {

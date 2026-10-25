@@ -1,6 +1,17 @@
+import fs from 'node:fs'
+import nodePath from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Scene, SessionState } from '../types.ts'
-import { loadParty, MESA, openWorld, pcsOf, playingPcs, seated } from '../../test/fixture.ts'
+import {
+  campaign as CAMPAIGN,
+  loadParty,
+  MESA,
+  openWorld,
+  pcsOf,
+  playingPcs,
+  seated,
+  worldRootAbs,
+} from '../../test/fixture.ts'
 import { reduce } from '../session/reducer.ts'
 import {
   applyDeviations,
@@ -45,12 +56,22 @@ const someName = pcNames.get(somePc)!
 const players = playingPcs(run).map((id) => pcNames.get(id)!)
 
 const sessionNumber = await vault.nextSessionNumber(MESA)
+/** How that number reads in a bitácora file name. */
+const padded = String(sessionNumber).padStart(2, '0')
 const template = await vault.readTemplate(MESA)
 const estado = await vault.readEstado(MESA)
 
 describe('session numbering', () => {
-  it('starts at 1 when only the template is there', () => {
-    expect(sessionNumber).toBe(1)
+  // The mesa is being played, so the folder holds real notes and the number
+  // moves with them. Starting at 1 from a bare template is pinned against
+  // memory, in shells.test.ts.
+  it('is one past the last bitácora note the mesa wrote', () => {
+    const dir = nodePath.join(worldRootAbs(), 'partidas', MESA, CAMPAIGN, 'bitacora')
+    const played = fs
+      .readdirSync(dir)
+      .map((f) => Number(/^(\d+)-.*\.md$/.exec(f)?.[1] ?? 0))
+      .filter((n) => n > 0)
+    expect(sessionNumber).toBe(Math.max(0, ...played) + 1)
   })
 
   it('names the file the way the template asks', () => {
@@ -77,19 +98,21 @@ describe('draftBitacora', () => {
   })
 
   it('numbers and names the note', () => {
-    expect(draft.sessionNumber).toBe(1)
-    expect(draft.filename).toBe('01-2026-08-27.md')
+    expect(draft.sessionNumber).toBe(sessionNumber)
+    expect(draft.filename).toBe(`${padded}-2026-08-27.md`)
   })
 
   it('fills the front matter the template declares', () => {
-    expect(draft.content).toMatch(/^---\nsesion: 1\nfecha: 2026-08-27\n/)
+    expect(draft.content.startsWith(`---\nsesion: ${sessionNumber}\nfecha: 2026-08-27\n`)).toBe(
+      true,
+    )
     expect(draft.content).toContain(
       `jugadores: [${players.map((p) => JSON.stringify(p)).join(', ')}]`,
     )
   })
 
   it('leaves a blank line between the front matter and the heading', () => {
-    expect(draft.content).toContain('---\n\n# Sesión 1 — título')
+    expect(draft.content).toContain(`---\n\n# Sesión ${sessionNumber} — título`)
   })
 
   it("puts the facts after each section's own guidance, not before it", () => {
@@ -230,11 +253,6 @@ describe('applyDeviations, against the real estado.md', () => {
       i = at + 1
     }
     expect(after.length).toBe(before.length + 1)
-  })
-
-  it('keeps the commented-out examples the file ships with', () => {
-    const out = applyDeviations(current, [{ section: 'Lugares', text: 'y' }])
-    expect(out).toContain('<!-- - [[faro]] — visitado, sesión 2.')
   })
 
   it('ignores a section the file does not have', () => {

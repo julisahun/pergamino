@@ -24,11 +24,13 @@ describe('every pnj the app can seat', () => {
       ]),
     )
     expect(found).toEqual({
+      asaltante: ['Cimitarra 3 1d6+1'],
       'bandido-lider': ['Cimitarra 3 1d6+1'],
       bandido: ['Cimitarra 3 1d6+1'],
       cristelle: ['Daga 2 1d4'],
       galo: ['Garrote 2 1d4'],
       'lancero-hundido': ['Lanza corroída 3 1d6+1'],
+      mauro: ['Bichero 3 1d8+3'],
       ossian: ['Mandoble de acero de Brona 3 1d6+2'],
       raimo: ['Bichero 2 1d4'],
       'soldado-ahogado': ['Espada oxidada 3 1d6+1'],
@@ -38,6 +40,11 @@ describe('every pnj the app can seat', () => {
       dairwen: [],
       maraia: [],
       vann: [],
+      // Three more who state an unarmed blow for a flat «1 de daño». No dice,
+      // no action: the line stays prose on the ficha.
+      anselmo: [],
+      prisco: [],
+      tabernero: [],
     })
   })
 })
